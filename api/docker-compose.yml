@@ -1,0 +1,24 @@
+# Docker yahan SIRF database (Postgres) ke liye hai.
+# NestJS / Next.js Docker mein nahi chalenge — woh tumhare PC pe npm se chalenge.
+#
+# Kaam: Postgres install kiye bina local DB mil jaye (ek container).
+# Start: docker compose up -d
+# Stop:  docker compose down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ff-ops-postgres
+    restart: unless-stopped
+    ports:
+      # 5433 so it does not clash with local PostgreSQL on 5432
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ffops
+      POSTGRES_PASSWORD: ffops_dev_password
+      POSTGRES_DB: ff_sensitivity_ops
+    volumes:
+      - ff_ops_pg_data:/var/lib/postgresql/data
+
+volumes:
+  ff_ops_pg_data:

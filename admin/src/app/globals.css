@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --login-page-bg: #3b82f6;
+  --ops-canvas: #f8fafc;
+  --ops-ink: #0f172a;
+  --ops-mute: #64748b;
+  --ops-line: #e8eaee;
+  --ops-accent: #2563eb;
+  --ops-sidebar: #0b1220;
+}
+
+@theme inline {
+  --color-login-page-bg: var(--login-page-bg);
+  --color-ops-canvas: var(--ops-canvas);
+  --color-ops-ink: var(--ops-ink);
+  --color-ops-mute: var(--ops-mute);
+  --color-ops-line: var(--ops-line);
+  --color-ops-accent: var(--ops-accent);
+  --color-ops-sidebar: var(--ops-sidebar);
+  --font-sans: var(--font-plex);
+  --font-mono: var(--font-plex-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ops-canvas);
+  color: var(--ops-ink);
+  font-family: var(--font-plex), "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Sidebar menu: scroll without visible scrollbar */
+.ops-scroll-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ops-scroll-hide::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

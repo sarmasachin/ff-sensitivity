@@ -1,0 +1,116 @@
+package com.ffsensitivity.app.data
+
+data class SharedSensiCard(
+    val id: String,
+    val name: String,
+    val freeFireId: String,
+    val rank: String,
+    val role: String,
+    val deviceLabel: String,
+    val deviceMeta: String,
+    val matches: Int,
+    val kills: Int,
+    val headshots: Int,
+    val general: Int,
+    val redDot: Int,
+    val scope2x: Int,
+    val scope4x: Int,
+    val awm: Int,
+    val freeLook: Int
+) {
+    val kd: String
+        get() = if (matches <= 0) "—" else String.format(java.util.Locale.US, "%.2f", kills.toDouble() / matches)
+}
+
+val sampleCommunitySensiCards: List<SharedSensiCard> = listOf(
+    SharedSensiCard(
+        id = "c1",
+        name = "SHADOW乂",
+        freeFireId = "8123456789",
+        rank = "Heroic",
+        role = "Rusher",
+        deviceLabel = "Samsung Galaxy S24 Ultra",
+        deviceMeta = "12GB · 120Hz",
+        matches = 1840,
+        kills = 6120,
+        headshots = 2840,
+        general = 96,
+        redDot = 88,
+        scope2x = 78,
+        scope4x = 68,
+        awm = 52,
+        freeLook = 110
+    ),
+    SharedSensiCard(
+        id = "c2",
+        name = "VENOM♛",
+        freeFireId = "9011223344",
+        rank = "Diamond",
+        role = "Sniper",
+        deviceLabel = "iQOO Neo 9 Pro",
+        deviceMeta = "12GB · 144Hz",
+        matches = 920,
+        kills = 3010,
+        headshots = 1620,
+        general = 84,
+        redDot = 76,
+        scope2x = 70,
+        scope4x = 62,
+        awm = 58,
+        freeLook = 98
+    ),
+    SharedSensiCard(
+        id = "c3",
+        name = "BLAZE⚡",
+        freeFireId = "7788990011",
+        rank = "Platinum",
+        role = "Entry",
+        deviceLabel = "Redmi Note 13 Pro+",
+        deviceMeta = "8GB · 120Hz",
+        matches = 640,
+        kills = 1580,
+        headshots = 710,
+        general = 102,
+        redDot = 94,
+        scope2x = 82,
+        scope4x = 70,
+        awm = 48,
+        freeLook = 120
+    ),
+    SharedSensiCard(
+        id = "c4",
+        name = "NIGHT༒",
+        freeFireId = "5566778899",
+        rank = "Gold",
+        role = "Support",
+        deviceLabel = "Realme GT 6",
+        deviceMeta = "8GB · 120Hz",
+        matches = 410,
+        kills = 890,
+        headshots = 320,
+        general = 90,
+        redDot = 82,
+        scope2x = 74,
+        scope4x = 66,
+        awm = 50,
+        freeLook = 105
+    ),
+    SharedSensiCard(
+        id = "c5",
+        name = "ACE★PRO",
+        freeFireId = "1122334455",
+        rank = "Heroic",
+        role = "Mixed",
+        deviceLabel = "OnePlus 12R",
+        deviceMeta = "16GB · 120Hz",
+        matches = 2210,
+        kills = 7450,
+        headshots = 3910,
+        general = 98,
+        redDot = 90,
+        scope2x = 80,
+        scope4x = 72,
+        awm = 55,
+        freeLook = 115
+    )
+)

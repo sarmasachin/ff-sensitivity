@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="void_black">#07080A</color>
+    <style name="Theme.FFSensitivity" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/void_black</item>
+        <item name="android:colorPrimary">#E8A838</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
