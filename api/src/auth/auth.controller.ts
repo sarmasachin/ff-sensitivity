@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
+import { clearAuthCookies, setAuthCookies } from './auth-cookies';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -39,11 +40,8 @@ export class AuthController {
       typeof ip === 'string' ? ip : undefined,
     );
     if ('requiresOtp' in result) return result;
-    this.setRefreshCookie(res, result.refreshToken);
-    return {
-      accessToken: result.accessToken,
-      admin: result.admin,
-    };
+    this.applySessionCookies(res, result);
+    return { admin: result.admin };
   }
 
   @Post('login/verify-otp')
@@ -58,8 +56,8 @@ export class AuthController {
       dto,
       typeof ip === 'string' ? ip : undefined,
     );
-    this.setRefreshCookie(res, result.refreshToken);
-    return { accessToken: result.accessToken, admin: result.admin };
+    this.applySessionCookies(res, result);
+    return { admin: result.admin };
   }
 
   @Post('login/resend-otp')
@@ -68,13 +66,24 @@ export class AuthController {
     return this.auth.resendLoginOtp(dto);
   }
 
+  @Post('refresh')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async refresh(
+    @Req() req: { cookies?: { refresh_token?: string } },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.auth.refresh(req.cookies?.refresh_token);
+    this.applySessionCookies(res, result);
+    return { admin: result.admin };
+  }
+
   @Post('logout')
   async logout(
     @Req() req: { cookies?: { refresh_token?: string } },
     @Res({ passthrough: true }) res: Response,
   ) {
     await this.auth.logout(req.cookies?.refresh_token);
-    res.clearCookie('refresh_token', this.cookieOpts());
+    clearAuthCookies(res, this.config);
     return { ok: true };
   }
 
@@ -104,24 +113,22 @@ export class AuthController {
   }
   // --- End: Admin profile live wire (Sachin) ---
 
-  private setRefreshCookie(res: Response, token: string) {
-    const days = Number(this.config.get('JWT_REFRESH_TTL_DAYS') ?? 14);
-    res.cookie('refresh_token', token, {
-      ...this.cookieOpts(),
-      maxAge: days * 24 * 60 * 60 * 1000,
-    });
-  }
-
-  private cookieOpts() {
-    const corsOrigin = this.config.get<string>('CORS_ORIGIN') ?? '';
-    const secure =
-      process.env.NODE_ENV === 'production' ||
-      corsOrigin.startsWith('https://');
-    return {
-      httpOnly: true,
-      secure,
-      sameSite: 'strict' as const,
-      path: '/api/v1/auth',
-    };
+  private applySessionCookies(
+    res: Response,
+    result: {
+      accessToken: string;
+      refreshToken: string;
+      refreshDays: number;
+    },
+  ) {
+    setAuthCookies(
+      res,
+      this.config,
+      {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      result.refreshDays,
+    );
   }
 }

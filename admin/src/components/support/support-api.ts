@@ -52,4 +52,22 @@ export async function markSupportRead(id: string): Promise<SupportThreadRow> {
     method: "PATCH",
   });
 }
+
+export async function deleteSupportThread(
+  id: string,
+): Promise<{ ok: true; id: string }> {
+  return apiFetch<{ ok: true; id: string }>(`/api/v1/admin/support/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function deleteSupportUserMessage(
+  threadId: string,
+  messageId: string,
+): Promise<SupportThreadRow> {
+  return apiFetch<SupportThreadRow>(
+    `/api/v1/admin/support/${threadId}/messages/${messageId}`,
+    { method: "DELETE" },
+  );
+}
 // --- End: Support live wire (Sachin) ---

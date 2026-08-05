@@ -34,19 +34,28 @@ android {
             "GOOGLE_SERVER_CLIENT_ID",
             "\"$googleServerClientId\""
         )
-        // --- Start: Redeem live wire (Sachin) ---
-        val apiBaseUrl = localProps.getProperty("API_BASE_URL", "http://10.0.2.2:4000")
-        buildConfigField(
-            "String",
-            "API_BASE_URL",
-            "\"$apiBaseUrl\""
-        )
-        // --- End: Redeem live wire (Sachin) ---
     }
 
     buildTypes {
-        release {
+        debug {
             isMinifyEnabled = false
+            // LAN / emulator HTTP OK for debug only.
+            val debugApi =
+                localProps.getProperty("API_BASE_URL", "http://10.0.2.2:4000")
+            buildConfigField("String", "API_BASE_URL", "\"$debugApi\"")
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // Release must be HTTPS (Play / production).
+            val releaseApi = localProps.getProperty(
+                "API_BASE_URL_RELEASE",
+                "https://api.sensitivitysettings.com"
+            )
+            require(releaseApi.startsWith("https://")) {
+                "API_BASE_URL_RELEASE must be https:// (got: $releaseApi)"
+            }
+            buildConfigField("String", "API_BASE_URL", "\"$releaseApi\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -82,6 +91,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     implementation("androidx.navigation:navigation-compose:2.8.3")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")

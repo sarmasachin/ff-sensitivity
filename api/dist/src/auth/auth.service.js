@@ -234,6 +234,52 @@ let AuthService = class AuthService {
         return {
             accessToken,
             refreshToken: refreshRaw,
+            refreshDays: Math.max(0, rememberDays),
+            admin: {
+                id: profile.id,
+                email: profile.email,
+                role: profile.role,
+                allowedModules: profile.allowedModules,
+                mustChangePassword: profile.mustChangePassword,
+                displayName: profile.displayName,
+            },
+        };
+    }
+    async refresh(refreshToken) {
+        if (!refreshToken) {
+            throw new app_error_1.AppError('AUTH_INVALID', 'Session expired. Sign in again.', 401);
+        }
+        const hash = this.hashToken(refreshToken);
+        const session = await this.prisma.adminSession.findFirst({
+            where: {
+                refreshTokenHash: hash,
+                revokedAt: null,
+                expiresAt: { gt: new Date() },
+            },
+            include: { admin: true },
+        });
+        if (!session || !session.admin.isActive) {
+            throw new app_error_1.AppError('AUTH_INVALID', 'Session expired. Sign in again.', 401);
+        }
+        const admin = session.admin;
+        const ttl = this.config.get('JWT_ACCESS_TTL') ?? '15m';
+        const accessToken = await this.jwt.signAsync({ sub: admin.id, email: admin.email, role: admin.role }, {
+            secret: this.config.getOrThrow('JWT_ACCESS_SECRET'),
+            expiresIn: ttl,
+        });
+        const refreshRaw = (0, crypto_1.randomBytes)(48).toString('hex');
+        const refreshHash = this.hashToken(refreshRaw);
+        const remainingMs = Math.max(0, session.expiresAt.getTime() - Date.now());
+        const refreshDays = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+        await this.prisma.adminSession.update({
+            where: { id: session.id },
+            data: { refreshTokenHash: refreshHash },
+        });
+        const profile = (0, auth_profile_1.toProfileView)(admin);
+        return {
+            accessToken,
+            refreshToken: refreshRaw,
+            refreshDays,
             admin: {
                 id: profile.id,
                 email: profile.email,

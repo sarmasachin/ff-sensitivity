@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import {
+  apiBaseUrl,
+  clearAuthStorage,
+  fetchAuthMe,
+  storeAdminProfile,
+} from "@/lib/api";
 import { OpsSidebar } from "./OpsSidebar";
 import { OpsTopbar } from "./OpsTopbar";
 
@@ -11,65 +17,74 @@ type AdminInfo = {
   allowedModules?: string[];
 };
 
-function readAuth(): { token: string | null; admin: AdminInfo | null } {
-  const token =
-    sessionStorage.getItem("ffops_access_token") ??
-    localStorage.getItem("ffops_access_token");
-  const raw =
-    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
-  let admin: AdminInfo | null = null;
-  if (raw) {
-    try {
-      admin = JSON.parse(raw) as AdminInfo;
-    } catch {
-      admin = null;
-    }
-  }
-  return { token, admin };
-}
-
-function clearAuth() {
-  sessionStorage.removeItem("ffops_access_token");
-  sessionStorage.removeItem("ffops_admin");
-  localStorage.removeItem("ffops_access_token");
-  localStorage.removeItem("ffops_admin");
-}
-
 export function OpsShell({ children }: { children: ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [admin, setAdmin] = useState<AdminInfo | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Back/forward cache can restore a signed-out screen: re-verify on restore.
   useEffect(() => {
-    const { token, admin: stored } = readAuth();
-    if (!token) {
-      setReady(false);
-      router.replace("/");
-      return;
+    function onPageShow(event: PageTransitionEvent) {
+      if (event.persisted) window.location.reload();
     }
-    setAdmin((prev) => {
-      if (prev?.email === stored?.email && prev?.role === stored?.role) {
-        return prev;
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const me = await fetchAuthMe();
+      if (cancelled) return;
+      if (!me?.email || !me.role) {
+        clearAuthStorage();
+        setReady(false);
+        setAdmin(null);
+        window.location.replace("/");
+        return;
       }
-      return stored;
-    });
-    setReady(true);
-  }, [router, pathname]);
+      const next: AdminInfo = {
+        email: me.email,
+        role: me.role,
+        allowedModules: me.allowedModules,
+      };
+      const remember = Boolean(
+        typeof window !== "undefined" && localStorage.getItem("ffops_admin"),
+      );
+      storeAdminProfile(next, remember);
+      setAdmin((prev) => {
+        if (
+          prev?.email === next.email &&
+          prev?.role === next.role &&
+          JSON.stringify(prev.allowedModules ?? []) ===
+            JSON.stringify(next.allowedModules ?? [])
+        ) {
+          return prev;
+        }
+        return next;
+      });
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   async function signOut() {
-    clearAuth();
-    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+    setReady(false);
+    setAdmin(null);
     try {
-      await fetch(`${apiBase}/api/v1/auth/logout`, {
+      await fetch(`${apiBaseUrl()}/api/v1/auth/logout`, {
         method: "POST",
         credentials: "include",
       });
     } catch {
-      // ignore
+      // Still clear local hint; cookies may linger if network failed.
     }
-    router.replace("/");
+    clearAuthStorage();
+    // Hard replace: drops this entry from history so Back cannot reach it.
+    window.location.replace("/");
   }
 
   if (!ready) {

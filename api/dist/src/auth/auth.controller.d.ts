@@ -20,7 +20,6 @@ export declare class AuthController {
         resendAfterSec: number;
         maskedEmail: string;
     } | {
-        accessToken: string;
         admin: {
             id: string;
             email: string;
@@ -34,7 +33,6 @@ export declare class AuthController {
         ip?: string;
         headers: Record<string, string | undefined>;
     }, res: Response): Promise<{
-        accessToken: string;
         admin: {
             id: string;
             email: string;
@@ -49,6 +47,20 @@ export declare class AuthController {
         expiresInSec: number;
         resendAfterSec: number;
         maskedEmail: string;
+    }>;
+    refresh(req: {
+        cookies?: {
+            refresh_token?: string;
+        };
+    }, res: Response): Promise<{
+        admin: {
+            id: string;
+            email: string;
+            role: string;
+            allowedModules: string[];
+            mustChangePassword: boolean;
+            displayName: string;
+        };
     }>;
     logout(req: {
         cookies?: {
@@ -72,6 +84,5 @@ export declare class AuthController {
             id: string;
         };
     }, dto: ChangePasswordDto): Promise<import("./auth-profile").AdminProfileView>;
-    private setRefreshCookie;
-    private cookieOpts;
+    private applySessionCookies;
 }

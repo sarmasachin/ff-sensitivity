@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ffsensitivity.app.BuildConfig
 import com.ffsensitivity.app.data.GoogleAuthClient
 import com.ffsensitivity.app.data.GoogleSignInOutcome
 import com.ffsensitivity.app.data.GoogleSignInResult
@@ -169,7 +170,12 @@ fun LoginScreen(
                                                         "Can't reach the server. Check Wi‑Fi and make sure the API is running."
                                                     is java.io.IOException ->
                                                         "Can't reach the server. Check Wi‑Fi and make sure the API is running."
-                                                    else -> "Couldn't sign in with Google. Please try again."
+                                                    // Google succeeded; the API exchange is what failed.
+                                                    else -> if (BuildConfig.DEBUG) {
+                                                        "Signed in with Google, but the server call failed.\n[debug] ${err.javaClass.simpleName}: ${err.message?.take(240)}"
+                                                    } else {
+                                                        "Couldn't sign in right now. Please try again."
+                                                    }
                                                 }
                                             }
                                         )

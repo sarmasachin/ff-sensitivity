@@ -11,6 +11,7 @@ type Props = {
   rows: SupportThreadRow[];
   onOpen: (id: string) => void;
   onCloseThread: (id: string) => void;
+  onDeleteThread: (id: string) => void;
 };
 
 const btn =
@@ -39,11 +40,16 @@ function subjectClass(subject: SupportSubject): string {
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
-export function SupportTable({ rows, onOpen, onCloseThread }: Props) {
+export function SupportTable({
+  rows,
+  onOpen,
+  onCloseThread,
+  onDeleteThread,
+}: Props) {
   return (
     <div className="overflow-hidden rounded-2xl border border-[#e8eaee] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] text-left text-[13px]">
+        <table className="w-full min-w-[920px] text-left text-[13px]">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/90 text-[11px] font-semibold tracking-[0.06em] text-slate-500 uppercase">
               <th className="px-4 py-3">Thread</th>
@@ -128,6 +134,14 @@ export function SupportTable({ rows, onOpen, onCloseThread }: Props) {
                           Close
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        onClick={() => onDeleteThread(row.id)}
+                        className={`${btn} bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100`}
+                        title="Delete conversation"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>

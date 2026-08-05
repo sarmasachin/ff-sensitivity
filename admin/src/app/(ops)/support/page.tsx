@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SupportCapabilities } from "@/components/support/SupportCapabilities";
 import { SupportEmptyState } from "@/components/support/SupportEmptyState";
 import { SupportHeader } from "@/components/support/SupportHeader";
 import { SupportPagination } from "@/components/support/SupportPagination";
+import { SupportConfirmDialog } from "@/components/support/SupportConfirmDialog";
 import { SupportStats } from "@/components/support/SupportStats";
 import { SupportTable } from "@/components/support/SupportTable";
 import { SupportThreadDrawer } from "@/components/support/SupportThreadDrawer";
@@ -14,6 +15,8 @@ import {
 } from "@/components/support/SupportToolbar";
 import {
   closeSupportThread,
+  deleteSupportThread,
+  deleteSupportUserMessage,
   fetchSupportStats,
   fetchSupportThreads,
   markSupportRead,
@@ -26,6 +29,11 @@ import {
 } from "@/components/support/support-data";
 
 const PAGE_SIZE = 12;
+
+type PendingAction =
+  | { kind: "close"; threadId: string }
+  | { kind: "delete-thread"; threadId: string }
+  | { kind: "delete-message"; threadId: string; messageId: string };
 
 function canAccessSupport(): boolean {
   if (typeof window === "undefined") return false;
@@ -60,6 +68,8 @@ export default function SupportPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inspectId, setInspectId] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const confirmingRef = useRef(false);
 
   useEffect(() => {
     setAllowed(canAccessSupport());
@@ -155,7 +165,6 @@ export default function SupportPage() {
   async function closeThread(id: string) {
     const row = rows.find((r) => r.id === id);
     if (!row || busy) return;
-    if (!window.confirm(`Close thread with ${row.name}?`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -197,6 +206,111 @@ export default function SupportPage() {
       setBusy(false);
     }
   }
+
+  async function deleteThread(id: string) {
+    const row = rows.find((r) => r.id === id);
+    if (!row || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteSupportThread(id);
+      setRows((prev) => prev.filter((r) => r.id !== id));
+      setServerStats(await fetchSupportStats());
+      setNotice(`Deleted conversation with ${row.name}.`);
+      if (inspectId === id) setInspectId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteUserMessage(threadId: string, messageId: string) {
+    const row = rows.find((r) => r.id === threadId);
+    if (!row || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await deleteSupportUserMessage(threadId, messageId);
+      upsertRow(next);
+      setServerStats(await fetchSupportStats());
+      setNotice("User message deleted.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete message.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function askConfirm(action: PendingAction) {
+    if (busy || confirmingRef.current || pending) return;
+    setPending(action);
+  }
+
+  async function runPending() {
+    if (!pending || busy || confirmingRef.current) return;
+    confirmingRef.current = true;
+    const action = pending;
+    try {
+      if (action.kind === "close") {
+        await closeThread(action.threadId);
+      } else if (action.kind === "delete-thread") {
+        await deleteThread(action.threadId);
+      } else {
+        await deleteUserMessage(action.threadId, action.messageId);
+      }
+    } finally {
+      confirmingRef.current = false;
+      setPending(null);
+    }
+  }
+
+  const pendingRow = pending
+    ? (rows.find((r) => r.id === pending.threadId) ?? null)
+    : null;
+
+  const confirmCopy = (() => {
+    if (!pending || !pendingRow) return null;
+    const who = `${pendingRow.name} · ${pendingRow.email}`;
+    if (pending.kind === "close") {
+      return {
+        tone: "neutral" as const,
+        eyebrow: "Close thread",
+        title: "Mark this conversation resolved?",
+        description:
+          "The user can no longer reply in this thread. They can still start a new conversation from the app.",
+        detail: who,
+        note: undefined,
+        confirmLabel: "Close thread",
+        busyLabel: "Closing…",
+      };
+    }
+    if (pending.kind === "delete-thread") {
+      return {
+        tone: "danger" as const,
+        eyebrow: "Delete conversation",
+        title: "Permanently delete this conversation?",
+        description:
+          "The whole thread and every message inside it will be removed from the support inbox.",
+        detail: who,
+        note: "This cannot be undone. The action is recorded in the audit log.",
+        confirmLabel: "Delete forever",
+        busyLabel: "Deleting…",
+      };
+    }
+    const target = pendingRow.messages.find((m) => m.id === pending.messageId);
+    return {
+      tone: "danger" as const,
+      eyebrow: "Delete message",
+      title: "Delete this user message?",
+      description:
+        "Only this single message is removed. The rest of the conversation stays intact.",
+      detail: target ? `“${target.text.slice(0, 140)}”` : who,
+      note: "This cannot be undone. The action is recorded in the audit log.",
+      confirmLabel: "Delete message",
+      busyLabel: "Deleting…",
+    };
+  })();
 
   if (!allowed) {
     return (
@@ -273,7 +387,12 @@ export default function SupportPage() {
               <SupportTable
                 rows={paged}
                 onOpen={setInspectId}
-                onCloseThread={(id) => void closeThread(id)}
+                onCloseThread={(id) =>
+                  askConfirm({ kind: "close", threadId: id })
+                }
+                onDeleteThread={(id) =>
+                  askConfirm({ kind: "delete-thread", threadId: id })
+                }
               />
               <SupportPagination
                 page={page}
@@ -292,10 +411,36 @@ export default function SupportPage() {
       <SupportThreadDrawer
         open={Boolean(inspectId)}
         row={inspectRow}
+        busy={busy}
         onClose={() => setInspectId(null)}
         onReply={(id, text) => void reply(id, text)}
         onMarkRead={(id) => void markRead(id)}
+        onDeleteUserMessage={(threadId, messageId) =>
+          askConfirm({ kind: "delete-message", threadId, messageId })
+        }
+        onDeleteThread={(id) =>
+          askConfirm({ kind: "delete-thread", threadId: id })
+        }
       />
+
+      {confirmCopy ? (
+        <SupportConfirmDialog
+          open
+          tone={confirmCopy.tone}
+          eyebrow={confirmCopy.eyebrow}
+          title={confirmCopy.title}
+          description={confirmCopy.description}
+          detail={confirmCopy.detail}
+          note={confirmCopy.note}
+          confirmLabel={confirmCopy.confirmLabel}
+          busyLabel={confirmCopy.busyLabel}
+          busy={busy}
+          onCancel={() => {
+            if (!busy && !confirmingRef.current) setPending(null);
+          }}
+          onConfirm={() => void runPending()}
+        />
+      ) : null}
     </section>
   );
 }

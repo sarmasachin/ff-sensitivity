@@ -19,6 +19,7 @@ export declare class AuthService {
     login(dto: LoginDto, ip?: string): Promise<{
         accessToken: string;
         refreshToken: string;
+        refreshDays: number;
         admin: {
             id: string;
             email: string;
@@ -37,6 +38,7 @@ export declare class AuthService {
     verifyLoginOtp(dto: VerifyLoginOtpDto, ip?: string): Promise<{
         accessToken: string;
         refreshToken: string;
+        refreshDays: number;
         admin: {
             id: string;
             email: string;
@@ -53,6 +55,19 @@ export declare class AuthService {
         maskedEmail: string;
     }>;
     private createSession;
+    refresh(refreshToken: string | undefined): Promise<{
+        accessToken: string;
+        refreshToken: string;
+        refreshDays: number;
+        admin: {
+            id: string;
+            email: string;
+            role: string;
+            allowedModules: string[];
+            mustChangePassword: boolean;
+            displayName: string;
+        };
+    }>;
     me(adminId: string): Promise<import("./auth-profile").AdminProfileView>;
     updateProfile(adminId: string, dto: UpdateProfileDto): Promise<import("./auth-profile").AdminProfileView>;
     changePassword(adminId: string, dto: ChangePasswordDto): Promise<import("./auth-profile").AdminProfileView>;

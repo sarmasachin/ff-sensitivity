@@ -17,6 +17,7 @@ const prisma_service_1 = require("../prisma/prisma.service");
 const MAX_MESSAGES_PER_THREAD = 40;
 const MAX_OPEN_THREADS = 1;
 const LIST_LIMIT = 100;
+const SUPPORT_ACKNOWLEDGEMENT = 'Thank you for contacting FF Sensitivity Support. We’ve received your message successfully. Our support team will review the details and respond here. Depending on the nature of your request, resolution may take 12–72 hours. Please avoid sending duplicate messages, as this can delay processing.';
 function stamp(d) {
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -116,6 +117,7 @@ let SupportService = class SupportService {
         if (openCount >= MAX_OPEN_THREADS) {
             throw new app_error_1.AppError('SUPPORT_OPEN_LIMIT', 'You already have an open support thread. Reply there instead.', 409);
         }
+        const receivedAt = new Date();
         const created = await this.prisma.supportThread.create({
             data: {
                 userId,
@@ -127,10 +129,18 @@ let SupportService = class SupportService {
                 deviceLabel,
                 unread: true,
                 messages: {
-                    create: {
-                        sender: client_1.SupportSender.USER,
-                        text: message,
-                    },
+                    create: [
+                        {
+                            sender: client_1.SupportSender.USER,
+                            text: message,
+                            createdAt: receivedAt,
+                        },
+                        {
+                            sender: client_1.SupportSender.ADMIN,
+                            text: SUPPORT_ACKNOWLEDGEMENT,
+                            createdAt: new Date(receivedAt.getTime() + 1),
+                        },
+                    ],
                 },
             },
             include: { messages: { orderBy: { createdAt: 'asc' } } },
@@ -310,6 +320,67 @@ let SupportService = class SupportService {
             include: { messages: { orderBy: { createdAt: 'asc' } } },
         });
         void adminId;
+        return this.toThreadRow(updated);
+    }
+    async adminDeleteThread(adminId, threadId) {
+        assertThreadId(threadId);
+        const thread = await this.prisma.supportThread.findUnique({
+            where: { id: threadId.trim() },
+            include: { _count: { select: { messages: true } } },
+        });
+        if (!thread) {
+            throw new app_error_1.AppError('SUPPORT_NOT_FOUND', 'Thread not found.', 404);
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.supportThread.delete({ where: { id: thread.id } });
+            await tx.auditLog.create({
+                data: {
+                    actorAdminId: adminId,
+                    action: 'support.delete_thread',
+                    entity: `support_thread:${thread.id}`,
+                    afterJson: {
+                        email: thread.email,
+                        messageCount: thread._count.messages,
+                    },
+                },
+            });
+        });
+        return { ok: true, id: thread.id };
+    }
+    async adminDeleteUserMessage(adminId, threadId, messageId) {
+        assertThreadId(threadId);
+        assertThreadId(messageId);
+        const message = await this.prisma.supportMessage.findUnique({
+            where: { id: messageId.trim() },
+        });
+        if (!message || message.threadId !== threadId.trim()) {
+            throw new app_error_1.AppError('SUPPORT_NOT_FOUND', 'Message not found.', 404);
+        }
+        if (message.sender !== client_1.SupportSender.USER) {
+            throw new app_error_1.AppError('SUPPORT_DELETE_FORBIDDEN', 'Only user messages can be deleted from the inbox.', 403);
+        }
+        const updated = await this.prisma.$transaction(async (tx) => {
+            await tx.supportMessage.delete({ where: { id: message.id } });
+            const row = await tx.supportThread.findUnique({
+                where: { id: threadId.trim() },
+                include: { messages: { orderBy: { createdAt: 'asc' } } },
+            });
+            if (!row) {
+                throw new app_error_1.AppError('SUPPORT_NOT_FOUND', 'Thread not found.', 404);
+            }
+            await tx.auditLog.create({
+                data: {
+                    actorAdminId: adminId,
+                    action: 'support.delete_user_message',
+                    entity: `support_thread:${row.id}`,
+                    afterJson: {
+                        messageId: message.id,
+                        textLen: message.text.length,
+                    },
+                },
+            });
+            return row;
+        });
         return this.toThreadRow(updated);
     }
 };

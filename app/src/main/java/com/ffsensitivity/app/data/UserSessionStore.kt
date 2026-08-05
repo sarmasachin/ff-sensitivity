@@ -4,9 +4,22 @@ import android.content.Context
 
 /**
  * Local session gate + Nest user access token after Google verify.
+ * Tokens live in EncryptedSharedPreferences (migrates once from plaintext v1).
  */
 class UserSessionStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val prefs = SecurePrefs.open(
+        context = context,
+        encryptedName = PREFS_ENC,
+        legacyName = PREFS_LEGACY,
+        migrateKeys = listOf(
+            KEY_SIGNED_IN,
+            KEY_NAME,
+            KEY_EMAIL,
+            KEY_ID_TOKEN,
+            KEY_ACCESS_TOKEN,
+            KEY_USER_ID,
+        ),
+    )
 
     fun isSignedIn(): Boolean = prefs.getBoolean(KEY_SIGNED_IN, false)
 
@@ -65,7 +78,8 @@ class UserSessionStore(context: Context) {
     }
 
     companion object {
-        private const val PREFS = "ff_user_session_v1"
+        private const val PREFS_ENC = "ff_user_session_v2_enc"
+        private const val PREFS_LEGACY = "ff_user_session_v1"
         private const val KEY_SIGNED_IN = "signed_in"
         private const val KEY_NAME = "display_name"
         private const val KEY_EMAIL = "email"

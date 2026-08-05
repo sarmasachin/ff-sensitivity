@@ -97,4 +97,29 @@ export declare class SupportAdminController {
             createdAtMs: number;
         }[];
     }>;
+    deleteMessage(admin: AuthAdmin, id: string, messageId: string): Promise<{
+        id: string;
+        name: string;
+        email: string;
+        subject: import(".prisma/client").$Enums.SupportSubject;
+        status: import(".prisma/client").$Enums.SupportStatus;
+        appVersion: string;
+        deviceLabel: string;
+        unread: boolean;
+        createdAt: string;
+        updatedAt: string;
+        createdAtMs: number;
+        updatedAtMs: number;
+        messages: {
+            id: string;
+            sender: import(".prisma/client").$Enums.SupportSender;
+            text: string;
+            createdAt: string;
+            createdAtMs: number;
+        }[];
+    }>;
+    deleteThread(admin: AuthAdmin, id: string): Promise<{
+        ok: true;
+        id: string;
+    }>;
 }

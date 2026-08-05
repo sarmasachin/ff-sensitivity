@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { AuthAdmin } from '../auth/current-admin.decorator';
 import { SettingsService } from '../settings/settings.service';
 import type { StaffInviteDto, StaffModulesDto } from './dto/staff.dto';
+import { StaffInviteMailService } from './staff-invite-mail.service';
 import {
   assertInviteRole,
   assertSafeStaffText,
@@ -29,6 +30,7 @@ export class StaffService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
+    private readonly inviteMail: StaffInviteMailService,
   ) {}
 
   private assertCanMutate(actor: AuthAdmin) {
@@ -191,9 +193,20 @@ export class StaffService {
         return admin;
       });
 
+      try {
+        await this.inviteMail.send({
+          to: email,
+          displayName: name,
+          temporaryPassword: tempPassword,
+        });
+      } catch (err) {
+        await this.prisma.admin.delete({ where: { id: created.id } }).catch(() => undefined);
+        throw err;
+      }
+
       return {
         staff: this.toRow(created),
-        temporaryPassword: tempPassword,
+        inviteSent: true as const,
       };
     } catch (e) {
       if (
@@ -343,6 +356,7 @@ export class StaffService {
 
     const tempPassword = generateTempPassword();
     const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+    const previousHash = target.passwordHash;
     await this.prisma.$transaction(async (tx) => {
       await tx.admin.update({
         where: { id },
@@ -362,9 +376,26 @@ export class StaffService {
       });
     });
 
+    try {
+      await this.inviteMail.send({
+        to: target.email,
+        displayName: target.displayName?.trim() || target.email.split('@')[0] || 'Staff',
+        temporaryPassword: tempPassword,
+        resent: true,
+      });
+    } catch (err) {
+      await this.prisma.admin
+        .update({
+          where: { id },
+          data: { passwordHash: previousHash, mustChangePassword: true },
+        })
+        .catch(() => undefined);
+      throw err;
+    }
+
     return {
       staff: await this.loadRow(id),
-      temporaryPassword: tempPassword,
+      inviteSent: true as const,
     };
   }
 }

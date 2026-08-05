@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -16,6 +17,13 @@ import { AppError } from '../common/errors/app-error';
 import { SupportModuleGuard } from './support-module.guard';
 import { SupportService } from './support.service';
 import { AdminSupportReplyDto } from './dto/support.dto';
+
+function assertSupportId(id: string, label = 'thread') {
+  if (!id?.trim() || id.includes('/') || id.length > 64) {
+    throw new AppError('SUPPORT_BAD_ID', `Invalid ${label} id.`, 400);
+  }
+  return id.trim();
+}
 
 // --- Start: Support live wire (Sachin) ---
 @Controller('api/v1/admin/support')
@@ -42,28 +50,39 @@ export class SupportAdminController {
     @Param('id') id: string,
     @Body() dto: AdminSupportReplyDto,
   ) {
-    if (!id?.trim() || id.includes('/') || id.length > 64) {
-      throw new AppError('SUPPORT_BAD_ID', 'Invalid thread id.', 400);
-    }
-    return this.support.adminReply(admin.id, id.trim(), dto);
+    return this.support.adminReply(admin.id, assertSupportId(id), dto);
   }
 
   @Patch(':id/close')
   @Throttle({ default: { limit: 40, ttl: 60_000 } })
   close(@CurrentAdmin() admin: AuthAdmin, @Param('id') id: string) {
-    if (!id?.trim() || id.includes('/') || id.length > 64) {
-      throw new AppError('SUPPORT_BAD_ID', 'Invalid thread id.', 400);
-    }
-    return this.support.adminClose(admin.id, id.trim());
+    return this.support.adminClose(admin.id, assertSupportId(id));
   }
 
   @Patch(':id/read')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   markRead(@CurrentAdmin() admin: AuthAdmin, @Param('id') id: string) {
-    if (!id?.trim() || id.includes('/') || id.length > 64) {
-      throw new AppError('SUPPORT_BAD_ID', 'Invalid thread id.', 400);
-    }
-    return this.support.adminMarkRead(admin.id, id.trim());
+    return this.support.adminMarkRead(admin.id, assertSupportId(id));
+  }
+
+  @Delete(':id/messages/:messageId')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  deleteMessage(
+    @CurrentAdmin() admin: AuthAdmin,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.support.adminDeleteUserMessage(
+      admin.id,
+      assertSupportId(id),
+      assertSupportId(messageId, 'message'),
+    );
+  }
+
+  @Delete(':id')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  deleteThread(@CurrentAdmin() admin: AuthAdmin, @Param('id') id: string) {
+    return this.support.adminDeleteThread(admin.id, assertSupportId(id));
   }
 }
 // --- End: Support live wire (Sachin) ---

@@ -179,10 +179,10 @@ export default function StaffPage() {
     setBusy(true);
     setError(null);
     try {
-      const { staff, temporaryPassword } = await resendInviteApi(id);
+      const { staff } = await resendInviteApi(id);
       upsertRow(staff);
       setNotice(
-        `Invite resent to ${staff.email}. Temp password: ${temporaryPassword}`,
+        `Invite resent to ${staff.email}. Temporary password was emailed — it is not shown here.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Resend failed.");
@@ -224,7 +224,7 @@ export default function StaffPage() {
     setBusy(true);
     setError(null);
     try {
-      const { staff, temporaryPassword } = await inviteStaffApi({
+      const { staff } = await inviteStaffApi({
         name: payload.name,
         email: payload.email,
         role: payload.role,
@@ -234,7 +234,7 @@ export default function StaffPage() {
       upsertRow(staff);
       setInviteOpen(false);
       setNotice(
-        `Invite created for ${staff.email} as ${staff.role}. Temp password: ${temporaryPassword}`,
+        `Invite created for ${staff.email} as ${staff.role}. Temporary password was emailed — it is not shown here.`,
       );
       setFilter("invited");
     } catch (e) {

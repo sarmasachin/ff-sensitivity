@@ -3,6 +3,7 @@ package com.ffsensitivity.app.data.remote
 import android.content.Context
 import android.content.SharedPreferences
 import com.ffsensitivity.app.data.DeviceInstallStore
+import com.ffsensitivity.app.data.SecurePrefs
 import com.ffsensitivity.app.data.UserSessionStore
 import com.ffsensitivity.app.util.AppLog
 import com.google.android.gms.tasks.Tasks
@@ -21,12 +22,18 @@ object PushInboxCache {
 }
 
 object PushRepository {
-    private const val PREFS = "ff_push_fcm_v1"
+    private const val PREFS_ENC = "ff_push_fcm_v2_enc"
+    private const val PREFS_LEGACY = "ff_push_fcm_v1"
     private const val KEY_TOKEN = "fcm_token"
     private val defaultTopics = listOf("feature_names", "all_users")
 
     private fun prefs(context: Context): SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        SecurePrefs.open(
+            context = context,
+            encryptedName = PREFS_ENC,
+            legacyName = PREFS_LEGACY,
+            migrateKeys = listOf(KEY_TOKEN),
+        )
 
     fun storeFcmToken(context: Context, token: String) {
         val t = token.trim()

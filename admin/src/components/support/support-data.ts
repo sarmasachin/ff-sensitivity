@@ -277,6 +277,10 @@ export const SUPPORT_CAPABILITIES = [
     body: "Filter by subject and status. Mark unread / close when resolved — ACL gated by support module.",
   },
   {
+    title: "Delete controls",
+    body: "Remove a single user message from the thread drawer, or permanently delete the whole conversation from the table or drawer.",
+  },
+  {
     title: "Device context",
     body: "App version and device label travel with each ticket for faster debugging.",
   },

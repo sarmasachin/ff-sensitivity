@@ -17,6 +17,8 @@ import type {
 const MAX_MESSAGES_PER_THREAD = 40;
 const MAX_OPEN_THREADS = 1;
 const LIST_LIMIT = 100;
+const SUPPORT_ACKNOWLEDGEMENT =
+  'Thank you for contacting FF Sensitivity Support. We’ve received your message successfully. Our support team will review the details and respond here. Depending on the nature of your request, resolution may take 12–72 hours. Please avoid sending duplicate messages, as this can delay processing.';
 
 function stamp(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -157,6 +159,7 @@ export class SupportService {
       );
     }
 
+    const receivedAt = new Date();
     const created = await this.prisma.supportThread.create({
       data: {
         userId,
@@ -168,10 +171,18 @@ export class SupportService {
         deviceLabel,
         unread: true,
         messages: {
-          create: {
-            sender: SupportSender.USER,
-            text: message,
-          },
+          create: [
+            {
+              sender: SupportSender.USER,
+              text: message,
+              createdAt: receivedAt,
+            },
+            {
+              sender: SupportSender.ADMIN,
+              text: SUPPORT_ACKNOWLEDGEMENT,
+              createdAt: new Date(receivedAt.getTime() + 1),
+            },
+          ],
         },
       },
       include: { messages: { orderBy: { createdAt: 'asc' } } },
@@ -210,6 +221,7 @@ export class SupportService {
       );
     }
 
+    // Auto-ack is only on thread start — never spam it on every follow-up reply.
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.supportMessage.create({
         data: {
@@ -379,6 +391,82 @@ export class SupportService {
       include: { messages: { orderBy: { createdAt: 'asc' } } },
     });
     void adminId;
+    return this.toThreadRow(updated);
+  }
+
+  async adminDeleteThread(adminId: string, threadId: string) {
+    assertThreadId(threadId);
+    const thread = await this.prisma.supportThread.findUnique({
+      where: { id: threadId.trim() },
+      include: { _count: { select: { messages: true } } },
+    });
+    if (!thread) {
+      throw new AppError('SUPPORT_NOT_FOUND', 'Thread not found.', 404);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.supportThread.delete({ where: { id: thread.id } });
+      await tx.auditLog.create({
+        data: {
+          actorAdminId: adminId,
+          action: 'support.delete_thread',
+          entity: `support_thread:${thread.id}`,
+          afterJson: {
+            email: thread.email,
+            messageCount: thread._count.messages,
+          } as Prisma.InputJsonValue,
+        },
+      });
+    });
+
+    return { ok: true as const, id: thread.id };
+  }
+
+  async adminDeleteUserMessage(
+    adminId: string,
+    threadId: string,
+    messageId: string,
+  ) {
+    assertThreadId(threadId);
+    assertThreadId(messageId);
+
+    const message = await this.prisma.supportMessage.findUnique({
+      where: { id: messageId.trim() },
+    });
+    if (!message || message.threadId !== threadId.trim()) {
+      throw new AppError('SUPPORT_NOT_FOUND', 'Message not found.', 404);
+    }
+    if (message.sender !== SupportSender.USER) {
+      throw new AppError(
+        'SUPPORT_DELETE_FORBIDDEN',
+        'Only user messages can be deleted from the inbox.',
+        403,
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.supportMessage.delete({ where: { id: message.id } });
+      const row = await tx.supportThread.findUnique({
+        where: { id: threadId.trim() },
+        include: { messages: { orderBy: { createdAt: 'asc' } } },
+      });
+      if (!row) {
+        throw new AppError('SUPPORT_NOT_FOUND', 'Thread not found.', 404);
+      }
+      await tx.auditLog.create({
+        data: {
+          actorAdminId: adminId,
+          action: 'support.delete_user_message',
+          entity: `support_thread:${row.id}`,
+          afterJson: {
+            messageId: message.id,
+            textLen: message.text.length,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return row;
+    });
+
     return this.toThreadRow(updated);
   }
 }

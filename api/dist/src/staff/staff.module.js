@@ -10,6 +10,7 @@ exports.StaffAdminModule = void 0;
 const common_1 = require("@nestjs/common");
 const settings_module_1 = require("../settings/settings.module");
 const staff_admin_controller_1 = require("./staff-admin.controller");
+const staff_invite_mail_service_1 = require("./staff-invite-mail.service");
 const staff_module_guard_1 = require("./staff-module.guard");
 const staff_service_1 = require("./staff.service");
 let StaffAdminModule = class StaffAdminModule {
@@ -19,7 +20,7 @@ exports.StaffAdminModule = StaffAdminModule = __decorate([
     (0, common_1.Module)({
         imports: [settings_module_1.SettingsAdminModule],
         controllers: [staff_admin_controller_1.StaffAdminController],
-        providers: [staff_service_1.StaffService, staff_module_guard_1.StaffModuleGuard],
+        providers: [staff_service_1.StaffService, staff_module_guard_1.StaffModuleGuard, staff_invite_mail_service_1.StaffInviteMailService],
     })
 ], StaffAdminModule);
 //# sourceMappingURL=staff.module.js.map

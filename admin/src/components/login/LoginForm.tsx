@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { storeAdminProfile } from "@/lib/api";
 
 type FieldErrors = {
   email?: string;
@@ -149,8 +150,7 @@ export function LoginForm() {
         requiresOtp?: boolean;
         challengeId?: string;
         maskedEmail?: string;
-        accessToken?: string;
-        admin?: { email: string; role: string };
+        admin?: { email: string; role: string; allowedModules?: string[] };
         error?: { message?: string };
       } | null;
 
@@ -167,12 +167,12 @@ export function LoginForm() {
         setErrors({});
         return;
       }
-      if (!data?.accessToken) {
+      if (!data?.admin?.email || !data.admin.role) {
         setErrors({ form: "Authentication response was incomplete." });
         return;
       }
 
-      completeLogin(data.accessToken, data.admin);
+      completeLogin(data.admin);
     } catch {
       setErrors({
         form: "Cannot reach authentication service. Is the API running?",
@@ -182,16 +182,12 @@ export function LoginForm() {
     }
   }
 
-  function completeLogin(
-    accessToken: string,
-    admin?: { email: string; role: string },
-  ) {
-    const storage = remember ? localStorage : sessionStorage;
-    storage.setItem("ffops_access_token", accessToken);
-    if (admin) storage.setItem("ffops_admin", JSON.stringify(admin));
-    const other = remember ? sessionStorage : localStorage;
-    other.removeItem("ffops_access_token");
-    other.removeItem("ffops_admin");
+  function completeLogin(admin: {
+    email: string;
+    role: string;
+    allowedModules?: string[];
+  }) {
+    storeAdminProfile(admin, remember);
     router.replace("/dashboard");
   }
 
@@ -212,11 +208,10 @@ export function LoginForm() {
         body: JSON.stringify({ challengeId, code: otp }),
       });
       const data = (await res.json().catch(() => null)) as {
-        accessToken?: string;
-        admin?: { email: string; role: string };
+        admin?: { email: string; role: string; allowedModules?: string[] };
         error?: { code?: string; message?: string };
       } | null;
-      if (!res.ok || !data?.accessToken) {
+      if (!res.ok || !data?.admin?.email || !data.admin.role) {
         const code = data?.error?.code;
         const message =
           data?.error?.message ?? "Verification failed. Try again.";
@@ -233,7 +228,7 @@ export function LoginForm() {
         setErrors({ otp: message });
         return;
       }
-      completeLogin(data.accessToken, data.admin);
+      completeLogin(data.admin);
     } catch {
       setErrors({ form: "Cannot reach authentication service." });
     } finally {
@@ -251,6 +246,7 @@ export function LoginForm() {
       const res = await fetch(`${apiBase}/api/v1/auth/login/resend-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ challengeId }),
       });
       const data = (await res.json().catch(() => null)) as {

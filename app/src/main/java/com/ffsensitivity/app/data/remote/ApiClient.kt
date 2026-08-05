@@ -27,7 +27,14 @@ object ApiClient {
 
     fun baseUrl(): String {
         val raw = BuildConfig.API_BASE_URL.trim().trimEnd('/')
-        return raw.ifBlank { "http://10.0.2.2:4000" }
+        val url = raw.ifBlank {
+            if (BuildConfig.DEBUG) "http://10.0.2.2:4000" else ""
+        }
+        check(url.isNotBlank()) { "API_BASE_URL is missing" }
+        check(BuildConfig.DEBUG || url.startsWith("https://")) {
+            "Release builds require an HTTPS API_BASE_URL"
+        }
+        return url
     }
 
     fun jsonBody(obj: JSONObject) =

@@ -21,6 +21,12 @@ const app_error_1 = require("../common/errors/app-error");
 const support_module_guard_1 = require("./support-module.guard");
 const support_service_1 = require("./support.service");
 const support_dto_1 = require("./dto/support.dto");
+function assertSupportId(id, label = 'thread') {
+    if (!id?.trim() || id.includes('/') || id.length > 64) {
+        throw new app_error_1.AppError('SUPPORT_BAD_ID', `Invalid ${label} id.`, 400);
+    }
+    return id.trim();
+}
 let SupportAdminController = class SupportAdminController {
     support;
     constructor(support) {
@@ -33,22 +39,19 @@ let SupportAdminController = class SupportAdminController {
         return this.support.adminStats();
     }
     reply(admin, id, dto) {
-        if (!id?.trim() || id.includes('/') || id.length > 64) {
-            throw new app_error_1.AppError('SUPPORT_BAD_ID', 'Invalid thread id.', 400);
-        }
-        return this.support.adminReply(admin.id, id.trim(), dto);
+        return this.support.adminReply(admin.id, assertSupportId(id), dto);
     }
     close(admin, id) {
-        if (!id?.trim() || id.includes('/') || id.length > 64) {
-            throw new app_error_1.AppError('SUPPORT_BAD_ID', 'Invalid thread id.', 400);
-        }
-        return this.support.adminClose(admin.id, id.trim());
+        return this.support.adminClose(admin.id, assertSupportId(id));
     }
     markRead(admin, id) {
-        if (!id?.trim() || id.includes('/') || id.length > 64) {
-            throw new app_error_1.AppError('SUPPORT_BAD_ID', 'Invalid thread id.', 400);
-        }
-        return this.support.adminMarkRead(admin.id, id.trim());
+        return this.support.adminMarkRead(admin.id, assertSupportId(id));
+    }
+    deleteMessage(admin, id, messageId) {
+        return this.support.adminDeleteUserMessage(admin.id, assertSupportId(id), assertSupportId(messageId, 'message'));
+    }
+    deleteThread(admin, id) {
+        return this.support.adminDeleteThread(admin.id, assertSupportId(id));
     }
 };
 exports.SupportAdminController = SupportAdminController;
@@ -96,6 +99,25 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", void 0)
 ], SupportAdminController.prototype, "markRead", null);
+__decorate([
+    (0, common_1.Delete)(':id/messages/:messageId'),
+    (0, throttler_1.Throttle)({ default: { limit: 30, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Param)('messageId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:returntype", void 0)
+], SupportAdminController.prototype, "deleteMessage", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], SupportAdminController.prototype, "deleteThread", null);
 exports.SupportAdminController = SupportAdminController = __decorate([
     (0, common_1.Controller)('api/v1/admin/support'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, support_module_guard_1.SupportModuleGuard),

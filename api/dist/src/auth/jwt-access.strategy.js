@@ -16,11 +16,19 @@ const passport_1 = require("@nestjs/passport");
 const passport_jwt_1 = require("passport-jwt");
 const prisma_service_1 = require("../prisma/prisma.service");
 const app_error_1 = require("../common/errors/app-error");
+const auth_cookies_1 = require("./auth-cookies");
+function accessTokenFromRequest(req) {
+    const fromHeader = passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+    if (fromHeader)
+        return fromHeader;
+    const cookie = req?.cookies?.[auth_cookies_1.ACCESS_COOKIE];
+    return typeof cookie === 'string' && cookie.length > 0 ? cookie : null;
+}
 let JwtAccessStrategy = class JwtAccessStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy, 'jwt') {
     prisma;
     constructor(config, prisma) {
         super({
-            jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
+            jwtFromRequest: accessTokenFromRequest,
             ignoreExpiration: false,
             secretOrKey: config.getOrThrow('JWT_ACCESS_SECRET'),
         });

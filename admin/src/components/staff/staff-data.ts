@@ -99,7 +99,7 @@ export function defaultModulesForRole(role: StaffRole): StaffModuleId[] {
 export const STAFF_CAPABILITIES = [
   {
     title: "Invite seats",
-    body: "Create ADMIN / SUB_ADMIN / VIEWER with temp password — must change on first login.",
+    body: "Create ADMIN / SUB_ADMIN / VIEWER — temp password is emailed, must change on first login.",
   },
   {
     title: "Module ACL",
@@ -111,7 +111,7 @@ export const STAFF_CAPABILITIES = [
   },
   {
     title: "Resend invite",
-    body: "Rotate temp password for seats that have not logged in yet.",
+    body: "Rotate temp password and email it for seats that have not logged in yet.",
   },
   {
     title: "Role guards",

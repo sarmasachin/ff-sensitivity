@@ -205,11 +205,7 @@ export function syncStoredAdminBlob(profile: ProfileApiResponse) {
   const store =
     scope === "local"
       ? localStorage
-      : scope === "session"
-        ? sessionStorage
-        : sessionStorage.getItem("ffops_access_token")
-          ? sessionStorage
-          : localStorage;
+      : sessionStorage;
   const prevRaw = store.getItem("ffops_admin");
   let prev: StoredAdminBlob = {};
   if (prevRaw) {

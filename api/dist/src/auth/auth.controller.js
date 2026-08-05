@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const throttler_1 = require("@nestjs/throttler");
 const auth_service_1 = require("./auth.service");
+const auth_cookies_1 = require("./auth-cookies");
 const login_dto_1 = require("./dto/login.dto");
 const update_profile_dto_1 = require("./dto/update-profile.dto");
 const change_password_dto_1 = require("./dto/change-password.dto");
@@ -35,24 +36,26 @@ let AuthController = class AuthController {
         const result = await this.auth.login(dto, typeof ip === 'string' ? ip : undefined);
         if ('requiresOtp' in result)
             return result;
-        this.setRefreshCookie(res, result.refreshToken);
-        return {
-            accessToken: result.accessToken,
-            admin: result.admin,
-        };
+        this.applySessionCookies(res, result);
+        return { admin: result.admin };
     }
     async verifyLoginOtp(dto, req, res) {
         const ip = req.ip ?? req.headers['x-forwarded-for'];
         const result = await this.auth.verifyLoginOtp(dto, typeof ip === 'string' ? ip : undefined);
-        this.setRefreshCookie(res, result.refreshToken);
-        return { accessToken: result.accessToken, admin: result.admin };
+        this.applySessionCookies(res, result);
+        return { admin: result.admin };
     }
     resendLoginOtp(dto) {
         return this.auth.resendLoginOtp(dto);
     }
+    async refresh(req, res) {
+        const result = await this.auth.refresh(req.cookies?.refresh_token);
+        this.applySessionCookies(res, result);
+        return { admin: result.admin };
+    }
     async logout(req, res) {
         await this.auth.logout(req.cookies?.refresh_token);
-        res.clearCookie('refresh_token', this.cookieOpts());
+        (0, auth_cookies_1.clearAuthCookies)(res, this.config);
         return { ok: true };
     }
     me(req) {
@@ -64,23 +67,11 @@ let AuthController = class AuthController {
     changePassword(req, dto) {
         return this.auth.changePassword(req.user.id, dto);
     }
-    setRefreshCookie(res, token) {
-        const days = Number(this.config.get('JWT_REFRESH_TTL_DAYS') ?? 14);
-        res.cookie('refresh_token', token, {
-            ...this.cookieOpts(),
-            maxAge: days * 24 * 60 * 60 * 1000,
-        });
-    }
-    cookieOpts() {
-        const corsOrigin = this.config.get('CORS_ORIGIN') ?? '';
-        const secure = process.env.NODE_ENV === 'production' ||
-            corsOrigin.startsWith('https://');
-        return {
-            httpOnly: true,
-            secure,
-            sameSite: 'strict',
-            path: '/api/v1/auth',
-        };
+    applySessionCookies(res, result) {
+        (0, auth_cookies_1.setAuthCookies)(res, this.config, {
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+        }, result.refreshDays);
     }
 };
 exports.AuthController = AuthController;
@@ -112,6 +103,15 @@ __decorate([
     __metadata("design:paramtypes", [resend_login_otp_dto_1.ResendLoginOtpDto]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "resendLoginOtp", null);
+__decorate([
+    (0, common_1.Post)('refresh'),
+    (0, throttler_1.Throttle)({ default: { limit: 30, ttl: 60_000 } }),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Res)({ passthrough: true })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "refresh", null);
 __decorate([
     (0, common_1.Post)('logout'),
     __param(0, (0, common_1.Req)()),

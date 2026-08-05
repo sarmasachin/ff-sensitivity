@@ -29,7 +29,7 @@ export declare class StaffAdminController {
             invitedAtLabel: string;
             note: string;
         };
-        temporaryPassword: string;
+        inviteSent: true;
     }>;
     setModules(admin: AuthAdmin, id: string, dto: StaffModulesDto): Promise<{
         staff: {
@@ -82,6 +82,6 @@ export declare class StaffAdminController {
             invitedAtLabel: string;
             note: string;
         };
-        temporaryPassword: string;
+        inviteSent: true;
     }>;
 }

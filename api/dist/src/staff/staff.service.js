@@ -49,14 +49,17 @@ const bcrypt = __importStar(require("bcryptjs"));
 const app_error_1 = require("../common/errors/app-error");
 const prisma_service_1 = require("../prisma/prisma.service");
 const settings_service_1 = require("../settings/settings.service");
+const staff_invite_mail_service_1 = require("./staff-invite-mail.service");
 const staff_security_1 = require("./staff-security");
 const BCRYPT_ROUNDS = 12;
 let StaffService = class StaffService {
     prisma;
     settings;
-    constructor(prisma, settings) {
+    inviteMail;
+    constructor(prisma, settings, inviteMail) {
         this.prisma = prisma;
         this.settings = settings;
+        this.inviteMail = inviteMail;
     }
     assertCanMutate(actor) {
         if (actor.role === client_1.AdminRole.VIEWER) {
@@ -160,9 +163,20 @@ let StaffService = class StaffService {
                 });
                 return admin;
             });
+            try {
+                await this.inviteMail.send({
+                    to: email,
+                    displayName: name,
+                    temporaryPassword: tempPassword,
+                });
+            }
+            catch (err) {
+                await this.prisma.admin.delete({ where: { id: created.id } }).catch(() => undefined);
+                throw err;
+            }
             return {
                 staff: this.toRow(created),
-                temporaryPassword: tempPassword,
+                inviteSent: true,
             };
         }
         catch (e) {
@@ -283,6 +297,7 @@ let StaffService = class StaffService {
         }
         const tempPassword = (0, staff_security_1.generateTempPassword)();
         const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+        const previousHash = target.passwordHash;
         await this.prisma.$transaction(async (tx) => {
             await tx.admin.update({
                 where: { id },
@@ -301,9 +316,26 @@ let StaffService = class StaffService {
                 },
             });
         });
+        try {
+            await this.inviteMail.send({
+                to: target.email,
+                displayName: target.displayName?.trim() || target.email.split('@')[0] || 'Staff',
+                temporaryPassword: tempPassword,
+                resent: true,
+            });
+        }
+        catch (err) {
+            await this.prisma.admin
+                .update({
+                where: { id },
+                data: { passwordHash: previousHash, mustChangePassword: true },
+            })
+                .catch(() => undefined);
+            throw err;
+        }
         return {
             staff: await this.loadRow(id),
-            temporaryPassword: tempPassword,
+            inviteSent: true,
         };
     }
 };
@@ -311,6 +343,7 @@ exports.StaffService = StaffService;
 exports.StaffService = StaffService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        settings_service_1.SettingsService])
+        settings_service_1.SettingsService,
+        staff_invite_mail_service_1.StaffInviteMailService])
 ], StaffService);
 //# sourceMappingURL=staff.service.js.map

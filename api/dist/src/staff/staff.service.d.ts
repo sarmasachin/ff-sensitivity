@@ -2,10 +2,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { AuthAdmin } from '../auth/current-admin.decorator';
 import { SettingsService } from '../settings/settings.service';
 import type { StaffInviteDto, StaffModulesDto } from './dto/staff.dto';
+import { StaffInviteMailService } from './staff-invite-mail.service';
 export declare class StaffService {
     private readonly prisma;
     private readonly settings;
-    constructor(prisma: PrismaService, settings: SettingsService);
+    private readonly inviteMail;
+    constructor(prisma: PrismaService, settings: SettingsService, inviteMail: StaffInviteMailService);
     private assertCanMutate;
     private assertCanManageTarget;
     private toRow;
@@ -35,7 +37,7 @@ export declare class StaffService {
             invitedAtLabel: string;
             note: string;
         };
-        temporaryPassword: string;
+        inviteSent: true;
     }>;
     setModules(actor: AuthAdmin, idRaw: string, dto: StaffModulesDto): Promise<{
         staff: {
@@ -88,6 +90,6 @@ export declare class StaffService {
             invitedAtLabel: string;
             note: string;
         };
-        temporaryPassword: string;
+        inviteSent: true;
     }>;
 }

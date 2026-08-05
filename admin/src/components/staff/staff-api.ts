@@ -15,7 +15,7 @@ export async function inviteStaffApi(body: {
   role: Exclude<StaffRole, "SUPER_ADMIN">;
   modules: StaffModuleId[];
   currentPassword?: string;
-}): Promise<{ staff: StaffListRow; temporaryPassword: string }> {
+}): Promise<{ staff: StaffListRow; inviteSent: boolean }> {
   return apiFetch("/api/v1/admin/staff/invite", {
     method: "POST",
     body: JSON.stringify(body),
@@ -51,7 +51,7 @@ export async function enableStaffApi(id: string): Promise<StaffListRow> {
 
 export async function resendInviteApi(
   id: string,
-): Promise<{ staff: StaffListRow; temporaryPassword: string }> {
+): Promise<{ staff: StaffListRow; inviteSent: boolean }> {
   return apiFetch(
     `/api/v1/admin/staff/${encodeURIComponent(id)}/resend-invite`,
     { method: "POST", body: "{}" },
