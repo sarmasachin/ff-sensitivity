@@ -5,19 +5,21 @@ export function ClaimsPolicyCard() {
         Claim rule
       </p>
       <h2 className="mt-1 text-[16px] font-bold tracking-[-0.02em] text-slate-900">
-        Code + Copy only
+        Unlock = claim (live app)
       </h2>
       <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-600">
-        User ko redeem code milne ke baad jab woh{" "}
-        <span className="font-semibold text-slate-800">Copy</span> pe click
-        kare — tabhi claim ledger me entry. Sirf unlock / dekhna / close bina
-        Copy ke → Claims me kuch nahi jata, stock bhi consume nahi hota.
+        Android scratch unlock calls{" "}
+        <span className="font-semibold text-slate-800">
+          POST /api/v1/redeem/:id/claim
+        </span>
+        . Stock is consumed then — Copy only puts the code on the clipboard.
+        This ledger shows those Nest claim rows.
       </p>
       <ol className="mt-4 grid gap-2 sm:grid-cols-3">
         {[
-          { step: "1", title: "Unlock", body: "Code reveal / scratch win" },
-          { step: "2", title: "Copy", body: "User taps Copy Code" },
-          { step: "3", title: "Claim", body: "Logged here + stock −1" },
+          { step: "1", title: "Unlock", body: "Scratch win on device" },
+          { step: "2", title: "Claim API", body: "Nest writes RedeemClaim" },
+          { step: "3", title: "Ledger", body: "Shows here for staff review" },
         ].map((item) => (
           <li
             key={item.step}

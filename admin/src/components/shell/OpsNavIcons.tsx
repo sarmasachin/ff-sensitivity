@@ -83,6 +83,20 @@ export function IconSettings({ className }: IconProps) {
   );
 }
 
+export function IconProfile({ className }: IconProps) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M5 19.2c1.2-3.4 3.8-5.2 7-5.2s5.8 1.8 7 5.2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function IconStaff({ className }: IconProps) {
   return (
     <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -178,6 +192,27 @@ export function IconWallets({ className }: IconProps) {
     <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M4 7h16v12H4V7Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
       <path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4H16M16 12h4v3h-4a1.5 1.5 0 0 1 0-3Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconUsers({ className }: IconProps) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M3.5 19c.9-3.2 3.2-5 5.5-5s4.6 1.8 5.5 5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <circle cx="17" cy="9" r="2.25" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M20.5 19c-.5-2.2-1.9-3.6-3.5-4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

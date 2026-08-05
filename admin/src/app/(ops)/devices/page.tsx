@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DevicesCapabilities } from "@/components/devices/DevicesCapabilities";
 import { DevicesDetailDrawer } from "@/components/devices/DevicesDetailDrawer";
 import { DevicesEmptyState } from "@/components/devices/DevicesEmptyState";
@@ -13,22 +13,111 @@ import {
   type DevicesFilterKey,
 } from "@/components/devices/DevicesToolbar";
 import {
-  DEVICES_DEMO_ROWS,
+  blockDeviceApi,
+  fetchDevices,
+  invalidateDeviceTokenApi,
+  unblockDeviceApi,
+} from "@/components/devices/devices-api";
+import {
   computeDeviceStats,
   type DeviceListRow,
 } from "@/components/devices/devices-data";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 12;
 
+function canAccessDevices(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as {
+      role?: string;
+      allowedModules?: string[];
+    };
+    if (admin.role === "SUPER_ADMIN") return true;
+    return Array.isArray(admin.allowedModules)
+      ? admin.allowedModules.includes("devices")
+      : false;
+  } catch {
+    return false;
+  }
+}
+
+function devicesToCsv(rows: DeviceListRow[]): string {
+  const header = [
+    "deviceId",
+    "brand",
+    "model",
+    "androidVersion",
+    "appVersion",
+    "status",
+    "lastSeenLabel",
+    "hasFcmToken",
+    "coinBalance",
+  ];
+  const escape = (v: string | number | boolean) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [
+    header.join(","),
+    ...rows.map((r) =>
+      [
+        r.deviceId,
+        r.brand,
+        r.model,
+        r.androidVersion,
+        r.appVersion,
+        r.status,
+        r.lastSeenLabel,
+        r.hasFcmToken,
+        r.coinBalance,
+      ]
+        .map(escape)
+        .join(","),
+    ),
+  ];
+  return lines.join("\n");
+}
+
+// --- Start: Devices live wire (Sachin) ---
 export default function DevicesPage() {
-  const [rows, setRows] = useState<DeviceListRow[]>(() => [
-    ...DEVICES_DEMO_ROWS,
-  ]);
+  const [allowed, setAllowed] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rows, setRows] = useState<DeviceListRow[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DevicesFilterKey>("all");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [inspectId, setInspectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAllowed(canAccessDevices());
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await fetchDevices();
+      setRows(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load devices.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [allowed, load]);
 
   useEffect(() => {
     setPage(1);
@@ -77,59 +166,88 @@ export default function DevicesPage() {
     ? (rows.find((r) => r.id === inspectId) ?? null)
     : null;
 
-  function blockDevice(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              status: "BLOCKED",
-              pushEnabled: false,
-              note: `${r.note} · Blocked by staff.`,
-            }
-          : r,
-      ),
-    );
-    setNotice(`Blocked ${row.deviceId} (${row.label}).`);
+  function replaceRow(next: DeviceListRow) {
+    setRows((prev) => prev.map((r) => (r.id === next.id ? next : r)));
   }
 
-  function unblockDevice(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              status: r.lastSeenHoursAgo > 72 ? "STALE" : "ACTIVE",
-              pushEnabled: r.hasFcmToken,
-              note: "Unblocked by staff. Push restored if token present.",
-            }
-          : r,
-      ),
-    );
-    setNotice(`Unblocked ${row.deviceId}.`);
+  async function blockDevice(id: string) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const next = await blockDeviceApi(id);
+      replaceRow(next);
+      setNotice(`Blocked ${next.deviceId} (${next.label}).`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Block failed.");
+    } finally {
+      setBusyId(null);
+    }
   }
 
-  function invalidateToken(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row || !row.hasFcmToken) return;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              hasFcmToken: false,
-              fcmTokenMasked: "—",
-              pushEnabled: false,
-              note: `${r.note} · FCM token invalidated by staff.`,
-            }
-          : r,
-      ),
+  async function unblockDevice(id: string) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const next = await unblockDeviceApi(id);
+      replaceRow(next);
+      setNotice(`Unblocked ${next.deviceId}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unblock failed.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function invalidateToken(id: string) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const next = await invalidateDeviceTokenApi(id);
+      replaceRow(next);
+      setNotice(`Dropped FCM token for ${next.deviceId}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalidate failed.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function onExport() {
+    if (filtered.length === 0) {
+      setNotice("Nothing to export.");
+      return;
+    }
+    // Never export full FCM — only masked fields from Nest rows.
+    const csv = devicesToCsv(filtered);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `devices_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(`Exported ${filtered.length} device row(s) (no raw FCM).`);
+  }
+
+  if (!allowed) {
+    return (
+      <section className="mx-auto flex max-w-6xl flex-col gap-5">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-8 text-center text-[13px] font-medium text-rose-900">
+          You do not have access to Devices. Ask a Super Admin for the devices
+          module.
+        </div>
+      </section>
     );
-    setNotice(`Dropped FCM token for ${row.deviceId}.`);
+  }
+
+  if (loading) {
+    return (
+      <section className="mx-auto flex max-w-6xl flex-col gap-5">
+        <div className="rounded-2xl border border-[#e8eaee] bg-white px-5 py-10 text-center text-[13px] text-slate-500">
+          Loading device registry…
+        </div>
+      </section>
+    );
   }
 
   const queueEmpty = rows.length === 0;
@@ -138,12 +256,10 @@ export default function DevicesPage() {
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <DevicesHeader
-        onRefresh={() =>
-          setNotice("Refresh will sync from Nest device registry next.")
-        }
-        onExport={() =>
-          setNotice("CSV export will work after Devices API is connected.")
-        }
+        onRefresh={() => {
+          void load().then(() => setNotice("Synced from Nest device registry."));
+        }}
+        onExport={onExport}
       />
       <DevicesStats
         total={stats.total}
@@ -158,6 +274,20 @@ export default function DevicesPage() {
         onQuery={setQuery}
         onFilter={setFilter}
       />
+
+      {error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
+        >
+          {error}
+        </div>
+      ) : null}
+      {busyId ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[13px] text-slate-600">
+          Updating device…
+        </div>
+      ) : null}
 
       {queueEmpty ? (
         <DevicesEmptyState kind="queue" />
@@ -174,9 +304,9 @@ export default function DevicesPage() {
           rows={paged}
           notice={notice}
           onInspect={setInspectId}
-          onBlock={blockDevice}
-          onUnblock={unblockDevice}
-          onInvalidateToken={invalidateToken}
+          onBlock={(id) => void blockDevice(id)}
+          onUnblock={(id) => void unblockDevice(id)}
+          onInvalidateToken={(id) => void invalidateToken(id)}
           footer={
             <DevicesPagination
               page={safePage}
@@ -194,10 +324,11 @@ export default function DevicesPage() {
         open={!!inspectRow}
         row={inspectRow}
         onClose={() => setInspectId(null)}
-        onBlock={blockDevice}
-        onUnblock={unblockDevice}
-        onInvalidateToken={invalidateToken}
+        onBlock={(id) => void blockDevice(id)}
+        onUnblock={(id) => void unblockDevice(id)}
+        onInvalidateToken={(id) => void invalidateToken(id)}
       />
     </section>
   );
 }
+// --- End: Devices live wire (Sachin) ---

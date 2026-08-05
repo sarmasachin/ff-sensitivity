@@ -22,9 +22,11 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,14 +39,18 @@ import com.ffsensitivity.app.data.ContactReplyResult
 import com.ffsensitivity.app.data.ContactStartResult
 import com.ffsensitivity.app.data.ContactStore
 import com.ffsensitivity.app.data.ContactSubject
+import com.ffsensitivity.app.data.UserSessionStore
+import com.ffsensitivity.app.data.remote.SupportRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.HairlineStrong
-import com.ffsensitivity.app.presentation.theme.InkMuted
 import com.ffsensitivity.app.presentation.theme.InkPrimary
 import com.ffsensitivity.app.presentation.theme.SurfaceCard
 import com.ffsensitivity.app.util.AppLog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ContactScreen(
@@ -53,13 +59,20 @@ fun ContactScreen(
     onBack: () -> Boolean
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val session = remember { UserSessionStore(context) }
     var thread by remember { mutableStateOf(ContactStore.load(context)) }
-    var name by remember { mutableStateOf(thread?.name.orEmpty()) }
-    var email by remember { mutableStateOf(thread?.email.orEmpty()) }
+    var name by remember {
+        mutableStateOf(thread?.name.orEmpty().ifBlank { session.displayName() })
+    }
+    var email by remember {
+        mutableStateOf(thread?.email.orEmpty().ifBlank { session.email() })
+    }
     var subject by remember { mutableStateOf(thread?.subject ?: ContactSubject.REPORT) }
     var startMessage by remember { mutableStateOf("") }
     var chatDraft by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    var syncing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<Pair<String, String>?>(null) }
     var backBusy by remember { mutableStateOf(false) }
 
@@ -69,6 +82,26 @@ fun ContactScreen(
 
     fun clearError() {
         error = null
+    }
+
+    LaunchedEffect(Unit) {
+        syncing = true
+        withContext(Dispatchers.IO) {
+            SupportRepository.syncMine(context)
+        }.onSuccess { remote ->
+            thread = remote ?: ContactStore.load(context)
+            if (thread != null) {
+                name = thread!!.name
+                email = thread!!.email
+                subject = thread!!.subject
+            }
+        }.onFailure {
+            // Keep local cache if offline; only force auth error when no cache.
+            if (ContactStore.load(context) == null && session.accessToken().isBlank()) {
+                error = "Sign in required" to "Sign in to send and receive support messages."
+            }
+        }
+        syncing = false
     }
 
     fun goBack() {
@@ -87,34 +120,45 @@ fun ContactScreen(
     fun startConversation() {
         if (sending) return
         clearError()
-        sending = true
-        val result = runCatching {
-            ContactStore.start(
-                context = context,
-                name = name,
-                email = email,
-                subject = subject,
-                message = startMessage,
-                appVersion = versionLabel
-            )
-        }.getOrElse {
-            AppLog.e("Contact start crashed", it)
-            ContactStartResult.SaveFailed
+        if (!ContactStore.isValidEmail(email.trim()) || name.trim().isBlank() || startMessage.trim().isBlank()) {
+            error = "Check name, email, and message" to
+                "Enter a valid name, email, and message to start."
+            return
         }
-        sending = false
-        when (result) {
-            is ContactStartResult.Ok -> {
-                thread = result.thread
-                startMessage = ""
-                chatDraft = ""
+        sending = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                SupportRepository.start(
+                    context = context,
+                    name = name,
+                    email = email,
+                    subject = subject,
+                    message = startMessage,
+                    appVersion = versionLabel
+                )
             }
-            ContactStartResult.Validation -> {
-                error = "Check name, email, and message" to
-                    "Enter a valid name, email, and message to start."
-            }
-            ContactStartResult.SaveFailed -> {
-                error = "Couldn’t save message" to
-                    "Local save failed. Try again."
+            sending = false
+            when (result) {
+                is ContactStartResult.Ok -> {
+                    thread = result.thread
+                    startMessage = ""
+                    chatDraft = ""
+                }
+                ContactStartResult.Validation -> {
+                    error = "Check name, email, and message" to
+                        "Enter a valid name, email, and message to start."
+                }
+                ContactStartResult.AuthRequired -> {
+                    error = "Sign in required" to "Sign in to contact support."
+                }
+                is ContactStartResult.OpenLimit -> {
+                    error = "Open thread exists" to result.message
+                    withContext(Dispatchers.IO) { SupportRepository.syncMine(context) }
+                        .onSuccess { thread = it }
+                }
+                is ContactStartResult.SaveFailed -> {
+                    error = "Couldn’t send" to result.message
+                }
             }
         }
     }
@@ -123,27 +167,34 @@ fun ContactScreen(
         if (sending) return
         clearError()
         sending = true
-        val result = runCatching {
-            ContactStore.appendUserMessage(context, chatDraft)
-        }.getOrElse {
-            AppLog.e("Contact chat send crashed", it)
-            ContactReplyResult.SaveFailed
-        }
-        sending = false
-        when (result) {
-            is ContactReplyResult.Ok -> {
-                thread = result.thread
-                chatDraft = ""
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                SupportRepository.reply(context, chatDraft)
             }
-            ContactReplyResult.Validation -> {
-                error = "Empty message" to "Type a message before sending."
-            }
-            ContactReplyResult.NoThread -> {
-                error = "Thread missing" to "Start a new conversation from the form."
-                thread = null
-            }
-            ContactReplyResult.SaveFailed -> {
-                error = "Couldn’t send" to "Local save failed. Try again."
+            sending = false
+            when (result) {
+                is ContactReplyResult.Ok -> {
+                    thread = result.thread
+                    chatDraft = ""
+                }
+                ContactReplyResult.Validation -> {
+                    error = "Empty message" to "Type a message before sending."
+                }
+                ContactReplyResult.NoThread -> {
+                    error = "Thread missing" to "Start a new conversation from the form."
+                    thread = null
+                }
+                ContactReplyResult.AuthRequired -> {
+                    error = "Sign in required" to "Sign in to send messages."
+                }
+                is ContactReplyResult.Closed -> {
+                    error = "Thread closed" to result.message
+                    thread = null
+                    ContactStore.clear(context)
+                }
+                is ContactReplyResult.SaveFailed -> {
+                    error = "Couldn’t send" to result.message
+                }
             }
         }
     }
@@ -178,7 +229,7 @@ fun ContactScreen(
                     subject = subject,
                     message = startMessage,
                     appVersion = versionLabel,
-                    sending = sending,
+                    sending = sending || syncing,
                     onName = { name = it },
                     onEmail = { email = it },
                     onSubject = { subject = it },
@@ -189,7 +240,7 @@ fun ContactScreen(
                 ContactChatPanel(
                     thread = current,
                     draft = chatDraft,
-                    sending = sending,
+                    sending = sending || syncing,
                     onDraftChange = { chatDraft = it.take(1000) },
                     onSend = { sendChat() }
                 )

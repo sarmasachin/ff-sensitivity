@@ -10,7 +10,7 @@ type Props = {
 const TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: "preferences", label: "Preferences", hint: "Desk · landing" },
   { id: "session", label: "Session", hint: "Timeout · device" },
-  { id: "security", label: "Security", hint: "Reauth · export" },
+  { id: "security", label: "Security", hint: "Reauth · audit · export" },
 ];
 
 export function SettingsTabs({ active, onChange }: Props) {

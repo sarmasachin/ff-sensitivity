@@ -23,8 +23,8 @@ export function SupportHeader({ onRefresh }: Props) {
             Support
           </h1>
           <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-white/80">
-            Contact Us tickets from the app — triage, reply, and close. Built
-            for staff ops, not a toy helpdesk skin.
+            Contact Us tickets from the app — live Nest triage, reply, and close.
+            Staff ACL on the support module.
           </p>
         </div>
         {onRefresh ? (

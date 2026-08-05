@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,7 +48,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.ffsensitivity.app.data.SharedSensiCard
-import com.ffsensitivity.app.data.sampleCommunitySensiCards
+import com.ffsensitivity.app.data.remote.ApiException
+import com.ffsensitivity.app.data.remote.CommunityRepository
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
 import com.ffsensitivity.app.presentation.theme.AmberSoft
@@ -60,6 +62,7 @@ import com.ffsensitivity.app.presentation.theme.SurfaceCard
 import com.ffsensitivity.app.presentation.theme.SurfaceDeep
 import com.ffsensitivity.app.presentation.theme.SurfaceLift
 import com.ffsensitivity.app.presentation.theme.VoidBlack
+import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
 import com.ffsensitivity.app.util.ShareCardBitmap
 import java.util.Locale
@@ -73,7 +76,42 @@ fun ShareCommunityTab(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var viewing by remember { mutableStateOf<SharedSensiCard?>(null) }
     var sharing by remember { mutableStateOf(false) }
-    val cards = remember { sampleCommunitySensiCards.filter { it.isValidForDisplay() } }
+    var cards by remember { mutableStateOf<List<SharedSensiCard>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+
+    fun reload() {
+        refreshKey += 1
+    }
+
+    LaunchedEffect(refreshKey) {
+        loading = true
+        loadError = null
+        val result = withContext(Dispatchers.IO) {
+            CommunityRepository.feed(context)
+        }
+        result.fold(
+            onSuccess = { list ->
+                cards = list.filter { it.isValidForDisplay() }
+                loadError = null
+            },
+            onFailure = { err ->
+                AppLog.e("Community feed load failed", err)
+                cards = emptyList()
+                loadError = when (err) {
+                    is ApiException -> err.message
+                    is java.net.ConnectException,
+                    is java.net.SocketTimeoutException,
+                    is java.net.UnknownHostException,
+                    is java.io.IOException ->
+                        "Can't reach the server. Check Wi‑Fi and try again."
+                    else -> "Couldn't load Community. Try again."
+                }
+            }
+        )
+        loading = false
+    }
 
     fun shareCardImage(card: SharedSensiCard) {
         if (sharing) return
@@ -124,23 +162,53 @@ fun ShareCommunityTab(modifier: Modifier = Modifier) {
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Share the premium card image · full settings only in app.",
+                    text = "Approved pro cards from players · share image · full settings in app.",
                     color = InkSecondary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
                 )
                 Spacer(modifier = Modifier.height(4.dp))
+                if (loadError != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = loadError.orEmpty(),
+                        color = InkSecondary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Tap to retry",
+                        color = Amber,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { reload() }
+                    )
+                }
             }
 
-            if (cards.isEmpty()) {
-                item { CommunityEmptyState() }
-            } else {
-                items(cards, key = { it.id }) { card ->
-                    CommunityProCard(
-                        card = card,
-                        onShare = { shareCardImage(card) },
-                        onView = { viewing = card }
-                    )
+            when {
+                loading -> {
+                    item {
+                        Text(
+                            text = "Loading community…",
+                            color = InkMuted,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(vertical = 24.dp)
+                        )
+                    }
+                }
+                cards.isEmpty() && loadError == null -> {
+                    item { CommunityEmptyState() }
+                }
+                else -> {
+                    items(cards, key = { it.id }) { card ->
+                        CommunityProCard(
+                            card = card,
+                            onShare = { shareCardImage(card) },
+                            onView = { viewing = card }
+                        )
+                    }
                 }
             }
         }
@@ -160,7 +228,28 @@ fun ShareCommunityTab(modifier: Modifier = Modifier) {
                         SafeOps.toast(context, "Could not copy settings")
                     }
                 },
-                onShare = { shareCardImage(card) }
+                onShare = { shareCardImage(card) },
+                onReport = {
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            CommunityRepository.report(context, card.id)
+                        }
+                        result.fold(
+                            onSuccess = {
+                                SafeOps.toast(context, "Reported. Thanks — staff will review.")
+                                viewing = null
+                            },
+                            onFailure = { err ->
+                                AppLog.e("Community report failed", err)
+                                val msg = when (err) {
+                                    is ApiException -> err.message
+                                    else -> "Could not report. Try again."
+                                }
+                                SafeOps.toast(context, msg)
+                            }
+                        )
+                    }
+                }
             )
         }
     }
@@ -192,7 +281,7 @@ private fun CommunityEmptyState() {
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-                    text = "Sample pro cards · share as image. Build yours in Share Mine.",
+            text = "Approved cards appear here after staff review. Submit yours from Share Mine.",
             color = InkSecondary,
             fontSize = 13.sp,
             lineHeight = 18.sp
@@ -392,7 +481,8 @@ private fun ViewSensitivityDialog(
     card: SharedSensiCard,
     onDismiss: () -> Unit,
     onCopy: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onReport: () -> Unit
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -545,6 +635,17 @@ private fun ViewSensitivityDialog(
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Report this post",
+                color = InkMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .clickable(onClick = onReport)
+                    .padding(vertical = 6.dp)
+            )
         }
     }
 }

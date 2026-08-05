@@ -13,10 +13,10 @@ export function StaffCapabilities() {
   return (
     <section className="rounded-2xl border border-[#e8eaee] bg-white p-5">
       <h2 className="text-[14px] font-semibold text-[#0f172a]">
-        What this module will include
+        What this module covers
       </h2>
       <p className="mt-1 text-[12px] text-[#94a3b8]">
-        UI shell now — Nest staff auth + ACL wire-up next.
+        Live Nest staff seats — invite, modules, disable, and resend.
       </p>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {STAFF_CAPABILITIES.map((item, i) => (

@@ -39,6 +39,25 @@ data class ContactThread(
     val email: String,
     val subject: ContactSubject,
     val appVersion: String,
+    val deviceLabel: String = "—",
+    val status: String = "OPEN",
     val createdAtMs: Long,
     val messages: List<ContactMessage>
 )
+
+sealed class ContactStartResult {
+    data class Ok(val thread: ContactThread) : ContactStartResult()
+    data object Validation : ContactStartResult()
+    data object AuthRequired : ContactStartResult()
+    data class OpenLimit(val message: String) : ContactStartResult()
+    data class SaveFailed(val message: String) : ContactStartResult()
+}
+
+sealed class ContactReplyResult {
+    data class Ok(val thread: ContactThread) : ContactReplyResult()
+    data object Validation : ContactReplyResult()
+    data object NoThread : ContactReplyResult()
+    data object AuthRequired : ContactReplyResult()
+    data class Closed(val message: String) : ContactReplyResult()
+    data class SaveFailed(val message: String) : ContactReplyResult()
+}

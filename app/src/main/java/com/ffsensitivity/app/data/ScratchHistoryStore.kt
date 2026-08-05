@@ -6,15 +6,28 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Persists scratched cards for [RETENTION_DAYS] days, then drops them.
+ * Persists scratched cards for [retentionDays] days, then drops them.
  */
 object ScratchHistoryStore {
 
-    const val RETENTION_DAYS = 30
-    const val RETENTION_MS = RETENTION_DAYS * 24L * 60L * 60L * 1000L
+    @Volatile
+    var retentionDays: Int = 30
+        set(value) {
+            field = value.coerceIn(1, 365)
+        }
+
+    @Volatile
+    var autoPurge: Boolean = true
+
+    val RETENTION_DAYS: Int get() = retentionDays
+    val RETENTION_MS: Long get() = retentionDays * 24L * 60L * 60L * 1000L
 
     private const val PREFS = "scratch_history_v1"
     private const val KEY_CARDS = "cards_json"
+
+    fun addEntry(context: Context, entry: ScratchedCardEntry) {
+        add(context, entry)
+    }
 
     fun addMilestone(
         context: Context,
@@ -76,11 +89,14 @@ object ScratchHistoryStore {
     fun listActive(context: Context): Result<List<ScratchedCardEntry>> {
         return runCatching {
             val now = System.currentTimeMillis()
-            val active = readAll(context)
-                .filterNot { it.isExpired(now) }
-                .sortedByDescending { it.scratchedAtMs }
-            writeAll(context, active)
-            active
+            val all = readAll(context)
+            val next = if (autoPurge) {
+                all.filterNot { it.isExpired(now) }
+            } else {
+                all
+            }.sortedByDescending { it.scratchedAtMs }
+            writeAll(context, next)
+            if (autoPurge) next else next.filterNot { it.isExpired(now) }
         }.onFailure {
             AppLog.e("ScratchHistory list failed", it)
         }

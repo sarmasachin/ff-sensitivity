@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import { formatCompact, type DashDonutSlice } from "./dashboard-data";
 
 type Props = {
@@ -5,7 +9,24 @@ type Props = {
   rangeLabel: string;
 };
 
-function donutPaths(slices: DashDonutSlice[], cx: number, cy: number, r: number, ir: number) {
+const SIZE = 220;
+const R_OUTER = 94;
+const R_INNER = 56;
+
+type Arc = {
+  id: string;
+  d: string;
+  color: string;
+  midAngle: number;
+};
+
+function donutArcs(
+  slices: DashDonutSlice[],
+  cx: number,
+  cy: number,
+  r: number,
+  ir: number,
+): Arc[] {
   const total = slices.reduce((a, s) => a + s.value, 0) || 1;
   let angle = -Math.PI / 2;
   return slices.map((slice) => {
@@ -29,16 +50,20 @@ function donutPaths(slices: DashDonutSlice[], cx: number, cy: number, r: number,
       `A ${ir} ${ir} 0 ${large} 0 ${ix2} ${iy2}`,
       "Z",
     ].join(" ");
-    return { id: slice.id, d, color: slice.color };
+    return { id: slice.id, d, color: slice.color, midAngle: (a1 + a2) / 2 };
   });
 }
 
 export function DashboardClaimsDonut({ slices, rangeLabel }: Props) {
+  const [hover, setHover] = useState<number | null>(null);
   const total = slices.reduce((a, s) => a + s.value, 0);
-  const size = 220;
-  const cx = size / 2;
-  const cy = size / 2;
-  const paths = donutPaths(slices, cx, cy, 94, 56);
+  const cx = SIZE / 2;
+  const cy = SIZE / 2;
+  const arcs = donutArcs(slices, cx, cy, R_OUTER, R_INNER);
+
+  const hovered = hover === null ? null : slices[hover];
+  const hoveredArc = hover === null ? null : arcs[hover];
+  const rMid = (R_OUTER + R_INNER) / 2;
 
   return (
     <section className="flex h-full min-h-[420px] flex-col rounded-2xl border border-[#e8eaee] bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
@@ -53,14 +78,21 @@ export function DashboardClaimsDonut({ slices, rangeLabel }: Props) {
       <div className="mt-6 flex flex-1 flex-col items-center justify-center gap-6">
         <div className="relative shrink-0">
           <svg
-            width={size}
-            height={size}
-            viewBox={`0 0 ${size} ${size}`}
+            width={SIZE}
+            height={SIZE}
+            viewBox={`0 0 ${SIZE} ${SIZE}`}
             role="img"
             aria-label="Claims outcome donut"
           >
-            {paths.map((p) => (
-              <path key={p.id} d={p.d} fill={p.color} />
+            {arcs.map((arc, i) => (
+              <path
+                key={arc.id}
+                d={arc.d}
+                fill={arc.color}
+                opacity={hover === null || hover === i ? 1 : 0.45}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+              />
             ))}
           </svg>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
@@ -68,15 +100,42 @@ export function DashboardClaimsDonut({ slices, rangeLabel }: Props) {
               Total
             </p>
             <p className="text-[26px] font-semibold tabular-nums text-slate-900">
-              {formatCompact(total)}
+              {formatCompact(hovered ? hovered.value : total)}
             </p>
           </div>
+
+          {hovered && hoveredArc ? (
+            <ChartTooltip
+              title={hovered.label}
+              leftPct={
+                ((cx + rMid * Math.cos(hoveredArc.midAngle)) / SIZE) * 100
+              }
+              topPct={((cy + rMid * Math.sin(hoveredArc.midAngle)) / SIZE) * 100}
+              rows={[
+                {
+                  label: "Claims",
+                  value: String(hovered.value),
+                  dotColor: hovered.color,
+                },
+                {
+                  label: "Share",
+                  value:
+                    total === 0
+                      ? "—"
+                      : `${Math.round((hovered.value / total) * 100)}%`,
+                },
+              ]}
+            />
+          ) : null}
         </div>
+
         <ul className="grid w-full grid-cols-2 gap-x-4 gap-y-2.5">
-          {slices.map((s) => (
+          {slices.map((s, i) => (
             <li
               key={s.id}
               className="flex items-center justify-between gap-2 text-[14px]"
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
             >
               <span className="flex items-center gap-2 text-slate-600">
                 <span

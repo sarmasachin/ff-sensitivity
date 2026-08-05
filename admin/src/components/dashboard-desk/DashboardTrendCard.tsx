@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { ChartTooltip } from "@/components/charts/ChartTooltip";
 import type { DashPoint } from "./dashboard-data";
 
 type Props = {
@@ -5,45 +9,61 @@ type Props = {
   rangeLabel: string;
 };
 
-function buildPath(
-  values: number[],
-  max: number,
-  w: number,
-  h: number,
-  padX: number,
-  padY: number,
-): string {
+const W = 720;
+const H = 320;
+const PAD_X = 16;
+const PAD_Y = 24;
+
+function pointX(i: number, n: number): number {
+  if (n <= 1) return PAD_X;
+  return PAD_X + ((W - PAD_X * 2) / (n - 1)) * i;
+}
+
+function pointY(v: number, max: number): number {
+  const innerH = H - PAD_Y * 2;
+  return PAD_Y + innerH - (v / max) * innerH;
+}
+
+function buildPath(values: number[], max: number): string {
   if (values.length === 0) return "";
-  const innerW = w - padX * 2;
-  const innerH = h - padY * 2;
-  const step = values.length === 1 ? 0 : innerW / (values.length - 1);
   return values
-    .map((v, i) => {
-      const x = padX + i * step;
-      const y = padY + innerH - (v / max) * innerH;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
+    .map(
+      (v, i) =>
+        `${i === 0 ? "M" : "L"}${pointX(i, values.length).toFixed(1)},${pointY(
+          v,
+          max,
+        ).toFixed(1)}`,
+    )
     .join(" ");
 }
 
 export function DashboardTrendCard({ points, rangeLabel }: Props) {
-  const w = 720;
-  const h = 320;
-  const padX = 16;
-  const padY = 24;
-  const max = Math.max(
-    1,
-    ...points.flatMap((p) => [p.claims, p.redeems]),
-  );
+  const [hover, setHover] = useState<number | null>(null);
+
+  const max = Math.max(1, ...points.flatMap((p) => [p.claims, p.redeems]));
   const claims = points.map((p) => p.claims);
   const redeems = points.map((p) => p.redeems);
-  const claimsLine = buildPath(claims, max, w, h, padX, padY);
-  const redeemsLine = buildPath(redeems, max, w, h, padX, padY);
-  const areaClose = `${padX + (points.length > 1 ? ((w - padX * 2) / (points.length - 1)) * (points.length - 1) : 0)},${h - padY} L${padX},${h - padY} Z`;
-  const claimsArea = `${claimsLine} L${areaClose}`;
+  const claimsLine = buildPath(claims, max);
+  const redeemsLine = buildPath(redeems, max);
+  const lastX = pointX(points.length - 1, points.length);
+  const claimsArea =
+    points.length === 0
+      ? ""
+      : `${claimsLine} L${lastX.toFixed(1)},${H - PAD_Y} L${PAD_X},${H - PAD_Y} Z`;
 
   const totalClaims = claims.reduce((a, b) => a + b, 0);
   const totalRedeems = redeems.reduce((a, b) => a + b, 0);
+  const active = hover === null ? null : points[hover];
+
+  function handleMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (points.length === 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const x = ((e.clientX - rect.left) / rect.width) * W;
+    const step = points.length <= 1 ? 1 : (W - PAD_X * 2) / (points.length - 1);
+    const idx = Math.round((x - PAD_X) / step);
+    setHover(Math.min(points.length - 1, Math.max(0, idx)));
+  }
 
   return (
     <section className="flex h-full min-h-[420px] flex-col rounded-2xl border border-[#e8eaee] bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
@@ -69,43 +89,99 @@ export function DashboardTrendCard({ points, rangeLabel }: Props) {
         </div>
       </div>
 
-      <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <svg
-          viewBox={`0 0 ${w} ${h}`}
-          className="h-[280px] w-full"
-          role="img"
-          aria-label="Claims and redeems trend chart"
+      <div className="mt-5 flex min-h-0 flex-1 flex-col">
+        <div
+          className="relative"
+          onMouseMove={handleMove}
+          onMouseLeave={() => setHover(null)}
         >
-          {[0.25, 0.5, 0.75].map((t) => (
-            <line
-              key={t}
-              x1={padX}
-              x2={w - padX}
-              y1={padY + (h - padY * 2) * (1 - t)}
-              y2={padY + (h - padY * 2) * (1 - t)}
-              stroke="#e2e8f0"
-              strokeWidth="1"
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            preserveAspectRatio="none"
+            className="h-[280px] w-full"
+            role="img"
+            aria-label="Claims and redeems trend chart"
+          >
+            {[0.25, 0.5, 0.75].map((t) => {
+              const y = PAD_Y + (H - PAD_Y * 2) * (1 - t);
+              return (
+                <line
+                  key={t}
+                  x1={PAD_X}
+                  x2={W - PAD_X}
+                  y1={y}
+                  y2={y}
+                  stroke="#e2e8f0"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
+            <path d={claimsArea} fill="rgba(14,165,233,0.12)" />
+            <path
+              d={claimsLine}
+              fill="none"
+              stroke="#0ea5e9"
+              strokeWidth="3"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
             />
-          ))}
-          <path d={claimsArea} fill="rgba(14,165,233,0.12)" />
-          <path
-            d={claimsLine}
-            fill="none"
-            stroke="#0ea5e9"
-            strokeWidth="3"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-          <path
-            d={redeemsLine}
-            fill="none"
-            stroke="#10b981"
-            strokeWidth="3"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            strokeDasharray="0"
-          />
-        </svg>
+            <path
+              d={redeemsLine}
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="3"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            {hover !== null ? (
+              <line
+                x1={pointX(hover, points.length)}
+                x2={pointX(hover, points.length)}
+                y1={PAD_Y}
+                y2={H - PAD_Y}
+                stroke="#94a3b8"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+          </svg>
+
+          {active && hover !== null ? (
+            <>
+              <Marker
+                leftPct={(pointX(hover, points.length) / W) * 100}
+                topPct={(pointY(active.claims, max) / H) * 100}
+                colorClass="bg-sky-500"
+              />
+              <Marker
+                leftPct={(pointX(hover, points.length) / W) * 100}
+                topPct={(pointY(active.redeems, max) / H) * 100}
+                colorClass="bg-emerald-500"
+              />
+              <ChartTooltip
+                title={active.label}
+                leftPct={(pointX(hover, points.length) / W) * 100}
+                rows={[
+                  {
+                    label: "Claims",
+                    value: String(active.claims),
+                    dotClass: "bg-sky-500",
+                  },
+                  {
+                    label: "Redeems",
+                    value: String(active.redeems),
+                    dotClass: "bg-emerald-500",
+                  },
+                ]}
+              />
+            </>
+          ) : null}
+        </div>
+
         <div className="mt-2 flex justify-between px-1">
           {points.map((p) => (
             <span
@@ -118,5 +194,22 @@ export function DashboardTrendCard({ points, rangeLabel }: Props) {
         </div>
       </div>
     </section>
+  );
+}
+
+function Marker({
+  leftPct,
+  topPct,
+  colorClass,
+}: {
+  leftPct: number;
+  topPct: number;
+  colorClass: string;
+}) {
+  return (
+    <span
+      className={`pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white ${colorClass}`}
+      style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+    />
   );
 }

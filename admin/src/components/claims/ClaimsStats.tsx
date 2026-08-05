@@ -39,15 +39,15 @@ const TONE = {
 export function ClaimsStats({ copied, blocked, flagged, devices }: Props) {
   const stats = [
     {
-      label: "Copied",
+      label: "Claimed",
       value: String(copied),
-      hint: "Code + Copy success",
+      hint: "Unlock claim rows",
       tone: "emerald" as const,
     },
     {
       label: "Blocked",
       value: String(blocked),
-      hint: "Already / copy fail",
+      hint: "Legacy / unused",
       tone: "slate" as const,
     },
     {
@@ -57,9 +57,9 @@ export function ClaimsStats({ copied, blocked, flagged, devices }: Props) {
       tone: "rose" as const,
     },
     {
-      label: "Devices",
+      label: "Users",
       value: String(devices),
-      hint: "Unique device ids",
+      hint: "Distinct claim accounts",
       tone: "sky" as const,
     },
   ];

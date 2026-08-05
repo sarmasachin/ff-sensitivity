@@ -59,6 +59,15 @@ object ShopStore {
     fun boostCharges(context: Context, itemId: String): Int =
         readBoosts(context)[itemId] ?: 0
 
+    // --- Start: Economy live wire (Sachin) ---
+    /** Replace local boost UI cache from Nest wallet. */
+    fun replaceBoostCharges(context: Context, charges: Map<String, Int>) {
+        synchronized(this) {
+            writeBoosts(context, charges.filterValues { it > 0 })
+        }
+    }
+    // --- End: Economy live wire (Sachin) ---
+
     /** Consume one pending boost charge. Returns true if a charge was used. */
     fun consumeBoostCharge(context: Context, itemId: String): Boolean {
         return runCatching {
@@ -96,25 +105,28 @@ object ShopStore {
 
     fun purchase(context: Context, itemId: String): BuyResult {
         return runCatching {
+            val item = ShopAdminTable.findById(itemId)
+                ?: return BuyResult(false, "Item not found", DailyChallengeStore.snapshot(context).coins)
+            if (!item.enabled) {
+                return BuyResult(false, "Item unavailable", DailyChallengeStore.snapshot(context).coins)
+            }
             synchronized(this) {
-                val item = ShopAdminTable.findById(itemId)
-                    ?: return BuyResult(false, "Item not found", DailyChallengeStore.snapshot(context).coins)
-                if (!item.enabled) {
-                    return BuyResult(false, "Item unavailable", DailyChallengeStore.snapshot(context).coins)
-                }
                 val snap = DailyChallengeStore.snapshot(context)
                 val (ok, reason) = canBuy(context, item, snap.coins)
                 if (!ok) return BuyResult(false, reason, snap.coins)
+            }
 
-                val spend = DailyChallengeStore.spendCoins(
-                    context,
-                    item.priceCoins,
-                    note = "Shop · ${item.title}"
-                )
-                if (!spend.ok) {
-                    return BuyResult(false, spend.message, spend.snapshot.coins)
-                }
+            // --- Start: Economy live wire (Sachin) ---
+            val remote = com.ffsensitivity.app.data.remote.EconomyRepository.purchaseShop(context, itemId)
+            val paid = remote.getOrElse {
+                AppLog.e("Shop economy purchase failed", it)
+                val msg = (it as? com.ffsensitivity.app.data.remote.ApiException)?.message
+                    ?: "Purchase failed. Check connection."
+                return BuyResult(false, msg, DailyChallengeStore.snapshot(context).coins)
+            }
+            // --- End: Economy live wire (Sachin) ---
 
+            synchronized(this) {
                 val owned = readOwned(context).toMutableSet()
                 if (item.oneTime) owned.add(item.id)
                 val counts = readCounts(context).toMutableMap()
@@ -131,7 +143,6 @@ object ShopStore {
                         qty = counts[item.id] ?: 1
                     )
                 )
-                // Keep last 100 history rows
                 while (history.size > 100) history.removeAt(history.lastIndex)
 
                 writeOwned(context, owned)
@@ -140,11 +151,14 @@ object ShopStore {
 
                 when (item.id) {
                     ID_PACK_SCRATCH_BONUS -> ScratchHistoryStore.addShopToken(context, item)
+                    // Boost charges live on Nest; refresh local UI cache.
                     ID_BOOST_QUIZ_DOUBLE,
-                    ID_BOOST_CHECKIN_PLUS -> grantBoostCharge(context, item.id)
+                    ID_BOOST_CHECKIN_PLUS -> {
+                        com.ffsensitivity.app.data.remote.EconomyRepository.refreshWallet(context)
+                    }
                 }
 
-                BuyResult(true, "Purchased · ${item.title}", spend.snapshot.coins)
+                BuyResult(true, "Purchased · ${item.title}", paid.coins)
             }
         }.getOrElse {
             AppLog.e("Shop purchase failed", it)

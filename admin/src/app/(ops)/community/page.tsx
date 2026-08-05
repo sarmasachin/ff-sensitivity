@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommunityCapabilities } from "@/components/community/CommunityCapabilities";
 import { CommunityDetailDrawer } from "@/components/community/CommunityDetailDrawer";
 import { CommunityEmptyState } from "@/components/community/CommunityEmptyState";
@@ -13,29 +13,93 @@ import {
   type CommunityFilterKey,
 } from "@/components/community/CommunityToolbar";
 import {
-  COMMUNITY_DEMO_ROWS,
+  fetchCommunityPosts,
+  fetchCommunityStats,
+  patchCommunityStatus,
+} from "@/components/community/community-api";
+import {
   computeCommunityStats,
   type CommunityListRow,
   type CommunityStatus,
 } from "@/components/community/community-data";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 12;
+
+function canAccessCommunityModule(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as {
+      role?: string;
+      allowedModules?: string[];
+    };
+    if (admin.role === "SUPER_ADMIN") return true;
+    return Array.isArray(admin.allowedModules)
+      ? admin.allowedModules.includes("community")
+      : false;
+  } catch {
+    return false;
+  }
+}
 
 export default function CommunityPage() {
-  const [rows, setRows] = useState<CommunityListRow[]>(() => [
-    ...COMMUNITY_DEMO_ROWS,
-  ]);
+  const [allowed, setAllowed] = useState(true);
+  const [rows, setRows] = useState<CommunityListRow[]>([]);
+  const [statsRemote, setStatsRemote] = useState<ReturnType<
+    typeof computeCommunityStats
+  > | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CommunityFilterKey>("all");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [inspectId, setInspectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAllowed(canAccessCommunityModule());
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [list, stats] = await Promise.all([
+        fetchCommunityPosts(),
+        fetchCommunityStats(),
+      ]);
+      setRows(list);
+      setStatsRemote({
+        pending: stats.pending,
+        live: stats.live,
+        featured: stats.featured,
+        flagged: stats.flagged,
+      });
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Failed to load community queue.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [allowed, load]);
 
   useEffect(() => {
     setPage(1);
   }, [filter, query]);
 
-  const stats = useMemo(() => computeCommunityStats(rows), [rows]);
+  const stats = statsRemote ?? computeCommunityStats(rows);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -79,22 +143,56 @@ export default function CommunityPage() {
     ? (rows.find((r) => r.id === inspectId) ?? null)
     : null;
 
-  function setStatus(id: string, status: CommunityStatus, label: string) {
+  async function setStatus(id: string, status: CommunityStatus, label: string) {
     const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
-    setNotice(`${label} “${row.name}”.`);
+    if (!row || busyId) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      const updated = await patchCommunityStatus(id, status);
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, ...updated } : r)),
+      );
+      setNotice(`${label} “${row.name}”.`);
+      const nextStats = await fetchCommunityStats();
+      setStatsRemote({
+        pending: nextStats.pending,
+        live: nextStats.live,
+        featured: nextStats.featured,
+        flagged: nextStats.flagged,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Status update failed.");
+    } finally {
+      setBusyId(null);
+    }
   }
 
-  const queueEmpty = rows.length === 0;
-  const filterEmpty = !queueEmpty && filtered.length === 0;
+  if (!allowed) {
+    return (
+      <section className="mx-auto max-w-lg rounded-2xl border border-amber-200 bg-amber-50 px-6 py-10 text-center">
+        <p className="text-[15px] font-semibold text-slate-900">
+          Community module locked
+        </p>
+        <p className="mt-2 text-[13px] text-slate-600">
+          Your staff role does not include the community module. Ask a Super
+          Admin to grant access.
+        </p>
+      </section>
+    );
+  }
+
+  const queueEmpty = !loading && !error && rows.length === 0;
+  const filterEmpty =
+    !loading && !error && rows.length > 0 && filtered.length === 0;
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <CommunityHeader
-        onRefresh={() =>
-          setNotice("Queue refreshed (local demo). API sync comes next.")
-        }
+        onRefresh={() => {
+          setNotice("Refreshing queue…");
+          void load().then(() => setNotice("Queue refreshed."));
+        }}
       />
       <CommunityStats
         pending={stats.pending}
@@ -109,7 +207,17 @@ export default function CommunityPage() {
         onFilter={setFilter}
       />
 
-      {queueEmpty ? (
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-800">
+          {error}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-[13px] text-slate-500">
+          Loading community queue…
+        </div>
+      ) : queueEmpty ? (
         <CommunityEmptyState kind="queue" />
       ) : filterEmpty ? (
         <CommunityEmptyState
@@ -124,10 +232,12 @@ export default function CommunityPage() {
           rows={paged}
           notice={notice}
           onInspect={setInspectId}
-          onApprove={(id) => setStatus(id, "APPROVED", "Approved")}
-          onFeature={(id) => setStatus(id, "FEATURED", "Featured")}
-          onHide={(id) => setStatus(id, "HIDDEN", "Hidden")}
-          onUnhide={(id) => setStatus(id, "PENDING", "Restored to pending")}
+          onApprove={(id) => void setStatus(id, "APPROVED", "Approved")}
+          onFeature={(id) => void setStatus(id, "FEATURED", "Featured")}
+          onHide={(id) => void setStatus(id, "HIDDEN", "Hidden")}
+          onUnhide={(id) =>
+            void setStatus(id, "PENDING", "Restored to pending")
+          }
           footer={
             <CommunityPagination
               page={page}

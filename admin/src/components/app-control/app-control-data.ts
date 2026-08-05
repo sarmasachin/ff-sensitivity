@@ -177,6 +177,10 @@ export const APP_CAPABILITIES = [
     title: "Store & legal links",
     body: "Play Store, privacy policy, website, and support email pushed to Android About / banners.",
   },
+  {
+    title: "Live Nest wire",
+    body: "GET/PUT /api/v1/admin/app + public GET /api/v1/app/config for Android cold start.",
+  },
 ] as const;
 
 export const APP_DEFAULT_CONFIG: AppRemoteConfig = {
@@ -185,8 +189,8 @@ export const APP_DEFAULT_CONFIG: AppRemoteConfig = {
     maintenanceMessage:
       "We are performing scheduled maintenance. Please try again shortly.",
     forceUpdate: false,
-    minVersionCode: 241,
-    minVersionName: "2.4.1",
+    minVersionCode: 1,
+    minVersionName: "1.0.0",
     softUpdatePrompt: true,
   },
   features: {
@@ -240,16 +244,16 @@ export function computeAppStats(config: AppRemoteConfig) {
 export function validateAppLinks(
   links: AppLinksConfig,
 ): string | null {
-  if (!links.playStoreUrl.trim().startsWith("http")) {
-    return "Play Store URL must start with http.";
+  if (!links.playStoreUrl.trim().toLowerCase().startsWith("https://")) {
+    return "Play Store URL must use https.";
   }
-  if (!links.privacyUrl.trim().startsWith("http")) {
-    return "Privacy URL must start with http.";
+  if (!links.privacyUrl.trim().toLowerCase().startsWith("https://")) {
+    return "Privacy URL must use https.";
   }
-  if (!links.websiteUrl.trim().startsWith("http")) {
-    return "Website URL must start with http.";
+  if (!links.websiteUrl.trim().toLowerCase().startsWith("https://")) {
+    return "Website URL must use https.";
   }
-  if (!links.supportEmail.trim().includes("@")) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(links.supportEmail.trim())) {
     return "Support email looks invalid.";
   }
   return null;

@@ -8,6 +8,7 @@ import { OpsTopbar } from "./OpsTopbar";
 type AdminInfo = {
   email: string;
   role: string;
+  allowedModules?: string[];
 };
 
 function readAuth(): { token: string | null; admin: AdminInfo | null } {
@@ -84,6 +85,7 @@ export function OpsShell({ children }: { children: ReactNode }) {
       <OpsSidebar
         email={admin?.email}
         role={admin?.role}
+        allowedModules={admin?.allowedModules}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
       />
@@ -91,6 +93,7 @@ export function OpsShell({ children }: { children: ReactNode }) {
         <OpsTopbar
           onOpenMenu={() => setMobileOpen(true)}
           onSignOut={signOut}
+          email={admin?.email}
         />
         <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8 sm:py-7">
           {children}

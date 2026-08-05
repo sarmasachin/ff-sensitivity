@@ -295,7 +295,7 @@ export const WALLETS_CAPABILITIES = [
   },
   {
     title: "Export",
-    body: "CSV of balances + recent ledger for finance review. Nest API wire-up next.",
+    body: "CSV of balances for finance review. Emails are masked in the desk.",
   },
 ] as const;
 

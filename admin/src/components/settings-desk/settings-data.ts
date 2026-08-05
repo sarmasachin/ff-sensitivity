@@ -22,6 +22,9 @@ export type SettingsSecurity = {
   requireReauthForWalletAdjust: boolean;
   allowViewerCsvExport: boolean;
   ipAllowlistNote: string;
+  auditRetentionDays: number;
+  auditAutoPurge: boolean;
+  lastAuditPurgeAt: string | null;
 };
 
 export type SettingsConfig = {
@@ -55,11 +58,15 @@ export const SETTINGS_DEFAULT_CONFIG: SettingsConfig = {
     singleSessionOnly: true,
   },
   security: {
-    requireReauthForReveal: true,
-    requireReauthForStaffInvite: true,
-    requireReauthForWalletAdjust: true,
+    requireReauthForReveal: false,
+    requireReauthForStaffInvite: false,
+    requireReauthForWalletAdjust: false,
     allowViewerCsvExport: false,
-    ipAllowlistNote: "No IP allowlist enforced yet — Nest policy next.",
+    ipAllowlistNote:
+      "No IP allowlist enforced yet — document office / VPN ranges here.",
+    auditRetentionDays: 90,
+    auditAutoPurge: true,
+    lastAuditPurgeAt: null,
   },
 };
 
@@ -81,12 +88,12 @@ export const SETTINGS_CAPABILITIES = [
     body: "Optionally block CSV exports for Viewer role even when a module is visible.",
   },
   {
-    title: "Pointers",
-    body: "Android remote toggles → App. Seats & ACL → Staff. Immutable trail → Audit.",
+    title: "Audit retention",
+    body: "Keep AuditLog for N days (7–3650). Auto-purge hourly; Run now deletes only older rows.",
   },
   {
-    title: "Nest wire-up",
-    body: "Persist to staff session policy table next. UI is a local draft.",
+    title: "Live Nest wire",
+    body: "Persisted in OpsSettings. Step-up + retention enforced server-side.",
   },
 ] as const;
 
@@ -102,6 +109,7 @@ export function computeSettingsStats(config: SettingsConfig) {
     reauthGates,
     singleSession: config.session.singleSessionOnly,
     landing: config.preferences.defaultLanding,
+    auditDays: config.security.auditRetentionDays,
   };
 }
 
@@ -146,6 +154,13 @@ export function validateSettingsSecurity(
 ): string | null {
   if (!security.ipAllowlistNote.trim()) {
     return "IP policy note is required (even if unused).";
+  }
+  if (
+    !Number.isFinite(security.auditRetentionDays) ||
+    security.auditRetentionDays < 7 ||
+    security.auditRetentionDays > 3650
+  ) {
+    return "Audit retention must be 7–3650 days.";
   }
   return null;
 }

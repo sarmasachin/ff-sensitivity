@@ -301,7 +301,7 @@ export const CHALLENGE_CAPABILITIES = [
     body: "Day gates, coin payouts, badges — Rewards tab on Android.",
   },
   {
-    title: "API sync",
-    body: "NestJS challenge config wire-up next — timing defaults ship with the app until then.",
+    title: "Live Nest sync",
+    body: "Save pushes rules + quiz + milestones to Nest. Android loads GET /api/v1/challenge/today.",
   },
 ] as const;

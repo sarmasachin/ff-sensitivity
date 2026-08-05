@@ -14,6 +14,7 @@ export type StaffInvitePayload = {
   email: string;
   role: StaffRole;
   modules: StaffModuleId[];
+  currentPassword?: string;
 };
 
 type Props = {
@@ -35,6 +36,7 @@ export function StaffInviteModal({ open, onClose, onSubmit }: Props) {
   const [modules, setModules] = useState<StaffModuleId[]>(() =>
     defaultModulesForRole("SUB_ADMIN"),
   );
+  const [currentPassword, setCurrentPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export function StaffInviteModal({ open, onClose, onSubmit }: Props) {
     setEmail("");
     setRole("SUB_ADMIN");
     setModules(defaultModulesForRole("SUB_ADMIN"));
+    setCurrentPassword("");
     setError(null);
   }, [open]);
 
@@ -77,6 +80,7 @@ export function StaffInviteModal({ open, onClose, onSubmit }: Props) {
       email: email.trim().toLowerCase(),
       role,
       modules,
+      currentPassword: currentPassword.trim() || undefined,
     });
   }
 
@@ -98,8 +102,8 @@ export function StaffInviteModal({ open, onClose, onSubmit }: Props) {
               Invite staff
             </h2>
             <p className="mt-1 text-[12px] text-slate-500">
-              Creates an INVITED seat. Super Admin create only — Nest will
-              enforce this server-side.
+              Creates an INVITED seat with a one-time temp password. Only Super
+              Admin can invite Admin seats.
             </p>
           </div>
           <button
@@ -180,6 +184,18 @@ export function StaffInviteModal({ open, onClose, onSubmit }: Props) {
               })}
             </div>
           </div>
+
+          <label className={labelClass}>
+            Confirm your password
+            <input
+              type="password"
+              autoComplete="current-password"
+              className={fieldClass}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Required if Settings step-up is on"
+            />
+          </label>
 
           {error ? (
             <p

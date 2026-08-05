@@ -196,7 +196,7 @@ export const DEVICES_CAPABILITIES = [
   },
   {
     title: "Export",
-    body: "CSV of device ids + last seen for offline review. Live Nest API wire-up next.",
+    body: "CSV of device ids + last seen for offline review. Raw FCM tokens are never exported.",
   },
 ] as const;
 

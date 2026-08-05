@@ -19,7 +19,7 @@ const FILTERS: {
   active: string;
 }[] = [
   { id: "all", label: "All", active: "bg-slate-900 text-white" },
-  { id: "copied", label: "Copied", active: "bg-emerald-600 text-white" },
+  { id: "copied", label: "Claimed", active: "bg-emerald-600 text-white" },
   { id: "blocked", label: "Blocked", active: "bg-slate-500 text-white" },
   { id: "abuse", label: "Abuse", active: "bg-rose-600 text-white" },
 ];

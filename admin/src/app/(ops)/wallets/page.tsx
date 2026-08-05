@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { WalletsCapabilities } from "@/components/wallets/WalletsCapabilities";
 import { WalletsDetailDrawer } from "@/components/wallets/WalletsDetailDrawer";
 import { WalletsEmptyState } from "@/components/wallets/WalletsEmptyState";
@@ -19,32 +19,117 @@ import {
   type WalletsFilterKey,
 } from "@/components/wallets/WalletsToolbar";
 import {
-  LEDGER_DEMO_ROWS,
-  WALLETS_DEMO_ROWS,
+  fetchWalletLedger,
+  fetchWallets,
+  freezeWalletApi,
+  grantCoinsApi,
+  revokeCoinsApi,
+} from "@/components/wallets/wallets-api";
+import {
   computeWalletStats,
   type LedgerEntry,
   type WalletListRow,
   type WalletsTabId,
 } from "@/components/wallets/wallets-data";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 12;
 const HIGH_BALANCE = 500;
 
+function canAccessWallets(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as {
+      role?: string;
+      allowedModules?: string[];
+    };
+    if (admin.role === "SUPER_ADMIN") return true;
+    return Array.isArray(admin.allowedModules)
+      ? admin.allowedModules.includes("wallets")
+      : false;
+  } catch {
+    return false;
+  }
+}
+
+function walletsCsv(rows: WalletListRow[]): string {
+  const header = [
+    "id",
+    "deviceId",
+    "label",
+    "balance",
+    "lifetimeEarned",
+    "lifetimeSpent",
+    "status",
+    "lastTxnLabel",
+  ];
+  const esc = (v: string | number) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [
+    header.join(","),
+    ...rows.map((r) =>
+      [
+        r.id,
+        r.deviceId,
+        r.label,
+        r.balance,
+        r.lifetimeEarned,
+        r.lifetimeSpent,
+        r.status,
+        r.lastTxnLabel,
+      ]
+        .map(esc)
+        .join(","),
+    ),
+  ].join("\n");
+}
+
+// --- Start: Wallets admin live wire (Sachin) ---
 export default function WalletsPage() {
-  const [wallets, setWallets] = useState<WalletListRow[]>(() => [
-    ...WALLETS_DEMO_ROWS,
-  ]);
-  const [ledger, setLedger] = useState<LedgerEntry[]>(() => [
-    ...LEDGER_DEMO_ROWS,
-  ]);
+  const [allowed, setAllowed] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [wallets, setWallets] = useState<WalletListRow[]>([]);
+  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [tab, setTab] = useState<WalletsTabId>("balances");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<WalletsFilterKey>("all");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [grantOpen, setGrantOpen] = useState(false);
   const [grantPreset, setGrantPreset] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAllowed(canAccessWallets());
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [w, l] = await Promise.all([fetchWallets(), fetchWalletLedger()]);
+      setWallets(w);
+      setLedger(l);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load wallets.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [allowed, load]);
 
   useEffect(() => {
     setPage(1);
@@ -68,7 +153,9 @@ export default function WalletsPage() {
       if (filter === "zero" && row.balance !== 0) return false;
       if (filter === "high" && row.balance < HIGH_BALANCE) return false;
       if (!q) return true;
-      const hay = [row.deviceId, row.label, row.note].join(" ").toLowerCase();
+      const hay = [row.deviceId, row.label, row.note, row.id]
+        .join(" ")
+        .toLowerCase();
       return hay.includes(q);
     });
   }, [wallets, query, filter]);
@@ -112,124 +199,115 @@ export default function WalletsPage() {
     ? (wallets.find((w) => w.id === inspectId) ?? null)
     : null;
 
+  function replaceWallet(next: WalletListRow) {
+    setWallets((prev) => prev.map((w) => (w.id === next.id ? next : w)));
+  }
+
   function openAdjust(walletId?: string) {
     setGrantPreset(walletId ?? null);
     setGrantOpen(true);
   }
 
-  function freezeWallet(id: string) {
-    const row = wallets.find((w) => w.id === id);
-    if (!row) return;
-    setWallets((prev) =>
-      prev.map((w) =>
-        w.id === id
-          ? {
-              ...w,
-              status: "FROZEN",
-              note: `${w.note} · Frozen by staff.`,
-              lastTxnLabel: "just now",
-              lastTxnHoursAgo: 0,
-            }
-          : w,
-      ),
-    );
-    setLedger((prev) => [
-      {
-        id: `l_${Date.now()}`,
-        walletId: id,
-        deviceId: row.deviceId,
-        label: row.label.split(" · ")[0] ?? row.label,
-        kind: "ADJUST",
-        amount: 0,
-        balanceAfter: row.balance,
-        reason: "Wallet frozen by staff",
-        whenLabel: "just now",
-        actor: "staff",
-      },
-      ...prev,
-    ]);
-    setNotice(`Frozen wallet ${row.deviceId}.`);
+  async function freezeWallet(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await freezeWalletApi(id, "freeze");
+      replaceWallet(next);
+      setNotice(`Frozen wallet ${next.deviceId}.`);
+      const l = await fetchWalletLedger();
+      setLedger(l);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Freeze failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function unfreezeWallet(id: string) {
-    const row = wallets.find((w) => w.id === id);
-    if (!row) return;
-    setWallets((prev) =>
-      prev.map((w) =>
-        w.id === id
-          ? {
-              ...w,
-              status: "ACTIVE",
-              note: "Unfrozen by staff. Earn/spend restored.",
-              lastTxnLabel: "just now",
-              lastTxnHoursAgo: 0,
-            }
-          : w,
-      ),
-    );
-    setLedger((prev) => [
-      {
-        id: `l_${Date.now()}`,
-        walletId: id,
-        deviceId: row.deviceId,
-        label: row.label.split(" · ")[0] ?? row.label,
-        kind: "ADJUST",
-        amount: 0,
-        balanceAfter: row.balance,
-        reason: "Wallet unfrozen by staff",
-        whenLabel: "just now",
-        actor: "staff",
-      },
-      ...prev,
-    ]);
-    setNotice(`Unfrozen wallet ${row.deviceId}.`);
+  async function unfreezeWallet(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await freezeWalletApi(id, "unfreeze");
+      replaceWallet(next);
+      setNotice(`Unfrozen wallet ${next.deviceId}.`);
+      const l = await fetchWalletLedger();
+      setLedger(l);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unfreeze failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function applyAdjust(payload: WalletAdjustPayload) {
-    const row = wallets.find((w) => w.id === payload.walletId);
-    if (!row) return;
-    const delta =
-      payload.mode === "grant" ? payload.amount : -payload.amount;
-    const nextBalance = Math.max(0, row.balance + delta);
-    setWallets((prev) =>
-      prev.map((w) =>
-        w.id === payload.walletId
-          ? {
-              ...w,
-              balance: nextBalance,
-              lifetimeEarned:
-                payload.mode === "grant"
-                  ? w.lifetimeEarned + payload.amount
-                  : w.lifetimeEarned,
-              lifetimeSpent:
-                payload.mode === "revoke"
-                  ? w.lifetimeSpent + payload.amount
-                  : w.lifetimeSpent,
-              lastTxnLabel: "just now",
-              lastTxnHoursAgo: 0,
-              note: `${payload.mode === "grant" ? "Grant" : "Revoke"}: ${payload.reason}`,
-            }
-          : w,
-      ),
-    );
-    setLedger((prev) => [
-      {
-        id: `l_${Date.now()}`,
-        walletId: payload.walletId,
-        deviceId: row.deviceId,
-        label: row.label.split(" · ")[0] ?? row.label,
-        kind: payload.mode === "grant" ? "GRANT" : "REVOKE",
-        amount: delta,
-        balanceAfter: nextBalance,
+  async function applyAdjust(payload: WalletAdjustPayload) {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        amount: payload.amount,
         reason: payload.reason,
-        whenLabel: "just now",
-        actor: "staff",
-      },
-      ...prev,
-    ]);
-    setGrantOpen(false);
-    setNotice(
-      `${payload.mode === "grant" ? "Granted" : "Revoked"} ${payload.amount.toLocaleString()} coins on ${row.deviceId}.`,
+        requestId: `adj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
+        currentPassword: payload.currentPassword,
+      };
+      const next =
+        payload.mode === "grant"
+          ? await grantCoinsApi(payload.walletId, body)
+          : await revokeCoinsApi(payload.walletId, body);
+      replaceWallet(next);
+      const l = await fetchWalletLedger();
+      setLedger(l);
+      setGrantOpen(false);
+      setNotice(
+        `${payload.mode === "grant" ? "Granted" : "Revoked"} ${payload.amount.toLocaleString()} coins on ${next.deviceId}.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Adjust failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onExport() {
+    const rows = tab === "balances" ? filteredWallets : [];
+    if (tab === "balances" && rows.length === 0) {
+      setNotice("Nothing to export.");
+      return;
+    }
+    if (tab === "ledger") {
+      setNotice("Switch to Balances tab to export wallet CSV.");
+      return;
+    }
+    const blob = new Blob([walletsCsv(rows)], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `wallets_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(`Exported ${rows.length} wallet row(s).`);
+  }
+
+  if (!allowed) {
+    return (
+      <section className="mx-auto flex max-w-6xl flex-col gap-5">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-8 text-center text-[13px] font-medium text-rose-900">
+          You do not have access to Wallets. Ask a Super Admin for the wallets
+          module.
+        </div>
+      </section>
+    );
+  }
+
+  if (loading) {
+    return (
+      <section className="mx-auto flex max-w-6xl flex-col gap-5">
+        <div className="rounded-2xl border border-[#e8eaee] bg-white px-5 py-10 text-center text-[13px] text-slate-500">
+          Loading wallets…
+        </div>
+      </section>
     );
   }
 
@@ -241,12 +319,10 @@ export default function WalletsPage() {
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <WalletsHeader
         onGrant={() => openAdjust()}
-        onRefresh={() =>
-          setNotice("Refresh will sync from Nest wallet service next.")
-        }
-        onExport={() =>
-          setNotice("CSV export will work after Wallets API is connected.")
-        }
+        onRefresh={() => {
+          void load().then(() => setNotice("Synced from Nest wallet service."));
+        }}
+        onExport={onExport}
       />
       <WalletsStats
         total={stats.total}
@@ -255,6 +331,19 @@ export default function WalletsPage() {
         zero={stats.zero}
         staffMoves={stats.staffMoves}
       />
+      {error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
+        >
+          {error}
+        </div>
+      ) : null}
+      {busy ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[13px] text-slate-600">
+          Updating wallet…
+        </div>
+      ) : null}
       <WalletsTabs active={tab} onChange={setTab} />
       <WalletsToolbar
         mode={tab}
@@ -279,8 +368,8 @@ export default function WalletsPage() {
           rows={pagedWallets}
           notice={notice}
           onInspect={setInspectId}
-          onFreeze={freezeWallet}
-          onUnfreeze={unfreezeWallet}
+          onFreeze={(id) => void freezeWallet(id)}
+          onUnfreeze={(id) => void unfreezeWallet(id)}
           onAdjust={(id) => openAdjust(id)}
           footer={
             <WalletsPagination
@@ -313,8 +402,8 @@ export default function WalletsPage() {
         row={inspectRow}
         ledger={ledger}
         onClose={() => setInspectId(null)}
-        onFreeze={freezeWallet}
-        onUnfreeze={unfreezeWallet}
+        onFreeze={(id) => void freezeWallet(id)}
+        onUnfreeze={(id) => void unfreezeWallet(id)}
         onAdjust={(id) => {
           setInspectId(null);
           openAdjust(id);
@@ -326,8 +415,9 @@ export default function WalletsPage() {
         wallets={wallets}
         presetWalletId={grantPreset}
         onClose={() => setGrantOpen(false)}
-        onSubmit={applyAdjust}
+        onSubmit={(p) => void applyAdjust(p)}
       />
     </section>
   );
 }
+// --- End: Wallets admin live wire (Sachin) ---

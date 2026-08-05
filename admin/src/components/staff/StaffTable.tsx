@@ -131,7 +131,7 @@ export function StaffTable({
                         >
                           Enable
                         </button>
-                      ) : row.status === "ACTIVE" ? (
+                      ) : (
                         <button
                           type="button"
                           onClick={() => onDisable(row.id)}
@@ -139,7 +139,7 @@ export function StaffTable({
                         >
                           Disable
                         </button>
-                      ) : null
+                      )
                     ) : null}
                   </div>
                 </td>

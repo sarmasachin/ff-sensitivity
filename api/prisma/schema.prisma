@@ -20,19 +20,43 @@ enum AdminModule {
   community
   claims
   daily_challenge
+  scratch
+  names
+  support
+  promos
+  push
+  app
+  devices
+  wallets
+  users
+  copy
+  staff
+  audit
+  settings
+  overview
 }
 
 model Admin {
-  id             String        @id @default(cuid())
-  email          String        @unique
-  passwordHash   String        @map("password_hash")
-  role           AdminRole
-  allowedModules AdminModule[] @default([]) @map("allowed_modules")
-  isActive       Boolean       @default(true) @map("is_active")
-  mustChangePassword Boolean   @default(true) @map("must_change_password")
-  lastLoginAt    DateTime?     @map("last_login_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  id                 String        @id @default(cuid())
+  email              String        @unique
+  passwordHash       String        @map("password_hash")
+  role               AdminRole
+  allowedModules     AdminModule[] @default([]) @map("allowed_modules")
+  isActive           Boolean       @default(true) @map("is_active")
+  mustChangePassword Boolean       @default(true) @map("must_change_password")
+  lastLoginAt        DateTime?     @map("last_login_at")
+  // --- Start: Admin profile live wire (Sachin) ---
+  displayName        String?       @map("display_name")
+  jobTitle           String?       @map("job_title")
+  deskLabel          String?       @map("desk_label")
+  notifyEmail        String?       @map("notify_email")
+  phone              String?
+  timezoneLabel      String?       @map("timezone_label")
+  digestDaily        Boolean       @default(false) @map("digest_daily")
+  digestSecurity     Boolean       @default(true) @map("digest_security")
+  // --- End: Admin profile live wire (Sachin) ---
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
 
   sessions AdminSession[]
   audits   AuditLog[]
@@ -69,3 +93,615 @@ model AuditLog {
   @@index([actorAdminId])
   @@map("audit_logs")
 }
+
+// --- Start: Redeem live wire (Sachin) ---
+enum RedeemType {
+  GOOGLE_PLAY
+  FF_DIAMONDS
+}
+
+enum RedeemCodeStatus {
+  ACTIVE
+  PAUSED
+  EXHAUSTED
+  EXPIRED
+}
+
+enum RedeemCadence {
+  DAILY
+  WEEKLY
+}
+
+model User {
+  id             String    @id @default(cuid())
+  googleSub      String    @unique @map("google_sub")
+  email          String    @unique
+  displayName    String    @map("display_name")
+  photoUrl       String?   @map("photo_url")
+  coins          Int       @default(0)
+  // --- Start: Economy live wire (Sachin) ---
+  streakDays     Int       @default(0) @map("streak_days")
+  lastCheckinDay String?   @map("last_checkin_day")
+  // --- End: Economy live wire (Sachin) ---
+  // --- Start: Wallets admin live wire (Sachin) ---
+  walletFrozen   Boolean   @default(false) @map("wallet_frozen")
+  walletNote     String    @default("") @map("wallet_note")
+  // --- End: Wallets admin live wire (Sachin) ---
+  // --- Start: Users admin live wire (Sachin) ---
+  isRestricted   Boolean   @default(false) @map("is_restricted")
+  accountNote    String    @default("") @map("account_note")
+  // --- End: Users admin live wire (Sachin) ---
+  // --- Start: App analytics P2 logout (Sachin) ---
+  tokenVersion   Int       @default(0) @map("token_version")
+  // --- End: App analytics P2 logout (Sachin) ---
+  isActive       Boolean   @default(true) @map("is_active")
+  lastLoginAt    DateTime? @map("last_login_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  claims           RedeemClaim[]
+  // --- Start: Economy live wire (Sachin) ---
+  ledger           WalletLedger[]
+  boostCharges     UserBoostCharge[]
+  // --- End: Economy live wire (Sachin) ---
+  // --- Start: Community live wire (Sachin) ---
+  communityPosts   CommunityPost[]
+  communityReports CommunityPostReport[]
+  // --- End: Community live wire (Sachin) ---
+  // --- Start: Scratch live wire (Sachin) ---
+  scratchRolls     ScratchRoll[]
+  // --- End: Scratch live wire (Sachin) ---
+  // --- Start: Support live wire (Sachin) ---
+  supportThreads   SupportThread[]
+  // --- End: Support live wire (Sachin) ---
+  // --- Start: Push live wire (Sachin) ---
+  pushTokens       DevicePushToken[]
+  // --- End: Push live wire (Sachin) ---
+  // --- Start: Devices live wire (Sachin) ---
+  deviceInstalls   DeviceInstall[]
+  // --- End: Devices live wire (Sachin) ---
+
+  @@map("users")
+}
+
+// --- Start: Economy live wire (Sachin) ---
+model WalletLedger {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  delta          Int
+  balanceAfter   Int      @map("balance_after")
+  reason         String
+  idempotencyKey String   @unique @map("idempotency_key")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("wallet_ledger")
+}
+
+model UserBoostCharge {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  boostId   String   @map("boost_id")
+  charges   Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, boostId])
+  @@map("user_boost_charges")
+}
+
+// --- End: Economy live wire (Sachin) ---
+
+model RedeemCode {
+  id           String           @id @default(cuid())
+  title        String
+  type         RedeemType
+  valueLabel   String           @map("value_label")
+  codeSecret   String           @map("code_secret")
+  status       RedeemCodeStatus @default(ACTIVE)
+  cadence      RedeemCadence    @default(DAILY)
+  stockLeft    Int              @map("stock_left")
+  coinCost     Int?             @map("coin_cost")
+  expiresLabel String           @map("expires_label")
+  expiresAt    DateTime?        @map("expires_at")
+  tip          String           @default("First Come, First Serve!")
+  redeemUrl    String           @map("redeem_url")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  claims RedeemClaim[]
+
+  @@unique([codeSecret])
+  @@map("redeem_codes")
+}
+
+model RedeemClaim {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  redeemCodeId String   @map("redeem_code_id")
+  codeSecret   String   @map("code_secret")
+  // --- Start: Claims live wire (Sachin) ---
+  flagged      Boolean  @default(false)
+  adminNote    String?  @map("admin_note")
+  // --- End: Claims live wire (Sachin) ---
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redeemCode RedeemCode @relation(fields: [redeemCodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, redeemCodeId])
+  @@index([redeemCodeId])
+  @@index([flagged, createdAt])
+  @@map("redeem_claims")
+}
+
+// --- End: Redeem live wire (Sachin) ---
+
+// --- Start: Community live wire (Sachin) ---
+enum CommunityPostStatus {
+  PENDING
+  APPROVED
+  FEATURED
+  HIDDEN
+}
+
+model CommunityPost {
+  id          String              @id @default(cuid())
+  userId      String              @map("user_id")
+  name        String
+  freeFireId  String              @map("free_fire_id")
+  rank        String
+  role        String
+  deviceLabel String              @map("device_label")
+  deviceMeta  String              @default("") @map("device_meta")
+  matches     Int
+  kills       Int
+  headshots   Int
+  general     Int
+  redDot      Int                 @map("red_dot")
+  scope2x     Int                 @map("scope_2x")
+  scope4x     Int                 @map("scope_4x")
+  awm         Int
+  freeLook    Int                 @map("free_look")
+  status      CommunityPostStatus @default(PENDING)
+  reports     Int                 @default(0)
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reportsBy CommunityPostReport[]
+
+  @@index([status, createdAt])
+  @@index([userId, status])
+  @@map("community_posts")
+}
+
+model CommunityPostReport {
+  id        String   @id @default(cuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@map("community_post_reports")
+}
+
+// --- End: Community live wire (Sachin) ---
+
+// --- Start: Challenge live wire (Sachin) ---
+model ChallengeConfig {
+  id                   String   @id @default("default")
+  missDayResetsStreak  Boolean  @default(true) @map("miss_day_resets_streak")
+  requireCheckIn       Boolean  @default(true) @map("require_check_in")
+  requireQuiz          Boolean  @default(true) @map("require_quiz")
+  adBonusOptional      Boolean  @default(true) @map("ad_bonus_optional")
+  scratchCardsPerDay   Int      @default(1) @map("scratch_cards_per_day")
+  cardExpiresSameDay   Boolean  @default(true) @map("card_expires_same_day")
+  firstMilestoneDays   Int      @default(7) @map("first_milestone_days")
+  wrongAnswerLockHours Int      @default(4) @map("wrong_answer_lock_hours")
+  quizOpenWindowHours  Int      @default(2) @map("quiz_open_window_hours")
+  quizCorrectCoins     Int      @default(50) @map("quiz_correct_coins")
+  quizWrongCoins       Int      @default(-10) @map("quiz_wrong_coins")
+  checkinCoins         Int      @default(20) @map("checkin_coins")
+  adBonusCoins         Int      @default(30) @map("ad_bonus_coins")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("challenge_config")
+}
+
+model ChallengeQuizQuestion {
+  id           String   @id
+  question     String
+  option0      String   @map("option_0")
+  option1      String   @map("option_1")
+  option2      String   @map("option_2")
+  option3      String   @map("option_3")
+  correctIndex Int      @map("correct_index")
+  enabled      Boolean  @default(true)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, sortOrder])
+  @@map("challenge_quiz_questions")
+}
+
+model ChallengeMilestone {
+  id          String   @id
+  days        Int      @unique
+  title       String
+  rewardLabel String   @map("reward_label")
+  coinReward  Int      @map("coin_reward")
+  badge       String?
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, days])
+  @@map("challenge_milestones")
+}
+
+// --- End: Challenge live wire (Sachin) ---
+
+// --- Start: Scratch live wire (Sachin) ---
+enum ScratchPrizeKind {
+  MILESTONE
+  REDEEM
+  SHOP
+  GIFT
+}
+
+enum ScratchRollOutcome {
+  COINS
+  REDEEM
+}
+
+model ScratchConfig {
+  id            String   @id @default("default")
+  coinsPercent  Int      @default(55) @map("coins_percent")
+  redeemPercent Int      @default(45) @map("redeem_percent")
+  coinAmount    Int      @default(50) @map("coin_amount")
+  retentionDays Int      @default(30) @map("retention_days")
+  autoPurge     Boolean  @default(true) @map("auto_purge")
+  showExpired   Boolean  @default(false) @map("show_expired")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("scratch_config")
+}
+
+model ScratchPrize {
+  id          String           @id
+  title       String
+  detail      String
+  kind        ScratchPrizeKind
+  rewardLabel String           @map("reward_label")
+  coinReward  Int              @default(0) @map("coin_reward")
+  oddsPercent Float            @default(0) @map("odds_percent")
+  enabled     Boolean          @default(true)
+  streakDays  Int?             @map("streak_days")
+  sortOrder   Int              @default(0) @map("sort_order")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@index([enabled, kind])
+  @@map("scratch_prizes")
+}
+
+model ScratchRoll {
+  id           String             @id @default(cuid())
+  userId       String             @map("user_id")
+  dayKey       String             @map("day_key")
+  slot         Int                @default(0)
+  outcome      ScratchRollOutcome
+  prizeId      String?            @map("prize_id")
+  coinDelta    Int                @default(0) @map("coin_delta")
+  redeemCodeId String?            @map("redeem_code_id")
+  title        String
+  rewardLabel  String             @map("reward_label")
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayKey, slot])
+  @@index([userId, createdAt])
+  @@map("scratch_rolls")
+}
+
+// --- End: Scratch live wire (Sachin) ---
+
+// --- Begin: Names catalog live wire (Sachin) ---
+model NamesConfig {
+  id                 Int      @id @default(1)
+  maxNameChars       Int      @default(12) @map("max_name_chars")
+  maxBatchSize       Int      @default(100) @map("max_batch_size")
+  allowSpacesInInput Boolean  @default(false) @map("allow_spaces_in_input")
+  requireStyleWrap   Boolean  @default(true) @map("require_style_wrap")
+  remotePackEnabled  Boolean  @default(false) @map("remote_pack_enabled")
+  remotePackUrl      String?  @map("remote_pack_url")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("names_config")
+}
+
+model NameFrame {
+  id        String   @id
+  label     String
+  prefix    String   @default("")
+  suffix    String   @default("")
+  premium   Boolean  @default(false)
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, sortOrder])
+  @@map("name_frames")
+}
+
+model NameFont {
+  id        String   @id
+  label     String
+  sample    String
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, sortOrder])
+  @@map("name_fonts")
+}
+
+// --- End: Names catalog live wire (Sachin) ---
+
+// --- Begin: Support live wire (Sachin) ---
+enum SupportSubject {
+  REPORT
+  REDEEM_CODE_ISSUE
+  BUG
+  FEATURE
+  FEEDBACK
+  OTHER
+}
+
+enum SupportStatus {
+  OPEN
+  PENDING_REPLY
+  REPLIED
+  CLOSED
+}
+
+enum SupportSender {
+  USER
+  ADMIN
+}
+
+model SupportThread {
+  id          String         @id @default(cuid())
+  userId      String         @map("user_id")
+  name        String
+  email       String
+  subject     SupportSubject
+  status      SupportStatus  @default(OPEN)
+  appVersion  String         @map("app_version")
+  deviceLabel String         @map("device_label")
+  unread      Boolean        @default(true)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([status, updatedAt])
+  @@index([userId, status])
+  @@index([unread, updatedAt])
+  @@map("support_threads")
+}
+
+model SupportMessage {
+  id        String        @id @default(cuid())
+  threadId  String        @map("thread_id")
+  sender    SupportSender
+  text      String
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  thread SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("support_messages")
+}
+
+// --- End: Support live wire (Sachin) ---
+
+// --- Begin: Promos live wire (Sachin) ---
+enum PromoPlacement {
+  HOME_BANNER
+  HOME_STRIP
+}
+
+model Promo {
+  id         String         @id
+  title      String
+  subtitle   String         @default("")
+  imageLabel String         @map("image_label")
+  deepLink   String         @map("deep_link")
+  placement  PromoPlacement
+  sortOrder  Int            @map("sort_order")
+  enabled    Boolean        @default(true)
+  startsAt   DateTime       @map("starts_at")
+  endsAt     DateTime       @map("ends_at")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  @@index([enabled, placement, sortOrder])
+  @@index([startsAt, endsAt])
+  @@map("promos")
+}
+
+// --- End: Promos live wire (Sachin) ---
+
+// --- Start: Push live wire (Sachin) ---
+enum PushAudience {
+  ALL
+  ACTIVE_7D
+  NO_CLAIM
+  TOPIC
+}
+
+enum PushStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model PushCampaign {
+  id          String       @id
+  title       String
+  body        String
+  deepLink    String       @map("deep_link")
+  audience    PushAudience
+  topic       String       @default("")
+  status      PushStatus   @default(DRAFT)
+  scheduledAt DateTime?    @map("scheduled_at")
+  sentAt      DateTime?    @map("sent_at")
+  delivered   Int          @default(0)
+  failed      Int          @default(0)
+  createdBy   String       @map("created_by")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@index([status, updatedAt])
+  @@map("push_campaigns")
+}
+
+model DevicePushToken {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  token       String   @unique
+  platform    String   @default("android")
+  topics      String[] @default([])
+  // --- Start: Devices live wire (Sachin) ---
+  installId   String?  @map("install_id")
+  // --- End: Devices live wire (Sachin) ---
+  pushEnabled Boolean  @default(true) @map("push_enabled")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([installId])
+  @@index([pushEnabled, lastSeenAt])
+  @@map("device_push_tokens")
+}
+
+// --- End: Push live wire (Sachin) ---
+
+// --- Start: Devices live wire (Sachin) ---
+model DeviceInstall {
+  id                   String    @id @default(cuid())
+  installId            String    @unique @map("install_id")
+  userId               String?   @map("user_id")
+  brand                String    @default("")
+  model                String    @default("")
+  androidVersion       String    @default("") @map("android_version")
+  appVersion           String    @default("") @map("app_version")
+  appVersionCode       Int       @default(0) @map("app_version_code")
+  fcmTokenHint         String    @default("") @map("fcm_token_hint")
+  hasFcmToken          Boolean   @default(false) @map("has_fcm_token")
+  pushEnabled          Boolean   @default(true) @map("push_enabled")
+  blocked              Boolean   @default(false)
+  note                 String    @default("")
+  uninstallSuspectedAt DateTime? @map("uninstall_suspected_at")
+  lastSeenAt           DateTime  @default(now()) @map("last_seen_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([blocked, lastSeenAt])
+  @@index([userId])
+  @@index([uninstallSuspectedAt])
+  @@map("device_installs")
+}
+
+// --- End: Devices live wire (Sachin) ---
+
+// --- Start: App analytics P1 live wire (Sachin) ---
+model AppAnalyticsEvent {
+  id        String   @id @default(cuid())
+  installId String?  @map("install_id")
+  userId    String?  @map("user_id")
+  name      String
+  propsJson Json?    @map("props_json")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([name, createdAt])
+  @@index([installId, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("app_analytics_events")
+}
+
+// --- End: App analytics P1 live wire (Sachin) ---
+
+// --- Start: App remote config live wire (Sachin) ---
+model AppConfig {
+  id                 Int      @id @default(1)
+  maintenanceMode    Boolean  @default(false) @map("maintenance_mode")
+  maintenanceMessage String   @default("") @map("maintenance_message")
+  forceUpdate        Boolean  @default(false) @map("force_update")
+  softUpdatePrompt   Boolean  @default(true) @map("soft_update_prompt")
+  minVersionCode     Int      @default(1) @map("min_version_code")
+  minVersionName     String   @default("1.0.0") @map("min_version_name")
+  featuresJson       Json     @map("features_json")
+  navigationJson     Json     @map("navigation_json")
+  playStoreUrl       String   @map("play_store_url")
+  privacyUrl         String   @map("privacy_url")
+  websiteUrl         String   @map("website_url")
+  supportEmail       String   @map("support_email")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("app_config")
+}
+
+// --- End: App remote config live wire (Sachin) ---
+
+// --- Start: Copy CMS live wire (Sachin) ---
+model CopyConfig {
+  id        Int      @id @default(1)
+  rateJson  Json     @map("rate_json")
+  shareJson Json     @map("share_json")
+  aboutJson Json     @map("about_json")
+  legalJson Json     @map("legal_json")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("copy_config")
+}
+
+// --- End: Copy CMS live wire (Sachin) ---
+
+// --- Start: Ops settings live wire (Sachin) ---
+model OpsSettings {
+  id          Int      @id @default(1)
+  preferences Json
+  session     Json
+  security    Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("ops_settings")
+}
+
+// --- End: Ops settings live wire (Sachin) ---

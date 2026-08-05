@@ -16,6 +16,12 @@ admin/.env.local
 **/node_modules
 .cursor/
 .kotlin/
+/local.properties
+
+# Firebase / secrets — never commit private keys
+api/secrets/
+**/firebase-admin.json
+**/firebase-adminsdk*.json
 
 tools/e2e/apk_unzip/
 *.apk

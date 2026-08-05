@@ -162,7 +162,7 @@ export function StaffDetailDrawer({
           </ul>
           {locked ? (
             <p className="mt-3 text-[11px] text-slate-400">
-              Super Admin module set is locked in this demo.
+              Super Admin module set is locked.
             </p>
           ) : null}
         </div>
@@ -186,7 +186,8 @@ export function StaffDetailDrawer({
               Enable account
             </button>
           ) : null}
-          {!locked && row.status === "ACTIVE" ? (
+          {!locked &&
+          (row.status === "ACTIVE" || row.status === "INVITED") ? (
             <button
               type="button"
               onClick={() => onDisable(row.id)}

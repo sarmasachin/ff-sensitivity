@@ -25,7 +25,7 @@ import {
   type RedeemFilterKey,
 } from "@/components/redeem/RedeemToolbar";
 
-const PAGE_SIZE = 3;
+const PAGE_SIZE = 12;
 
 export default function RedeemPage() {
   const [rows, setRows] = useState<RedeemListRow[]>(() => [...REDEEM_DEMO_ROWS]);

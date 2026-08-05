@@ -266,15 +266,15 @@ export function previewSnippet(row: SupportThreadRow): string {
 export const SUPPORT_CAPABILITIES = [
   {
     title: "Contact inbox",
-    body: "Threads from Android Contact Us — report, redeem issues, bugs, features, feedback.",
+    body: "Live Nest threads from Android Contact Us — report, redeem issues, bugs, features, feedback.",
   },
   {
     title: "Staff reply",
-    body: "Open a thread and send an admin reply. Status moves to Replied automatically.",
+    body: "Open a thread and send an admin reply via POST /api/v1/admin/support/:id/reply.",
   },
   {
     title: "Triage",
-    body: "Filter by subject and status. Mark unread / close when resolved.",
+    body: "Filter by subject and status. Mark unread / close when resolved — ACL gated by support module.",
   },
   {
     title: "Device context",

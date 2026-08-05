@@ -2,6 +2,8 @@ import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 export declare class AuthController {
     private readonly auth;
     private readonly config;
@@ -14,9 +16,10 @@ export declare class AuthController {
         admin: {
             id: string;
             email: string;
-            role: import(".prisma/client").$Enums.AdminRole;
-            allowedModules: import(".prisma/client").$Enums.AdminModule[];
+            role: string;
+            allowedModules: string[];
             mustChangePassword: boolean;
+            displayName: string;
         };
     }>;
     logout(req: {
@@ -30,14 +33,17 @@ export declare class AuthController {
         user: {
             id: string;
         };
-    }): Promise<{
-        id: string;
-        email: string;
-        role: import(".prisma/client").$Enums.AdminRole;
-        allowedModules: import(".prisma/client").$Enums.AdminModule[];
-        mustChangePassword: boolean;
-        lastLoginAt: Date | null;
-    }>;
+    }): Promise<import("./auth-profile").AdminProfileView>;
+    updateMe(req: {
+        user: {
+            id: string;
+        };
+    }, dto: UpdateProfileDto): Promise<import("./auth-profile").AdminProfileView>;
+    changePassword(req: {
+        user: {
+            id: string;
+        };
+    }, dto: ChangePasswordDto): Promise<import("./auth-profile").AdminProfileView>;
     private setRefreshCookie;
     private cookieOpts;
 }

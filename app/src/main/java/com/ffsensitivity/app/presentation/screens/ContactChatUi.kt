@@ -100,7 +100,7 @@ fun ContactChatPanel(
             item(key = "waiting_admin") {
                 if (thread.messages.none { it.sender == ContactSender.ADMIN }) {
                     Text(
-                        text = "Waiting for support reply… (admin chat comes with backend)",
+                        text = "Waiting for support reply…",
                         color = InkMuted,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)

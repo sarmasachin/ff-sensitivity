@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.AppSession
 import com.ffsensitivity.app.data.DeviceInfoFetcher
 import com.ffsensitivity.app.data.SharedSensiCard
+import com.ffsensitivity.app.data.remote.ApiException
+import com.ffsensitivity.app.data.remote.CommunityRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
 import com.ffsensitivity.app.presentation.theme.InkMuted
@@ -206,52 +208,78 @@ fun ShareSensitivityScreen(
 
         sharing = true
         scope.launch {
-            val ok = runCatching {
-                val card = SharedSensiCard(
-                    id = "mine_${System.currentTimeMillis()}",
-                    name = name.trim(),
-                    freeFireId = freeFireId.trim(),
-                    rank = rank.orEmpty(),
-                    role = role.orEmpty(),
-                    deviceLabel = effectiveDevice,
-                    deviceMeta = deviceMeta.trim(),
-                    matches = matchesNum ?: 0,
-                    kills = killsNum ?: 0,
-                    headshots = headshotsNum ?: 0,
-                    general = general.toInt(),
-                    redDot = redDot.toInt(),
-                    scope2x = scope2x.toInt(),
-                    scope4x = scope4x.toInt(),
-                    awm = awm.toInt(),
-                    freeLook = freeLook.toInt()
-                )
-                val bmp = withContext(Dispatchers.Default) {
-                    ShareCardBitmap.render(card)
+            val card = SharedSensiCard(
+                id = "mine_${System.currentTimeMillis()}",
+                name = name.trim(),
+                freeFireId = freeFireId.trim(),
+                rank = rank.orEmpty(),
+                role = role.orEmpty(),
+                deviceLabel = effectiveDevice,
+                deviceMeta = deviceMeta.trim(),
+                matches = matchesNum ?: 0,
+                kills = killsNum ?: 0,
+                headshots = headshotsNum ?: 0,
+                general = general.toInt(),
+                redDot = redDot.toInt(),
+                scope2x = scope2x.toInt(),
+                scope4x = scope4x.toInt(),
+                awm = awm.toInt(),
+                freeLook = freeLook.toInt()
+            )
+
+            val nest = withContext(Dispatchers.IO) {
+                CommunityRepository.submit(context, card)
+            }
+            nest.fold(
+                onSuccess = { submitted ->
+                    val shared = runCatching {
+                        val bmp = withContext(Dispatchers.Default) {
+                            ShareCardBitmap.render(card)
+                        }
+                        val caption = ShareCardBitmap.captionText(card)
+                        val ok = SafeOps.shareImageAndText(
+                            context = context,
+                            title = "Share sensitivity card",
+                            bitmap = bmp,
+                            caption = caption
+                        )
+                        runCatching { bmp.recycle() }
+                        ok
+                    }.getOrElse {
+                        AppLog.e("Share card image failed", it)
+                        false
+                    }
+                    SafeOps.toast(
+                        context,
+                        if (shared) {
+                            "Submitted for review · share sheet opened"
+                        } else {
+                            submitted.message.ifBlank { "Submitted for review." }
+                        }
+                    )
+                },
+                onFailure = { err ->
+                    AppLog.e("Community submit failed", err)
+                    showError(
+                        code = when (err) {
+                            is ApiException -> err.code
+                            else -> "SHARE_SUBMIT_FAILED"
+                        },
+                        title = "Couldn’t submit to Community",
+                        message = when (err) {
+                            is ApiException -> err.message
+                            is java.net.ConnectException,
+                            is java.net.SocketTimeoutException,
+                            is java.net.UnknownHostException,
+                            is java.io.IOException ->
+                                "Can't reach the server. Check Wi‑Fi and make sure the API is running."
+                            else -> "Submit failed. Try again."
+                        },
+                        retryKind = ShareRetryKind.SHARE_CARD
+                    )
                 }
-                val caption = ShareCardBitmap.captionText(card)
-                val shared = SafeOps.shareImageAndText(
-                    context = context,
-                    title = "Share sensitivity card",
-                    bitmap = bmp,
-                    caption = caption
-                )
-                runCatching { bmp.recycle() }
-                shared
-            }.getOrElse {
-                AppLog.e("Share card failed", it)
-                false
-            }
+            )
             sharing = false
-            if (ok) {
-                SafeOps.toast(context, "Share sheet opened")
-            } else {
-                showError(
-                    code = "SHARE_CARD_FAILED",
-                    title = "Couldn’t share card",
-                    message = "Image share failed. Check storage/share apps and try again.",
-                    retryKind = ShareRetryKind.SHARE_CARD
-                )
-            }
         }
     }
 
@@ -527,7 +555,7 @@ fun ShareSensitivityScreen(
                         }
                         SubmitProButton(
                             enabled = canSubmit && !deviceLoading && !sharing,
-                            label = if (sharing) "Sharing…" else "Share Card Image",
+                            label = if (sharing) "Submitting…" else "Submit to Community",
                             onClick = { shareCard() }
                         )
                         Spacer(modifier = Modifier.height(28.dp))

@@ -1,7 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    // --- Start: Push FCM live wire (Sachin) ---
+    id("com.google.gms.google-services")
+    // --- End: Push FCM live wire (Sachin) ---
+    // --- Start: App quality P3 Crashlytics (Sachin) ---
+    id("com.google.firebase.crashlytics")
+    // --- End: App quality P3 Crashlytics (Sachin) ---
+}
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -14,6 +27,21 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
+
+        val googleServerClientId = localProps.getProperty("GOOGLE_SERVER_CLIENT_ID", "")
+        buildConfigField(
+            "String",
+            "GOOGLE_SERVER_CLIENT_ID",
+            "\"$googleServerClientId\""
+        )
+        // --- Start: Redeem live wire (Sachin) ---
+        val apiBaseUrl = localProps.getProperty("API_BASE_URL", "http://10.0.2.2:4000")
+        buildConfigField(
+            "String",
+            "API_BASE_URL",
+            "\"$apiBaseUrl\""
+        )
+        // --- End: Redeem live wire (Sachin) ---
     }
 
     buildTypes {
@@ -61,6 +89,22 @@ dependencies {
     implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
+    // --- Start: Redeem live wire (Sachin) ---
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // --- End: Redeem live wire (Sachin) ---
+
+    // --- Start: Push FCM live wire (Sachin) ---
+    implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    // --- End: Push FCM live wire (Sachin) ---
+    // --- Start: App quality P3 Crashlytics (Sachin) ---
+    implementation("com.google.firebase:firebase-crashlytics")
+    // --- End: App quality P3 Crashlytics (Sachin) ---
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChallengeCapabilities } from "@/components/challenge/ChallengeCapabilities";
 import { ChallengeEmptyState } from "@/components/challenge/ChallengeEmptyState";
 import { ChallengeHeader } from "@/components/challenge/ChallengeHeader";
@@ -19,9 +19,11 @@ import {
   type ChallengeListFilter,
 } from "@/components/challenge/ChallengeToolbar";
 import {
+  fetchChallengeBundle,
+  saveChallengeBundle,
+} from "@/components/challenge/challenge-api";
+import {
   CHALLENGE_DEFAULT_RULES,
-  MILESTONE_DEMO_ROWS,
-  QUIZ_DEMO_ROWS,
   computeChallengeStats,
   emptyMilestoneForm,
   emptyQuizForm,
@@ -37,7 +39,7 @@ import {
   type QuizQuestionRow,
 } from "@/components/challenge/challenge-data";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 12;
 
 function snapshotKey(
   rules: ChallengeRules,
@@ -47,21 +49,43 @@ function snapshotKey(
   return JSON.stringify({ rules, quiz, milestones });
 }
 
+function canAccessChallengeModule(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as {
+      role?: string;
+      allowedModules?: string[];
+    };
+    if (admin.role === "SUPER_ADMIN") return true;
+    return Array.isArray(admin.allowedModules)
+      ? admin.allowedModules.includes("daily_challenge") ||
+          admin.allowedModules.includes("challenge")
+      : false;
+  } catch {
+    return false;
+  }
+}
+
 export default function DailyChallengePage() {
+  const [allowed, setAllowed] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<ChallengeTabId>("rules");
   const [rules, setRules] = useState<ChallengeRules>(CHALLENGE_DEFAULT_RULES);
-  const [quiz, setQuiz] = useState<QuizQuestionRow[]>(() => [...QUIZ_DEMO_ROWS]);
-  const [milestones, setMilestones] = useState<MilestoneRow[]>(() => [
-    ...MILESTONE_DEMO_ROWS,
-  ]);
+  const [quiz, setQuiz] = useState<QuizQuestionRow[]>([]);
+  const [milestones, setMilestones] = useState<MilestoneRow[]>([]);
   const [savedKey, setSavedKey] = useState(() =>
-    snapshotKey(CHALLENGE_DEFAULT_RULES, QUIZ_DEMO_ROWS, MILESTONE_DEMO_ROWS),
+    snapshotKey(CHALLENGE_DEFAULT_RULES, [], []),
   );
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ChallengeListFilter>("all");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [quizOpen, setQuizOpen] = useState(false);
   const [quizMode, setQuizMode] = useState<"add" | "edit">("add");
@@ -78,6 +102,34 @@ export default function DailyChallengePage() {
     () => computeChallengeStats(quiz, milestones, rules),
     [quiz, milestones, rules],
   );
+
+  useEffect(() => {
+    setAllowed(canAccessChallengeModule());
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const bundle = await fetchChallengeBundle();
+      setRules(bundle.rules);
+      setQuiz(bundle.quiz);
+      setMilestones(bundle.milestones);
+      setSavedKey(snapshotKey(bundle.rules, bundle.quiz, bundle.milestones));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load challenge.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [allowed, load]);
 
   useEffect(() => {
     setPage(1);
@@ -127,21 +179,25 @@ export default function DailyChallengePage() {
     return list.slice(start, start + PAGE_SIZE);
   }, [list, page]);
 
-  function handleSave() {
-    setSavedKey(snapshotKey(rules, quiz, milestones));
-    setNotice("Challenge draft saved locally. API sync comes next.");
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await saveChallengeBundle({ rules, quiz, milestones });
+      setRules(saved.rules);
+      setQuiz(saved.quiz);
+      setMilestones(saved.milestones);
+      setSavedKey(snapshotKey(saved.rules, saved.quiz, saved.milestones));
+      setNotice("Challenge saved to Nest — Android picks this up on next sync.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleReset() {
-    const parsed = JSON.parse(savedKey) as {
-      rules: ChallengeRules;
-      quiz: QuizQuestionRow[];
-      milestones: MilestoneRow[];
-    };
-    setRules(parsed.rules);
-    setQuiz(parsed.quiz);
-    setMilestones(parsed.milestones);
-    setNotice("Reverted to last saved draft.");
+    void load().then(() => setNotice("Reverted to last saved server draft."));
   }
 
   function openAddQuiz() {
@@ -168,14 +224,14 @@ export default function DailyChallengePage() {
       const result = formToQuiz(values, id);
       if ("error" in result) return result.error;
       setQuiz((prev) => [result, ...prev]);
-      setNotice(`Added question ${result.id}.`);
+      setNotice(`Added question ${result.id}. Save to push live.`);
       return null;
     }
     if (!quizEditingId) return "Nothing to edit.";
     const result = formToQuiz({ ...values, id: quizEditingId }, quizEditingId);
     if ("error" in result) return result.error;
     setQuiz((prev) => prev.map((r) => (r.id === quizEditingId ? result : r)));
-    setNotice("Quiz question updated.");
+    setNotice("Quiz question updated. Save to push live.");
     return null;
   }
 
@@ -209,7 +265,7 @@ export default function DailyChallengePage() {
       const result = formToMilestone(values, id);
       if ("error" in result) return result.error;
       setMilestones((prev) => [...prev, result].sort((a, b) => a.days - b.days));
-      setNotice(`Added milestone Day ${result.days}.`);
+      setNotice(`Added milestone Day ${result.days}. Save to push live.`);
       return null;
     }
     if (!msEditingId) return "Nothing to edit.";
@@ -228,8 +284,19 @@ export default function DailyChallengePage() {
         .map((r) => (r.id === msEditingId ? result : r))
         .sort((a, b) => a.days - b.days),
     );
-    setNotice(`Updated milestone Day ${result.days}.`);
+    setNotice(`Updated milestone Day ${result.days}. Save to push live.`);
     return null;
+  }
+
+  if (!allowed) {
+    return (
+      <section className="mx-auto max-w-3xl rounded-2xl border border-rose-200 bg-rose-50 px-5 py-8 text-center">
+        <h1 className="text-[17px] font-bold text-rose-950">No Challenge access</h1>
+        <p className="mt-2 text-[13px] text-rose-800">
+          Your staff role is missing the <code>daily_challenge</code> module.
+        </p>
+      </section>
+    );
   }
 
   return (
@@ -237,7 +304,7 @@ export default function DailyChallengePage() {
       <ChallengeHeader
         dirty={dirty}
         tab={tab}
-        onSave={handleSave}
+        onSave={() => void handleSave()}
         onReset={handleReset}
         onAddQuiz={openAddQuiz}
         onAddMilestone={openAddMilestone}
@@ -258,16 +325,32 @@ export default function DailyChallengePage() {
         }}
       />
 
+      {loading ? (
+        <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-[13px] text-slate-400">
+          Loading challenge config…
+        </p>
+      ) : null}
+
+      {error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
+        >
+          {error}
+        </div>
+      ) : null}
+
       {notice ? (
         <div
           role="status"
           className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-[13px] font-medium text-orange-950"
         >
           {notice}
+          {saving ? " (saving…)" : ""}
         </div>
       ) : null}
 
-      {tab === "rules" ? (
+      {!loading && tab === "rules" ? (
         <>
           <ChallengeRulesPanel
             rules={rules}
@@ -293,7 +376,7 @@ export default function DailyChallengePage() {
         </>
       ) : null}
 
-      {tab === "quiz" || tab === "milestones" ? (
+      {!loading && (tab === "quiz" || tab === "milestones") ? (
         <>
           <ChallengeToolbar
             query={query}
@@ -328,14 +411,14 @@ export default function DailyChallengePage() {
                       r.id === id ? { ...r, enabled: !r.enabled } : r,
                     ),
                   );
-                  setNotice("Quiz status updated.");
+                  setNotice("Quiz status updated. Save to push live.");
                 }}
                 onDelete={(id) => {
                   const row = quiz.find((r) => r.id === id);
                   if (!row) return;
                   if (!window.confirm(`Delete question “${row.id}”?`)) return;
                   setQuiz((prev) => prev.filter((r) => r.id !== id));
-                  setNotice(`Deleted ${row.id}.`);
+                  setNotice(`Deleted ${row.id}. Save to push live.`);
                 }}
                 footer={
                   <ChallengePagination
@@ -368,7 +451,7 @@ export default function DailyChallengePage() {
                     r.id === id ? { ...r, enabled: !r.enabled } : r,
                   ),
                 );
-                setNotice("Milestone status updated.");
+                setNotice("Milestone status updated. Save to push live.");
               }}
               onDelete={(id) => {
                 const row = milestones.find((r) => r.id === id);
@@ -381,7 +464,7 @@ export default function DailyChallengePage() {
                   return;
                 }
                 setMilestones((prev) => prev.filter((r) => r.id !== id));
-                setNotice(`Deleted Day ${row.days}.`);
+                setNotice(`Deleted Day ${row.days}. Save to push live.`);
               }}
               footer={
                 <ChallengePagination

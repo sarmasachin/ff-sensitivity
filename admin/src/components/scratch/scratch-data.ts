@@ -288,7 +288,7 @@ export const SCRATCH_CAPABILITIES = [
     body: "Retention days (Android default 30) and auto-purge of expired cards.",
   },
   {
-    title: "Remote sync",
-    body: "Nest API will push prize tables + policy to devices live.",
+    title: "Live Nest sync",
+    body: "Save pushes odds + prizes + policy. Android rolls via POST /api/v1/scratch/roll (server RNG).",
   },
 ];

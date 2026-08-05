@@ -1,0 +1,12 @@
+export type AuditCategory = 'LOGIN' | 'REDEEM' | 'INVENTORY' | 'STAFF' | 'WALLET' | 'CONFIG' | 'DEVICE';
+export type AuditResult = 'SUCCESS' | 'DENIED' | 'FAILED';
+export declare function hoursAgo(from: Date, now?: Date): number;
+export declare function formatWhen(hours: number): string;
+export declare function maskEmail(email: string): string;
+export declare function mapCategory(action: string): AuditCategory;
+export declare function mapResult(action: string, after: unknown): AuditResult;
+export declare function humanAction(action: string): string;
+export declare function extractIp(after: unknown): string;
+export declare function redactObject(raw: Record<string, unknown> | null | undefined): Record<string, unknown> | null;
+export declare function summarizeDetail(before: unknown, after: unknown, max?: number): string;
+export declare function assertAuditLimit(n: number): number;

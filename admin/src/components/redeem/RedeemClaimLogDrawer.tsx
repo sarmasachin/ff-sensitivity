@@ -1,23 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  REDEEM_CLAIM_DEMO,
-  type ClaimResult,
-  type RedeemClaimRow,
-} from "./redeem-claims-data";
+import { useEffect, useMemo, useState } from "react";
+import { fetchClaims } from "@/components/claims/claims-api";
+import type { ClaimResult, RedeemClaimRow } from "./redeem-claims-data";
 
 type Props = {
   open: boolean;
   onClose: () => void;
 };
 
-function ResultPill({ result }: { result: ClaimResult }) {
-  const map: Record<ClaimResult, string> = {
+type DrawerResult = ClaimResult | "FLAGGED";
+
+function ResultPill({ result }: { result: DrawerResult }) {
+  const map: Record<DrawerResult, string> = {
     SUCCESS: "bg-emerald-100 text-emerald-800 ring-emerald-200",
     FAILED: "bg-rose-100 text-rose-800 ring-rose-200",
     ALREADY_CLAIMED: "bg-amber-100 text-amber-900 ring-amber-200",
     OUT_OF_STOCK: "bg-orange-100 text-orange-900 ring-orange-200",
+    FLAGGED: "bg-violet-100 text-violet-900 ring-violet-200",
   };
   return (
     <span
@@ -29,9 +29,44 @@ function ResultPill({ result }: { result: ClaimResult }) {
 }
 
 export function RedeemClaimLogDrawer({ open, onClose }: Props) {
-  const [rows] = useState<RedeemClaimRow[]>(() => [...REDEEM_CLAIM_DEMO]);
+  const [rows, setRows] = useState<RedeemClaimRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [resultFilter, setResultFilter] = useState<"all" | ClaimResult>("all");
+  const [resultFilter, setResultFilter] = useState<"all" | DrawerResult>("all");
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchClaims()
+      .then((list) => {
+        if (cancelled) return;
+        setRows(
+          list.map((r) => ({
+            id: r.id,
+            codeId: r.refId,
+            codeTitle: r.title,
+            deviceId: r.deviceId,
+            result: (r.result === "FLAGGED" ? "FLAGGED" : "SUCCESS") as DrawerResult,
+            whenLabel: r.whenLabel,
+            stockAfter: r.stockAfter,
+          })),
+        );
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Failed to load claims.");
+        setRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -66,7 +101,9 @@ export function RedeemClaimLogDrawer({ open, onClose }: Props) {
                 Claim log
               </h2>
               <p className="mt-0.5 text-[12px] text-slate-500">
-                {rows.length} events · device + result + stock after claim
+                {loading
+                  ? "Loading…"
+                  : `${rows.length} events · unlock = claim · stock after`}
               </p>
             </div>
             <button
@@ -97,21 +134,27 @@ export function RedeemClaimLogDrawer({ open, onClose }: Props) {
             <select
               value={resultFilter}
               onChange={(e) =>
-                setResultFilter(e.target.value as "all" | ClaimResult)
+                setResultFilter(e.target.value as "all" | DrawerResult)
               }
               className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700"
             >
               <option value="all">All results</option>
               <option value="SUCCESS">Success</option>
-              <option value="FAILED">Failed</option>
-              <option value="ALREADY_CLAIMED">Already claimed</option>
-              <option value="OUT_OF_STOCK">Out of stock</option>
+              <option value="FLAGGED">Flagged</option>
             </select>
           </div>
         </header>
 
         <div className="ops-scroll-hide min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-          {visible.length === 0 ? (
+          {error ? (
+            <p className="rounded-xl border border-dashed border-rose-200 px-4 py-12 text-center text-[13px] text-rose-600">
+              {error}
+            </p>
+          ) : loading ? (
+            <p className="rounded-xl border border-dashed border-slate-200 px-4 py-12 text-center text-[13px] text-slate-400">
+              Loading claims…
+            </p>
+          ) : visible.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 px-4 py-12 text-center text-[13px] text-slate-400">
               No claims match this filter.
             </p>
@@ -131,7 +174,7 @@ export function RedeemClaimLogDrawer({ open, onClose }: Props) {
                         {row.deviceId}
                       </p>
                     </div>
-                    <ResultPill result={row.result} />
+                    <ResultPill result={row.result as DrawerResult} />
                   </div>
                   <div className="mt-2.5 flex items-center justify-between text-[12px] text-slate-500">
                     <span>{row.whenLabel}</span>

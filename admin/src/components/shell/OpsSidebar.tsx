@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { OPS_NAV_PRIMARY, OPS_NAV_SYSTEM } from "./ops-nav";
 import { OpsNavLink } from "./OpsNavLink";
@@ -7,6 +8,7 @@ import { OpsNavLink } from "./OpsNavLink";
 type Props = {
   email?: string | null;
   role?: string | null;
+  allowedModules?: string[] | null;
   mobileOpen: boolean;
   onCloseMobile: () => void;
 };
@@ -16,14 +18,103 @@ function shortEmail(email: string) {
   return local.length > 18 ? `${local.slice(0, 16)}…` : local;
 }
 
+function canSeeModule(
+  moduleId:
+    | "community"
+    | "claims"
+    | "daily_challenge"
+    | "scratch"
+    | "names"
+    | "support"
+    | "promos"
+    | "push"
+    | "app"
+    | "devices"
+    | "wallets"
+    | "users"
+    | "copy"
+    | "staff"
+    | "audit"
+    | "settings"
+    | "overview",
+  role?: string | null,
+  modules?: string[] | null,
+) {
+  if (role === "SUPER_ADMIN") return true;
+  return (
+    Array.isArray(modules) &&
+    (modules.includes(moduleId) ||
+      (moduleId === "daily_challenge" && modules.includes("challenge")))
+  );
+}
+
 export function OpsSidebar({
   email,
   role,
+  allowedModules,
   mobileOpen,
   onCloseMobile,
 }: Props) {
   const pathname = usePathname();
   const initial = (email ?? "S").trim().charAt(0).toUpperCase();
+  const primaryNav = OPS_NAV_PRIMARY.filter((item) => {
+    // Overview (live KPIs) + Dashboard (graphs) — always visible for signed-in seats.
+    if (item.href === "/dashboard" || item.href === "/dash") {
+      return true;
+    }
+    if (item.href === "/community") {
+      return canSeeModule("community", role, allowedModules);
+    }
+    if (item.href === "/claims") {
+      return canSeeModule("claims", role, allowedModules);
+    }
+    if (item.href === "/daily-challenge") {
+      return canSeeModule("daily_challenge", role, allowedModules);
+    }
+    if (item.href === "/scratch") {
+      return canSeeModule("scratch", role, allowedModules);
+    }
+    if (item.href === "/names") {
+      return canSeeModule("names", role, allowedModules);
+    }
+    if (item.href === "/support") {
+      return canSeeModule("support", role, allowedModules);
+    }
+    if (item.href === "/promos") {
+      return canSeeModule("promos", role, allowedModules);
+    }
+    return true;
+  });
+  const systemNav = OPS_NAV_SYSTEM.filter((item) => {
+    if (item.href === "/push") {
+      return canSeeModule("push", role, allowedModules);
+    }
+    if (item.href === "/app") {
+      return canSeeModule("app", role, allowedModules);
+    }
+    if (item.href === "/devices") {
+      return canSeeModule("devices", role, allowedModules);
+    }
+    if (item.href === "/wallets") {
+      return canSeeModule("wallets", role, allowedModules);
+    }
+    if (item.href === "/users") {
+      return canSeeModule("users", role, allowedModules);
+    }
+    if (item.href === "/copy") {
+      return canSeeModule("copy", role, allowedModules);
+    }
+    if (item.href === "/staff") {
+      return canSeeModule("staff", role, allowedModules);
+    }
+    if (item.href === "/audit") {
+      return canSeeModule("audit", role, allowedModules);
+    }
+    if (item.href === "/settings") {
+      return canSeeModule("settings", role, allowedModules);
+    }
+    return true;
+  });
 
   return (
     <>
@@ -59,7 +150,7 @@ export function OpsSidebar({
             App
           </p>
           <div className="space-y-1">
-            {OPS_NAV_PRIMARY.map((item) => (
+            {primaryNav.map((item) => (
               <OpsNavLink
                 key={item.href}
                 href={item.href}
@@ -74,7 +165,7 @@ export function OpsSidebar({
             System
           </p>
           <div className="space-y-1">
-            {OPS_NAV_SYSTEM.map((item) => (
+            {systemNav.map((item) => (
               <OpsNavLink
                 key={item.href}
                 href={item.href}
@@ -87,7 +178,18 @@ export function OpsSidebar({
         </nav>
 
         <div className="shrink-0 border-t border-white/10 p-4">
-          <div className="flex items-center gap-3">
+          <Link
+            href="/profile"
+            prefetch={false}
+            onClick={onCloseMobile}
+            aria-current={pathname === "/profile" ? "page" : undefined}
+            className={[
+              "flex items-center gap-3 rounded-xl px-1 py-1 transition-colors",
+              pathname === "/profile"
+                ? "bg-white/[0.06]"
+                : "hover:bg-white/[0.04]",
+            ].join(" ")}
+          >
             <div
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1e293b] text-[13px] font-semibold text-[#e2e8f0]"
               aria-hidden
@@ -102,7 +204,7 @@ export function OpsSidebar({
                 {role?.replaceAll("_", " ") ?? "—"}
               </p>
             </div>
-          </div>
+          </Link>
         </div>
       </aside>
     </>

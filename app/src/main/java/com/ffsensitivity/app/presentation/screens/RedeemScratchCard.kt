@@ -92,7 +92,9 @@ private const val REDEEM_SCRATCH_BRUSH = 28f
 fun RedeemScratchCardDialog(
     item: RedeemCodeItem,
     onDismiss: () -> Unit,
-    onUnlocked: () -> Boolean
+    // --- Start: Redeem live wire (Sachin) ---
+    onUnlocked: suspend () -> Boolean
+    // --- End: Redeem live wire (Sachin) ---
 ) {
     val context = LocalContext.current
     val obsidianFoil = remember(context) { ShopStore.hasObsidianFoil(context) }

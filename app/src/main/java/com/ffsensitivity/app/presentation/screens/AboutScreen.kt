@@ -78,6 +78,8 @@ fun AboutScreen(
         }
     }
 
+    val copy = com.ffsensitivity.app.data.remote.CopyRepository.snapshot()
+
     val websiteHost = remember {
         runCatching {
             AppLinks.WEBSITE.removePrefix("https://").removePrefix("http://").ifBlank { AppLinks.WEBSITE }
@@ -214,7 +216,7 @@ fun AboutScreen(
                         letterSpacing = 1.4.sp
                     )
                     Text(
-                        text = "FF Sensitivity",
+                        text = copy.about.headline.ifBlank { "FF Sensitivity" },
                         color = InkPrimary,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.SemiBold
@@ -247,21 +249,23 @@ fun AboutScreen(
                     .padding(18.dp)
             ) {
                 Text(
-                    text = "Precision tools for Free Fire & Max",
+                    text = copy.about.headline.ifBlank { "Precision tools for Free Fire & Max" },
                     color = InkPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Sensitivity, HUD, graphics, safe DPI, stylish names, redeem codes, daily challenges and share cards — tuned for your device.",
+                    text = copy.about.blurb.ifBlank {
+                        "Sensitivity, HUD, graphics, safe DPI, stylish names, redeem codes, daily challenges and share cards — tuned for your device."
+                    },
                     color = InkSecondary,
                     fontSize = 13.sp,
                     lineHeight = 19.sp
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
-                    text = "Website",
+                    text = copy.about.websiteCta.ifBlank { "Website" },
                     color = InkMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -280,7 +284,7 @@ fun AboutScreen(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Privacy Policy",
+                    text = copy.legal.privacyLabel.ifBlank { "Privacy Policy" },
                     color = InkMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -288,7 +292,7 @@ fun AboutScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "View privacy policy",
+                    text = copy.about.privacyCta.ifBlank { "View privacy policy" },
                     color = AmberHot,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -299,7 +303,7 @@ fun AboutScreen(
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
-                    text = "Version $safeVersion",
+                    text = "${copy.about.versionPrefix.ifBlank { "Version" }} $safeVersion",
                     color = InkMuted,
                     fontSize = 12.sp
                 )

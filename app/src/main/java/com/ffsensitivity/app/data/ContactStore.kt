@@ -6,21 +6,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-sealed class ContactStartResult {
-    data class Ok(val thread: ContactThread) : ContactStartResult()
-    data object Validation : ContactStartResult()
-    data object SaveFailed : ContactStartResult()
-}
-
-sealed class ContactReplyResult {
-    data class Ok(val thread: ContactThread) : ContactReplyResult()
-    data object Validation : ContactReplyResult()
-    data object NoThread : ContactReplyResult()
-    data object SaveFailed : ContactReplyResult()
-}
-
 /**
- * Local-only contact thread. Admin replies will sync here after backend exists.
+ * Local cache of the Nest support thread for Contact Us.
+ * Server is source of truth when signed in.
  */
 object ContactStore {
 
@@ -37,63 +25,13 @@ object ContactStore {
         }
     }
 
-    fun start(
-        context: Context,
-        name: String,
-        email: String,
-        subject: ContactSubject,
-        message: String,
-        appVersion: String
-    ): ContactStartResult {
-        val cleanName = name.trim().take(40)
-        val cleanEmail = email.trim().take(80)
-        val cleanMsg = message.trim().take(1000)
-        if (cleanName.isBlank() || cleanMsg.isBlank() || !isValidEmail(cleanEmail)) {
-            return ContactStartResult.Validation
-        }
-        val now = System.currentTimeMillis()
-        val first = ContactMessage(
-            id = UUID.randomUUID().toString(),
-            sender = ContactSender.USER,
-            text = cleanMsg,
-            createdAtMs = now
-        )
-        val thread = ContactThread(
-            id = UUID.randomUUID().toString(),
-            name = cleanName,
-            email = cleanEmail,
-            subject = subject,
-            appVersion = appVersion.trim().ifBlank { "—" },
-            createdAtMs = now,
-            messages = listOf(first)
-        )
-        return runCatching {
-            save(context, thread)
-            ContactStartResult.Ok(thread)
-        }.getOrElse {
-            AppLog.e("Contact thread start failed", it)
-            ContactStartResult.SaveFailed
-        }
+    fun saveRemote(context: Context, thread: ContactThread) {
+        runCatching { save(context, thread) }
+            .onFailure { AppLog.e("Contact cache save failed", it) }
     }
 
-    fun appendUserMessage(context: Context, message: String): ContactReplyResult {
-        val cleanMsg = message.trim().take(1000)
-        if (cleanMsg.isBlank()) return ContactReplyResult.Validation
-        val current = load(context) ?: return ContactReplyResult.NoThread
-        val nextMsg = ContactMessage(
-            id = UUID.randomUUID().toString(),
-            sender = ContactSender.USER,
-            text = cleanMsg,
-            createdAtMs = System.currentTimeMillis()
-        )
-        val updated = current.copy(messages = current.messages + nextMsg)
-        return runCatching {
-            save(context, updated)
-            ContactReplyResult.Ok(updated)
-        }.getOrElse {
-            AppLog.e("Contact append user message failed", it)
-            ContactReplyResult.SaveFailed
-        }
+    fun clear(context: Context) {
+        prefs(context).edit().remove(KEY_THREAD).apply()
     }
 
     fun isValidEmail(email: String): Boolean {
@@ -122,6 +60,8 @@ object ContactStore {
             .put("email", thread.email)
             .put("subject", thread.subject.name)
             .put("appVersion", thread.appVersion)
+            .put("deviceLabel", thread.deviceLabel)
+            .put("status", thread.status)
             .put("createdAtMs", thread.createdAtMs)
             .put("messages", msgs)
     }
@@ -149,6 +89,8 @@ object ContactStore {
             email = obj.optString("email"),
             subject = ContactSubject.fromStorage(obj.optString("subject")),
             appVersion = obj.optString("appVersion").ifBlank { "—" },
+            deviceLabel = obj.optString("deviceLabel").ifBlank { "—" },
+            status = obj.optString("status").ifBlank { "OPEN" },
             createdAtMs = obj.optLong("createdAtMs", 0L),
             messages = messages
         )

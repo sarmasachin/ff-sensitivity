@@ -3,7 +3,8 @@ package com.ffsensitivity.app.data
 enum class ScratchCardKind {
     MILESTONE,
     REDEEM,
-    SHOP
+    SHOP,
+    GIFT
 }
 
 data class ScratchedCardEntry(

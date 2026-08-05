@@ -15,7 +15,21 @@ import org.json.JSONObject
  */
 object StylishNameCatalog {
 
-    const val FF_NAME_MAX = 12
+    /** FF in-game name length — updated from Nest policy when catalog syncs. */
+    @Volatile
+    var FF_NAME_MAX: Int = 12
+        private set
+
+    @Volatile
+    var maxBatchSize: Int = 100
+        private set
+
+    @Volatile
+    private var blockSpaces: Boolean = true
+
+    @Volatile
+    private var requireStyleWrap: Boolean = true
+
     const val SYMBOL_TARGET = 500
 
     /** How many symbols pair with classic frames around mid-letter styles (keeps pool huge but bounded). */
@@ -61,8 +75,23 @@ object StylishNameCatalog {
     /** Cached after load so generateAll does not rebuild 1500+ frames every call. */
     private var cachedFrames: List<FrameStyle> = emptyList()
 
+    /** When set, only these letter style ids are used (Nest enabled fonts). */
+    @Volatile
+    private var enabledFontIds: Set<String>? = null
+
     private var generateCacheKey: String? = null
     private var generateCache: List<GeneratedName> = emptyList()
+
+    /** Builtin letter maps — Nest can only enable/disable known ids. */
+    private val builtinLetterStyles: List<LetterStyle> by lazy {
+        listOf(
+            LetterStyle("normal", "Caps", null),
+            LetterStyle("small_caps", "Small Caps", SMALL_CAPS),
+            LetterStyle("wide", "Wide", WIDE),
+            LetterStyle("bubbled", "Bubbled", BUBBLED),
+            LetterStyle("parenthesized", "Parenthesized", PARENTHESIZED)
+        )
+    }
 
     /** Popular multi-char FF frames (kept alongside the 500-symbol set). */
     val frames: List<FrameStyle> = listOf(
@@ -126,15 +155,14 @@ object StylishNameCatalog {
         FrameStyle("mini_vip", "Mini VIP", "꧁ᴠɪᴘ丨", "꧂")
     )
 
-    val letterStyles: List<LetterStyle> by lazy {
-        listOf(
-            LetterStyle("normal", "Caps", null),
-            LetterStyle("small_caps", "Small Caps", SMALL_CAPS),
-            LetterStyle("wide", "Wide", WIDE),
-            LetterStyle("bubbled", "Bubbled", BUBBLED),
-            LetterStyle("parenthesized", "Parenthesized", PARENTHESIZED)
-        )
-    }
+    val letterStyles: List<LetterStyle>
+        get() {
+            val enabled = enabledFontIds
+            val all = builtinLetterStyles
+            if (enabled == null) return all
+            val filtered = all.filter { it.id in enabled }
+            return filtered.ifEmpty { all }
+        }
 
     /** 500 unique symbols once [ensureLoaded] succeeds; empty until then. */
     val symbols: List<String>
@@ -157,15 +185,51 @@ object StylishNameCatalog {
         synchronized(this) {
             if (loaded) return
             symbolList = loadSymbolsFromAssets(context)
-            cachedFrames = frames
+            if (cachedFrames.isEmpty()) {
+                cachedFrames = frames
+            }
             generateCacheKey = null
             generateCache = emptyList()
             loaded = true
         }
     }
 
+    /**
+     * Apply Nest catalog (enabled frames/fonts + policy). Safe offline fallback
+     * remains when [frames] is empty. Never fetches remotePackUrl.
+     */
+    fun applyRemoteCatalog(payload: com.ffsensitivity.app.data.remote.NamesCatalogPayload) {
+        synchronized(this) {
+            FF_NAME_MAX = payload.policy.maxNameChars.coerceIn(1, 12)
+            maxBatchSize = payload.policy.maxBatchSize.coerceIn(10, 200)
+            blockSpaces = payload.policy.blockSpaces
+            requireStyleWrap = payload.policy.requireStyleWrap
+            enabledFontIds = payload.fonts.map { it.id }.toSet().ifEmpty { null }
+            val remoteFrames = payload.frames.mapNotNull { f ->
+                val prefix = f.prefix.take(32)
+                val suffix = f.suffix.take(32)
+                if (prefix.isEmpty() && suffix.isEmpty()) return@mapNotNull null
+                FrameStyle(
+                    id = f.id,
+                    label = f.label.ifBlank { f.id },
+                    prefix = prefix,
+                    suffix = suffix
+                )
+            }
+            if (remoteFrames.isNotEmpty()) {
+                cachedFrames = remoteFrames
+            }
+            generateCacheKey = null
+            generateCache = emptyList()
+        }
+    }
+
     fun generateAll(baseName: String): List<GeneratedName> {
-        val clean = baseName.trim().replace(" ", "")
+        val clean = if (blockSpaces) {
+            baseName.trim().replace(" ", "")
+        } else {
+            baseName.trim()
+        }
         if (clean.isEmpty()) return emptyList()
 
         synchronized(this) {
@@ -176,7 +240,8 @@ object StylishNameCatalog {
             val syms = symbolList.ifEmpty { accents }
             val classic = if (cachedFrames.isNotEmpty()) cachedFrames else frames
             val midFrameSyms = syms.take(MID_FRAME_SYMBOL_CAP)
-            val capacity = letterStyles.size * (
+            val letters = letterStyles
+            val capacity = letters.size * (
                 classic.size +
                     syms.size * 5 +
                     classic.size * midFrameSyms.size
@@ -186,12 +251,12 @@ object StylishNameCatalog {
 
             fun add(id: String, label: String, value: String, plainCores: Set<String>) {
                 if (value.isEmpty()) return
-                if (value in plainCores) return
+                if (requireStyleWrap && value in plainCores) return
                 if (!seenValues.add(value)) return
                 out.add(GeneratedName(id = id, styleLabel = label, value = value))
             }
 
-            for (letter in letterStyles) {
+            for (letter in letters) {
                 val segments = letterSegments(clean, letter.map)
                 if (segments.isEmpty()) continue
                 val core = segments.joinToString("")
@@ -363,7 +428,7 @@ object StylishNameCatalog {
     val totalStyleCount: Int
         get() {
             val sym = symbolList.size.coerceAtLeast(accents.size)
-            val classic = frames.size
+            val classic = (if (cachedFrames.isNotEmpty()) cachedFrames else frames).size
             val midCap = sym.coerceAtMost(MID_FRAME_SYMBOL_CAP)
             return letterStyles.size * (classic + sym * 5 + classic * midCap)
         }

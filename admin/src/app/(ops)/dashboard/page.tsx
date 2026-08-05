@@ -1,202 +1,218 @@
-import Link from "next/link";
+"use client";
 
-type Card = {
-  title: string;
-  value: string;
-  badge: string;
-  badgeTone: "live" | "pending" | "role";
-  icon: "shield" | "stack" | "user";
-};
+import { useCallback, useEffect, useState } from "react";
+import { OverviewActivityChart } from "@/components/overview-desk/OverviewActivityChart";
+import { OverviewCapabilities } from "@/components/overview-desk/OverviewCapabilities";
+import { OverviewEngagementCard } from "@/components/overview-desk/OverviewEngagementCard";
+import { OverviewFunnelCard } from "@/components/overview-desk/OverviewFunnelCard";
+import { OverviewFunnelChart } from "@/components/overview-desk/OverviewFunnelChart";
+import { OverviewHeader } from "@/components/overview-desk/OverviewHeader";
+import { OverviewKpis } from "@/components/overview-desk/OverviewKpis";
+import { OverviewPanels } from "@/components/overview-desk/OverviewPanels";
+import { OverviewQualityCard } from "@/components/overview-desk/OverviewQualityCard";
+import { OverviewQuickLinks } from "@/components/overview-desk/OverviewQuickLinks";
+import { OverviewRangeTabs } from "@/components/overview-desk/OverviewRangeTabs";
+import { OverviewScreensChart } from "@/components/overview-desk/OverviewScreensChart";
+import { OverviewTrendCard } from "@/components/overview-desk/OverviewTrendCard";
+import {
+  fetchOverviewSeries,
+  fetchOverviewSnapshot,
+} from "@/components/overview-desk/overview-api";
+import {
+  OVERVIEW_RANGE_TABS,
+  emptyOverviewSeries,
+  emptyOverviewSnapshot,
+  formatRefreshedLabel,
+  type OverviewSeries,
+  type OverviewSeriesRange,
+  type OverviewSnapshot,
+} from "@/components/overview-desk/overview-data";
+import { ApiClientError } from "@/lib/api";
 
-const CARDS: Card[] = [
-  {
-    title: "Authentication API",
-    value: "Active",
-    badge: "Live",
-    badgeTone: "live",
-    icon: "shield",
-  },
-  {
-    title: "Redeem Inventory",
-    value: "Disabled",
-    badge: "Pending API",
-    badgeTone: "pending",
-    icon: "stack",
-  },
-  {
-    title: "Active Admin Role",
-    value: "Super Admin",
-    badge: "Role",
-    badgeTone: "role",
-    icon: "user",
-  },
-];
+function canAccessOverview(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as { role?: string };
+    return typeof admin.role === "string" && admin.role.length > 0;
+  } catch {
+    return false;
+  }
+}
 
-const ROWS = [
-  {
-    name: "Auth Services",
-    status: "Live",
-    tone: "live" as const,
-    action: { href: "/staff", label: "Open Staff" },
-  },
-  {
-    name: "Redeem / Shop / Claims",
-    status: "Connection Pending",
-    tone: "pending" as const,
-    action: { href: "/redeem", label: "Connect API" },
-  },
-  {
-    name: "Challenge / Community / Support",
-    status: "Connection Pending",
-    tone: "pending" as const,
-    action: { href: "/daily-challenge", label: "Connect API" },
-  },
-  {
-    name: "App toggles / Ads / Push",
-    status: "Connection Pending",
-    tone: "pending" as const,
-    action: { href: "/app", label: "Connect API" },
-  },
-];
-
+// --- Start: Overview KPIs live wire (Sachin) ---
 export default function OverviewPage() {
+  const [allowed, setAllowed] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [seriesBusy, setSeriesBusy] = useState(false);
+  const [snap, setSnap] = useState<OverviewSnapshot>(emptyOverviewSnapshot);
+  const [series, setSeries] = useState<OverviewSeries>(emptyOverviewSeries);
+  const [range, setRange] = useState<OverviewSeriesRange>("7d");
+  const [error, setError] = useState<string | null>(null);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAllowed(canAccessOverview());
+  }, []);
+
+  const loadSeries = useCallback(async (nextRange: OverviewSeriesRange) => {
+    setSeriesBusy(true);
+    setSeriesError(null);
+    try {
+      const next = await fetchOverviewSeries(nextRange);
+      setSeries(next);
+    } catch (e) {
+      const msg =
+        e instanceof ApiClientError
+          ? e.message
+          : "Could not load Overview charts.";
+      setSeriesError(msg);
+    } finally {
+      setSeriesBusy(false);
+    }
+  }, []);
+
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setLoading(true);
+      setBusy(true);
+      setError(null);
+      try {
+        const next = await fetchOverviewSnapshot();
+        setSnap(next);
+        if (quiet) {
+          setNotice(`Refreshed · ${formatRefreshedLabel(next.refreshedAt)}`);
+        }
+      } catch (e) {
+        const msg =
+          e instanceof ApiClientError
+            ? e.message
+            : "Could not load Overview KPIs.";
+        setError(msg);
+      } finally {
+        setLoading(false);
+        setBusy(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void load(false);
+  }, [allowed, load]);
+
+  useEffect(() => {
+    if (!allowed) return;
+    void loadSeries(range);
+  }, [allowed, range, loadSeries]);
+
+  if (!allowed) {
+    return (
+      <section className="mx-auto max-w-6xl">
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
+        >
+          You do not have an active staff session. Sign in again to open
+          Overview.
+        </div>
+      </section>
+    );
+  }
+
+  const rangeLabel =
+    OVERVIEW_RANGE_TABS.find((t) => t.id === range)?.label ?? "7 days";
+
   return (
-    <section className="mx-auto max-w-6xl">
-      <header className="mb-6">
-        <h1 className="text-[28px] font-bold tracking-[-0.03em] text-[#0f172a]">
-          Operations Console
-        </h1>
-        <p className="mt-2 max-w-3xl text-[14px] leading-relaxed text-[#64748b]">
-          Full remote control for the Android app: inventory, shop, community,
-          challenge, support, ads, and feature switches. Connect each API to go
-          live.
-        </p>
-      </header>
+    <section className="mx-auto flex max-w-6xl flex-col gap-5">
+      <OverviewHeader
+        refreshedLabel={formatRefreshedLabel(snap.refreshedAt)}
+        busy={busy}
+        onRefresh={() => {
+          void load(true);
+          void loadSeries(range);
+        }}
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {CARDS.map((card) => (
-          <article
-            key={card.title}
-            className="rounded-2xl border border-[#e8eaee] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <CardIcon kind={card.icon} tone={card.badgeTone} />
-              <Badge tone={card.badgeTone}>{card.badge}</Badge>
+      {notice ? (
+        <div
+          role="status"
+          className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-[13px] font-medium text-sky-950"
+        >
+          {notice}
+        </div>
+      ) : null}
+
+      {error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
+        >
+          {error}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <p className="text-[13px] text-slate-500">Loading live KPIs…</p>
+      ) : (
+        <>
+          <OverviewKpis snap={snap} />
+
+          <OverviewRangeTabs
+            active={range}
+            disabled={seriesBusy}
+            onChange={setRange}
+          />
+
+          {seriesError ? (
+            <div
+              role="alert"
+              className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
+            >
+              {seriesError}
             </div>
-            <p className="mt-4 text-[12px] font-medium tracking-[0.04em] text-[#94a3b8] uppercase">
-              {card.title}
-            </p>
-            <p className="mt-1 text-[20px] font-semibold tracking-[-0.02em] text-[#0f172a]">
-              {card.value}
-            </p>
-          </article>
-        ))}
-      </div>
+          ) : null}
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-[#e8eaee] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <div className="border-b border-[#eef2f7] px-5 py-4">
-          <h2 className="text-[14px] font-semibold text-[#0f172a]">
-            API Module Status Overview
-          </h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left">
-            <thead>
-              <tr className="border-b border-[#eef2f7] text-[11px] font-semibold tracking-[0.08em] text-[#94a3b8] uppercase">
-                <th className="px-5 py-3 font-semibold">Module Name</th>
-                <th className="px-5 py-3 font-semibold">Integration Status</th>
-                <th className="px-5 py-3 font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ROWS.map((row) => (
-                <tr key={row.name} className="border-b border-[#f1f5f9] last:border-0">
-                  <td className="px-5 py-4 text-[13px] font-medium text-[#0f172a]">
-                    {row.name}
-                  </td>
-                  <td className="px-5 py-4">
-                    <Badge tone={row.tone}>{row.status}</Badge>
-                  </td>
-                  <td className="px-5 py-4">
-                    <Link
-                      href={row.action.href}
-                      prefetch={false}
-                      className="text-[13px] font-semibold text-[#2563eb] hover:underline"
-                    >
-                      {row.action.label}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <OverviewTrendCard points={series.points} rangeLabel={rangeLabel} />
+            <OverviewFunnelChart
+              funnel={series.funnel}
+              rangeLabel={rangeLabel}
+            />
+          </div>
+
+          <OverviewActivityChart
+            points={series.points}
+            rangeLabel={rangeLabel}
+          />
+
+          <OverviewScreensChart
+            screens={series.topScreens}
+            rangeLabel={rangeLabel}
+          />
+
+          <OverviewEngagementCard engagement={snap.engagement} />
+          <OverviewFunnelCard funnel={snap.funnel} />
+          <OverviewQualityCard p3={snap.p3} />
+          <OverviewPanels
+            users={snap.users}
+            devices={snap.devices}
+            today={snap.today}
+            staleHours={snap.meta.staleHours}
+          />
+          <OverviewQuickLinks />
+          <OverviewCapabilities />
+        </>
+      )}
     </section>
   );
 }
-
-function Badge({
-  tone,
-  children,
-}: {
-  tone: "live" | "pending" | "role";
-  children: string;
-}) {
-  const styles = {
-    live: "bg-[#ecfdf5] text-[#15803d]",
-    pending: "bg-[#fffbeb] text-[#b45309]",
-    role: "bg-[#eff6ff] text-[#1d4ed8]",
-  }[tone];
-  const dot = {
-    live: "bg-[#22c55e]",
-    pending: "bg-[#f59e0b]",
-    role: "bg-[#3b82f6]",
-  }[tone];
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-      {children}
-    </span>
-  );
-}
-
-function CardIcon({
-  kind,
-  tone,
-}: {
-  kind: "shield" | "stack" | "user";
-  tone: "live" | "pending" | "role";
-}) {
-  const bg = {
-    live: "bg-[#dbeafe] text-[#2563eb]",
-    pending: "bg-[#f1f5f9] text-[#64748b]",
-    role: "bg-[#ede9fe] text-[#7c3aed]",
-  }[tone];
-
-  return (
-    <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${bg}`}>
-      {kind === "shield" ? (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M12 3 5 6v5c0 4.5 2.8 7.8 7 9 4.2-1.2 7-4.5 7-9V6l-7-3Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-          <path d="m9 12 2 2 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ) : null}
-      {kind === "stack" ? (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="m4 8 8-4 8 4-8 4-8-4Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-          <path d="m4 12 8 4 8-4M4 16l8 4 8-4" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-        </svg>
-      ) : null}
-      {kind === "user" ? (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.7" />
-          <path d="M5.5 19c1.2-3 3.6-4.5 6.5-4.5s5.3 1.5 6.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-        </svg>
-      ) : null}
-    </div>
-  );
-}
+// --- End: Overview KPIs live wire (Sachin) ---

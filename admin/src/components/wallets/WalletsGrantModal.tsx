@@ -8,6 +8,7 @@ export type WalletAdjustPayload = {
   mode: "grant" | "revoke";
   amount: number;
   reason: string;
+  currentPassword?: string;
 };
 
 type Props = {
@@ -33,6 +34,7 @@ export function WalletsGrantModal({
   const [mode, setMode] = useState<"grant" | "revoke">("grant");
   const [amount, setAmount] = useState("100");
   const [reason, setReason] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,6 +44,7 @@ export function WalletsGrantModal({
     setMode("grant");
     setAmount("100");
     setReason("");
+    setCurrentPassword("");
     setError(null);
   }, [open, presetWalletId, wallets]);
 
@@ -78,6 +81,7 @@ export function WalletsGrantModal({
       mode,
       amount: n,
       reason: reason.trim(),
+      currentPassword: currentPassword.trim() || undefined,
     });
   }
 
@@ -179,6 +183,18 @@ export function WalletsGrantModal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Support ticket #… / goodwill / duplicate payout…"
+            />
+          </label>
+
+          <label className={labelClass}>
+            Confirm your password
+            <input
+              type="password"
+              autoComplete="current-password"
+              className={fieldClass}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Required if Settings step-up is on"
             />
           </label>
 

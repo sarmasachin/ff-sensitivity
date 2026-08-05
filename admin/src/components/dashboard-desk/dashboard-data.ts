@@ -102,6 +102,9 @@ const CLAIMS_MIX: DashDonutSlice[] = [
   { id: "fail", label: "Failed", value: 17, color: "#64748b" },
 ];
 
+/** Max rows shown in Pending support / Recent ops activity cards. */
+export const DASH_LIST_LIMIT = 10;
+
 const SUPPORT: DashSupportRow[] = [
   {
     id: "t-1042",
@@ -132,6 +135,36 @@ const SUPPORT: DashSupportRow[] = [
     subject: "Challenge leaderboard delay",
     priority: "P3",
     age: "5h",
+  },
+  {
+    id: "t-1026",
+    subject: "Name frame upload rejected",
+    priority: "P2",
+    age: "6h",
+  },
+  {
+    id: "t-1022",
+    subject: "Scratch card not opening",
+    priority: "P1",
+    age: "7h",
+  },
+  {
+    id: "t-1018",
+    subject: "Promo code expired early",
+    priority: "P3",
+    age: "9h",
+  },
+  {
+    id: "t-1014",
+    subject: "Device ban appeal",
+    priority: "P2",
+    age: "11h",
+  },
+  {
+    id: "t-1011",
+    subject: "Daily challenge reward missing",
+    priority: "P3",
+    age: "14h",
   },
 ];
 
@@ -180,6 +213,41 @@ const ACTIVITY: DashActivity[] = [
     actor: "admin",
     action: "Blocked device fingerprint",
     module: "Devices",
+  },
+  {
+    id: "a6",
+    time: "12:18",
+    actor: "ops.riya",
+    action: "Published shop SKU pack",
+    module: "Shop",
+  },
+  {
+    id: "a7",
+    time: "11:55",
+    actor: "admin",
+    action: "Updated claim policy",
+    module: "Claims",
+  },
+  {
+    id: "a8",
+    time: "11:30",
+    actor: "ops.kabir",
+    action: "Rotated name fonts",
+    module: "Names",
+  },
+  {
+    id: "a9",
+    time: "10:58",
+    actor: "admin",
+    action: "Purged expired scratch cards",
+    module: "Scratch",
+  },
+  {
+    id: "a10",
+    time: "10:22",
+    actor: "ops.riya",
+    action: "Scheduled daily challenge",
+    module: "Challenge",
   },
 ];
 
@@ -284,9 +352,9 @@ export function buildDashSnapshot(range: DashRangeId): DashSnapshot {
     trend: trendFor(range),
     inventory: INVENTORY.map((r) => ({ ...r })),
     claimsMix: CLAIMS_MIX.map((s) => ({ ...s })),
-    support: SUPPORT.map((t) => ({ ...t })),
+    support: SUPPORT.map((t) => ({ ...t })).slice(0, DASH_LIST_LIMIT),
     wallet: walletFor(range),
-    activity: ACTIVITY.map((a) => ({ ...a })),
+    activity: ACTIVITY.map((a) => ({ ...a })).slice(0, DASH_LIST_LIMIT),
     refreshedAt: `${hh}:${mm}`,
   };
 }

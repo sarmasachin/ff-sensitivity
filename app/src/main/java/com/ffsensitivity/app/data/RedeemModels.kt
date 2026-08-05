@@ -16,7 +16,10 @@ data class RedeemCodeItem(
     val redeemUrl: String,
     val stockLeft: Int? = null,
     val coinCost: Int? = null,
-    val cadence: RedeemCadence = RedeemCadence.DAILY
+    val cadence: RedeemCadence = RedeemCadence.DAILY,
+    // --- Start: Redeem live wire (Sachin) ---
+    val serverUnlocked: Boolean = false
+    // --- End: Redeem live wire (Sachin) ---
 )
 
 val sampleRedeemCodes = listOf(

@@ -28,8 +28,8 @@ export function ClaimsEmptyState({ kind, onClearFilter }: Props) {
     <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
       <p className="text-[15px] font-semibold text-slate-900">No copy claims yet</p>
       <p className="mx-auto mt-1 max-w-sm text-[13px] text-slate-500">
-        Entries appear only when a user unlocks a redeem code and taps Copy.
-        Unlock without Copy never lands here.
+        Entries appear when Android scratch unlock calls the Nest claim API.
+        Stock is consumed at unlock — Copy only copies the clipboard.
       </p>
     </div>
   );

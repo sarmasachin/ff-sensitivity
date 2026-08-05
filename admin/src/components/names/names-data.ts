@@ -109,6 +109,9 @@ export function formToFrame(
   if (!/^[a-z0-9_]+$/.test(id)) {
     return { error: "ID must be lowercase letters, numbers, underscores." };
   }
+  if (prefix.length > 32 || suffix.length > 32) {
+    return { error: "Prefix and suffix max 32 characters each." };
+  }
   return {
     id,
     label,
@@ -158,6 +161,6 @@ export const NAMES_CAPABILITIES = [
   },
   {
     title: "Remote packs",
-    body: "Optional URL for future symbol/frame pack sync to the app (local toggle for now).",
+    body: "Optional https URL is admin-only. Android only pulls Nest GET /api/v1/names/catalog — never arbitrary URLs.",
   },
 ] as const;

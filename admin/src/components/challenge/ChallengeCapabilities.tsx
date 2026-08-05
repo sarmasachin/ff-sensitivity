@@ -13,10 +13,10 @@ export function ChallengeCapabilities() {
   return (
     <section className="rounded-2xl border border-[#e8eaee] bg-white p-5">
       <h2 className="text-[14px] font-semibold text-[#0f172a]">
-        What this module will include
+        What this module covers
       </h2>
       <p className="mt-1 text-[12px] text-[#94a3b8]">
-        UI shell now — NestJS challenge config wire-up next.
+        Live Nest challenge config — rules, quiz bank, and streak milestones.
       </p>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {CHALLENGE_CAPABILITIES.map((item, i) => (

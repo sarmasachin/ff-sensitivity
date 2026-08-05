@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StaffCapabilities } from "@/components/staff/StaffCapabilities";
 import { StaffDetailDrawer } from "@/components/staff/StaffDetailDrawer";
 import { StaffEmptyState } from "@/components/staff/StaffEmptyState";
@@ -17,28 +17,77 @@ import {
   type StaffFilterKey,
 } from "@/components/staff/StaffToolbar";
 import {
-  STAFF_DEMO_ROWS,
+  disableStaffApi,
+  enableStaffApi,
+  fetchStaff,
+  inviteStaffApi,
+  resendInviteApi,
+  setStaffModulesApi,
+} from "@/components/staff/staff-api";
+import {
   computeStaffStats,
   type StaffListRow,
   type StaffModuleId,
 } from "@/components/staff/staff-data";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 12;
 
-function todayLabel(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function canAccessStaff(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as {
+      role?: string;
+      allowedModules?: string[];
+    };
+    if (admin.role === "SUPER_ADMIN") return true;
+    return Array.isArray(admin.allowedModules)
+      ? admin.allowedModules.includes("staff")
+      : false;
+  } catch {
+    return false;
+  }
 }
 
+// --- Start: Staff admin live wire (Sachin) ---
 export default function StaffPage() {
-  const [rows, setRows] = useState<StaffListRow[]>(() => [...STAFF_DEMO_ROWS]);
+  const [allowed, setAllowed] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [rows, setRows] = useState<StaffListRow[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StaffFilterKey>("all");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+
+  useEffect(() => {
+    setAllowed(canAccessStaff());
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setRows(await fetchStaff());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load staff.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [allowed, load]);
 
   useEffect(() => {
     setPage(1);
@@ -85,142 +134,188 @@ export default function StaffPage() {
     ? (rows.find((r) => r.id === inspectId) ?? null)
     : null;
 
-  function disableAccount(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row || row.role === "SUPER_ADMIN") return;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              status: "DISABLED",
-              note: `${r.note} · Disabled by staff.`,
-            }
-          : r,
-      ),
-    );
-    setNotice(`Disabled ${row.email}.`);
+  function upsertRow(next: StaffListRow) {
+    setRows((prev) => {
+      const i = prev.findIndex((r) => r.id === next.id);
+      if (i < 0) return [next, ...prev];
+      const copy = [...prev];
+      copy[i] = next;
+      return copy;
+    });
   }
 
-  function enableAccount(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              status: "ACTIVE",
-              note: "Re-enabled by staff. Sessions allowed again.",
-            }
-          : r,
-      ),
-    );
-    setNotice(`Enabled ${row.email}.`);
+  async function disableAccount(id: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const row = await disableStaffApi(id);
+      upsertRow(row);
+      setNotice(`Disabled ${row.email}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Disable failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function resendInvite(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row || row.status !== "INVITED") return;
-    setNotice(`Invite resent to ${row.email} (local demo).`);
+  async function enableAccount(id: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const row = await enableStaffApi(id);
+      upsertRow(row);
+      setNotice(`Enabled ${row.email}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Enable failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function toggleModule(id: string, moduleId: StaffModuleId) {
-    const row = rows.find((r) => r.id === id);
-    if (!row || row.role === "SUPER_ADMIN") return;
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== id) return r;
-        const has = r.modules.includes(moduleId);
-        const modules = has
-          ? r.modules.filter((m) => m !== moduleId)
-          : [...r.modules, moduleId];
-        return { ...r, modules };
-      }),
-    );
+  async function resendInvite(id: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { staff, temporaryPassword } = await resendInviteApi(id);
+      upsertRow(staff);
+      setNotice(
+        `Invite resent to ${staff.email}. Temp password: ${temporaryPassword}`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Resend failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function inviteStaff(payload: StaffInvitePayload) {
-    const exists = rows.some(
-      (r) => r.email.toLowerCase() === payload.email.toLowerCase(),
-    );
-    if (exists) {
-      setNotice(`Invite blocked — ${payload.email} already exists.`);
+  async function toggleModule(id: string, moduleId: StaffModuleId) {
+    const row = rows.find((r) => r.id === id);
+    if (!row || row.role === "SUPER_ADMIN" || busy) return;
+    const has = row.modules.includes(moduleId);
+    const modules = has
+      ? row.modules.filter((m) => m !== moduleId)
+      : [...row.modules, moduleId];
+    if (modules.length === 0) {
+      setError("Assign at least one module.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await setStaffModulesApi(id, modules);
+      upsertRow(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Module update failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function inviteStaff(payload: StaffInvitePayload) {
+    if (busy) return;
+    if (payload.role === "SUPER_ADMIN") {
+      setError("Cannot invite Super Admin from this desk.");
       setInviteOpen(false);
       return;
     }
-    const id = `s_${Date.now()}`;
-    setRows((prev) => [
-      {
-        id,
+    setBusy(true);
+    setError(null);
+    try {
+      const { staff, temporaryPassword } = await inviteStaffApi({
         name: payload.name,
         email: payload.email,
         role: payload.role,
-        status: "INVITED",
         modules: payload.modules,
-        lastLoginLabel: "Never",
-        invitedAtLabel: todayLabel(),
-        note: "Invite sent (local demo).",
-      },
-      ...prev,
-    ]);
-    setInviteOpen(false);
-    setNotice(`Invite sent to ${payload.email} as ${payload.role}.`);
-    setFilter("invited");
+        currentPassword: payload.currentPassword,
+      });
+      upsertRow(staff);
+      setInviteOpen(false);
+      setNotice(
+        `Invite created for ${staff.email} as ${staff.role}. Temp password: ${temporaryPassword}`,
+      );
+      setFilter("invited");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invite failed.");
+      setInviteOpen(false);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const queueEmpty = rows.length === 0;
+  if (!allowed) {
+    return (
+      <section className="mx-auto max-w-6xl rounded-2xl border border-amber-200 bg-amber-50 px-5 py-8 text-sm text-amber-950">
+        You do not have access to the Staff module.
+      </section>
+    );
+  }
+
+  const queueEmpty = !loading && rows.length === 0;
   const filterEmpty = !queueEmpty && filtered.length === 0;
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <StaffHeader
         onInvite={() => setInviteOpen(true)}
-        onRefresh={() =>
-          setNotice("Refresh will sync from Nest staff auth next.")
-        }
+        onRefresh={() => {
+          void load().then(() => setNotice("Staff refreshed from Nest."));
+        }}
       />
-      <StaffStats
-        total={stats.total}
-        active={stats.active}
-        invited={stats.invited}
-        disabled={stats.disabled}
-        admins={stats.admins}
-      />
-      <StaffToolbar
-        query={query}
-        filter={filter}
-        onQuery={setQuery}
-        onFilter={setFilter}
-      />
-
-      {queueEmpty ? (
-        <StaffEmptyState kind="queue" />
-      ) : filterEmpty ? (
-        <StaffEmptyState
-          kind="filter"
-          onClearFilter={() => {
-            setFilter("all");
-            setQuery("");
-          }}
-        />
+      {error ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {error}
+        </p>
+      ) : null}
+      {loading ? (
+        <p className="text-sm text-slate-500">Loading staff…</p>
       ) : (
-        <StaffTable
-          rows={paged}
-          notice={notice}
-          onInspect={setInspectId}
-          onDisable={disableAccount}
-          onEnable={enableAccount}
-          onResend={resendInvite}
-          footer={
-            <StaffPagination
-              page={safePage}
-              pageSize={PAGE_SIZE}
-              total={filtered.length}
-              onPage={setPage}
+        <>
+          <StaffStats
+            total={stats.total}
+            active={stats.active}
+            invited={stats.invited}
+            disabled={stats.disabled}
+            admins={stats.admins}
+          />
+          <StaffToolbar
+            query={query}
+            filter={filter}
+            onQuery={setQuery}
+            onFilter={setFilter}
+          />
+
+          {queueEmpty ? (
+            <StaffEmptyState kind="queue" />
+          ) : filterEmpty ? (
+            <StaffEmptyState
+              kind="filter"
+              onClearFilter={() => {
+                setFilter("all");
+                setQuery("");
+              }}
             />
-          }
-        />
+          ) : (
+            <StaffTable
+              rows={paged}
+              notice={notice}
+              onInspect={setInspectId}
+              onDisable={(id) => void disableAccount(id)}
+              onEnable={(id) => void enableAccount(id)}
+              onResend={(id) => void resendInvite(id)}
+              footer={
+                <StaffPagination
+                  page={safePage}
+                  pageSize={PAGE_SIZE}
+                  total={filtered.length}
+                  onPage={setPage}
+                />
+              }
+            />
+          )}
+        </>
       )}
 
       <StaffCapabilities />
@@ -229,17 +324,18 @@ export default function StaffPage() {
         open={!!inspectRow}
         row={inspectRow}
         onClose={() => setInspectId(null)}
-        onDisable={disableAccount}
-        onEnable={enableAccount}
-        onResend={resendInvite}
-        onToggleModule={toggleModule}
+        onDisable={(id) => void disableAccount(id)}
+        onEnable={(id) => void enableAccount(id)}
+        onResend={(id) => void resendInvite(id)}
+        onToggleModule={(id, m) => void toggleModule(id, m)}
       />
 
       <StaffInviteModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
-        onSubmit={inviteStaff}
+        onSubmit={(p) => void inviteStaff(p)}
       />
     </section>
   );
 }
+// --- End: Staff admin live wire (Sachin) ---

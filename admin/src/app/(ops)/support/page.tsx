@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SupportCapabilities } from "@/components/support/SupportCapabilities";
 import { SupportEmptyState } from "@/components/support/SupportEmptyState";
 import { SupportHeader } from "@/components/support/SupportHeader";
@@ -13,34 +13,89 @@ import {
   type SupportFilterKey,
 } from "@/components/support/SupportToolbar";
 import {
-  SUPPORT_DEMO_ROWS,
+  closeSupportThread,
+  fetchSupportStats,
+  fetchSupportThreads,
+  markSupportRead,
+  replySupportThread,
+  type SupportStatsPayload,
+} from "@/components/support/support-api";
+import {
   computeSupportStats,
   type SupportThreadRow,
 } from "@/components/support/support-data";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 12;
 
-function nowStamp(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function canAccessSupport(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as {
+      role?: string;
+      allowedModules?: string[];
+    };
+    if (admin.role === "SUPER_ADMIN") return true;
+    return Array.isArray(admin.allowedModules)
+      ? admin.allowedModules.includes("support")
+      : false;
+  } catch {
+    return false;
+  }
 }
 
 export default function SupportPage() {
-  const [rows, setRows] = useState<SupportThreadRow[]>(() => [
-    ...SUPPORT_DEMO_ROWS,
-  ]);
+  const [allowed, setAllowed] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [rows, setRows] = useState<SupportThreadRow[]>([]);
+  const [serverStats, setServerStats] = useState<SupportStatsPayload | null>(
+    null,
+  );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<SupportFilterKey>("all");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [inspectId, setInspectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAllowed(canAccessSupport());
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [threads, stats] = await Promise.all([
+        fetchSupportThreads(),
+        fetchSupportStats(),
+      ]);
+      setRows(threads);
+      setServerStats(stats);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load support inbox.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [allowed, load]);
 
   useEffect(() => {
     setPage(1);
   }, [filter, query]);
 
-  const stats = useMemo(() => computeSupportStats(rows), [rows]);
+  const localStats = useMemo(() => computeSupportStats(rows), [rows]);
+  const stats = serverStats ?? localStats;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -87,62 +142,81 @@ export default function SupportPage() {
     ? (rows.find((r) => r.id === inspectId) ?? null)
     : null;
 
-  const queueEmpty = rows.length === 0;
+  function upsertRow(next: SupportThreadRow) {
+    setRows((prev) => {
+      const idx = prev.findIndex((r) => r.id === next.id);
+      if (idx < 0) return [next, ...prev];
+      const copy = [...prev];
+      copy[idx] = next;
+      return copy;
+    });
+  }
+
+  async function closeThread(id: string) {
+    const row = rows.find((r) => r.id === id);
+    if (!row || busy) return;
+    if (!window.confirm(`Close thread with ${row.name}?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await closeSupportThread(id);
+      upsertRow(next);
+      setServerStats(await fetchSupportStats());
+      setNotice(`Closed thread with ${row.name}.`);
+      if (inspectId === id) setInspectId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Close failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function markRead(id: string) {
+    try {
+      const next = await markSupportRead(id);
+      upsertRow(next);
+      setServerStats(await fetchSupportStats());
+    } catch {
+      // Non-blocking — drawer still usable.
+    }
+  }
+
+  async function reply(id: string, text: string) {
+    const row = rows.find((r) => r.id === id);
+    if (!row || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await replySupportThread(id, text);
+      upsertRow(next);
+      setServerStats(await fetchSupportStats());
+      setNotice(`Replied to ${row.name}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reply failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!allowed) {
+    return (
+      <section className="mx-auto max-w-3xl rounded-2xl border border-rose-200 bg-rose-50 px-5 py-8 text-center">
+        <h1 className="text-[17px] font-bold text-rose-950">No Support access</h1>
+        <p className="mt-2 text-[13px] text-rose-800">
+          Your staff role is missing the <code>support</code> module.
+        </p>
+      </section>
+    );
+  }
+
+  const queueEmpty = !loading && rows.length === 0;
   const filterEmpty = !queueEmpty && filtered.length === 0;
-
-  function closeThread(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, status: "CLOSED", unread: false, updatedAt: nowStamp() }
-          : r,
-      ),
-    );
-    setNotice(`Closed thread with ${row.name}.`);
-    if (inspectId === id) setInspectId(null);
-  }
-
-  function markRead(id: string) {
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, unread: false } : r)),
-    );
-  }
-
-  function reply(id: string, text: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    const stamp = nowStamp();
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              status: "REPLIED",
-              unread: false,
-              updatedAt: stamp,
-              messages: [
-                ...r.messages,
-                {
-                  id: `m_${Date.now().toString(36)}`,
-                  sender: "ADMIN",
-                  text,
-                  createdAt: stamp,
-                },
-              ],
-            }
-          : r,
-      ),
-    );
-    setNotice(`Replied to ${row.name}.`);
-  }
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <SupportHeader
         onRefresh={() =>
-          setNotice("Inbox refreshed (local demo). API sync comes next.")
+          void load().then(() => setNotice("Inbox refreshed from Nest."))
         }
       />
       <SupportStats
@@ -153,6 +227,19 @@ export default function SupportPage() {
         closed={stats.closed}
       />
 
+      {loading ? (
+        <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-[13px] text-slate-400">
+          Loading support inbox…
+        </p>
+      ) : null}
+      {error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
+        >
+          {error}
+        </div>
+      ) : null}
       {notice ? (
         <div
           role="status"
@@ -162,48 +249,52 @@ export default function SupportPage() {
         </div>
       ) : null}
 
-      <SupportToolbar
-        query={query}
-        filter={filter}
-        onQuery={setQuery}
-        onFilter={setFilter}
-      />
-
-      {queueEmpty ? (
-        <SupportEmptyState
-          title="Inbox empty"
-          body="New Contact Us threads from Android will appear here."
-        />
-      ) : filterEmpty ? (
-        <SupportEmptyState
-          title="No matches"
-          body="Try another search or filter."
-        />
-      ) : (
+      {!loading ? (
         <>
-          <SupportTable
-            rows={paged}
-            onOpen={setInspectId}
-            onCloseThread={closeThread}
+          <SupportToolbar
+            query={query}
+            filter={filter}
+            onQuery={setQuery}
+            onFilter={setFilter}
           />
-          <SupportPagination
-            page={page}
-            totalPages={totalPages}
-            totalItems={filtered.length}
-            pageSize={PAGE_SIZE}
-            onPage={setPage}
-          />
-        </>
-      )}
 
-      <SupportCapabilities />
+          {queueEmpty ? (
+            <SupportEmptyState
+              title="Inbox empty"
+              body="New Contact Us threads from Android will appear here."
+            />
+          ) : filterEmpty ? (
+            <SupportEmptyState
+              title="No matches"
+              body="Try another search or filter."
+            />
+          ) : (
+            <>
+              <SupportTable
+                rows={paged}
+                onOpen={setInspectId}
+                onCloseThread={(id) => void closeThread(id)}
+              />
+              <SupportPagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={filtered.length}
+                pageSize={PAGE_SIZE}
+                onPage={setPage}
+              />
+            </>
+          )}
+
+          <SupportCapabilities />
+        </>
+      ) : null}
 
       <SupportThreadDrawer
         open={Boolean(inspectId)}
         row={inspectRow}
         onClose={() => setInspectId(null)}
-        onReply={reply}
-        onMarkRead={markRead}
+        onReply={(id, text) => void reply(id, text)}
+        onMarkRead={(id) => void markRead(id)}
       />
     </section>
   );

@@ -1,13 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { OpsNotifications } from "./OpsNotifications";
 
 type Props = {
   onOpenMenu: () => void;
   onSignOut: () => void;
+  email?: string | null;
 };
 
-export function OpsTopbar({ onOpenMenu, onSignOut }: Props) {
+export function OpsTopbar({ onOpenMenu, onSignOut, email }: Props) {
+  const initial = (email ?? "S").trim().charAt(0).toUpperCase();
+
   return (
     <header className="z-30 flex h-16 shrink-0 items-center gap-3 border-b border-[#e8eaee] bg-[#f8fafc] px-4 sm:px-6">
       <button
@@ -47,6 +51,16 @@ export function OpsTopbar({ onOpenMenu, onSignOut }: Props) {
 
       <div className="flex items-center gap-2 sm:gap-3">
         <OpsNotifications />
+
+        <Link
+          href="/profile"
+          prefetch={false}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#e2e8f0] bg-white text-[13px] font-semibold text-[#0f172a] hover:bg-[#f8fafc]"
+          aria-label="Open profile"
+          title="Profile"
+        >
+          {initial}
+        </Link>
 
         <button
           type="button"

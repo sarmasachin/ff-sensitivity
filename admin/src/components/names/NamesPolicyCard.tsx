@@ -54,8 +54,9 @@ export function NamesPolicyCard({ policy, onChange, onSave }: Props) {
         FF name policy & remote packs
       </h2>
       <p className="mt-0.5 max-w-2xl text-[12px] text-slate-500">
-        Matches Android Stylish Names defaults (12-char FF limit, 100-style
-        batches). Remote pack URL is prepared for Nest sync later.
+        Matches Android Stylish Names (12-char FF limit, batch size). Remote
+        pack URL is stored for ops only — the app never fetches it; Nest
+        catalog is the source of truth.
       </p>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -64,14 +65,14 @@ export function NamesPolicyCard({ policy, onChange, onSave }: Props) {
           <input
             type="number"
             min={1}
-            max={24}
+            max={12}
             className={fieldClass}
             value={policy.maxNameChars}
             onChange={(e) =>
               patch({
                 maxNameChars: Math.max(
                   1,
-                  Math.min(24, Number(e.target.value) || 12),
+                  Math.min(12, Number(e.target.value) || 12),
                 ),
               })
             }
@@ -82,14 +83,14 @@ export function NamesPolicyCard({ policy, onChange, onSave }: Props) {
           <input
             type="number"
             min={10}
-            max={500}
+            max={200}
             className={fieldClass}
             value={policy.maxBatchSize}
             onChange={(e) =>
               patch({
                 maxBatchSize: Math.max(
                   10,
-                  Math.min(500, Number(e.target.value) || 100),
+                  Math.min(200, Number(e.target.value) || 100),
                 ),
               })
             }

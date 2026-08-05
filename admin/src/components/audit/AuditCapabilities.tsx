@@ -13,10 +13,10 @@ export function AuditCapabilities() {
   return (
     <section className="rounded-2xl border border-[#e8eaee] bg-white p-5">
       <h2 className="text-[14px] font-semibold text-[#0f172a]">
-        What this module will include
+        What this module includes
       </h2>
       <p className="mt-1 text-[12px] text-[#94a3b8]">
-        UI shell now — Nest immutable audit log wire-up next.
+        Live immutable trail from Nest AuditLog — read-only in this console.
       </p>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {AUDIT_CAPABILITIES.map((item, i) => (

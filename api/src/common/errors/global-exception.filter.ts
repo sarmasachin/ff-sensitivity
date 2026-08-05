@@ -44,6 +44,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           code = 'VALIDATION_ERROR';
         }
       }
+      if (status === HttpStatus.TOO_MANY_REQUESTS) {
+        code = 'RATE_LIMITED';
+        message = 'Too many requests. Please wait a moment.';
+      }
     }
 
     const payload: ApiErrorBody = {

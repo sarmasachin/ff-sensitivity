@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.Share
@@ -32,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ffsensitivity.app.data.remote.AppConfigRepository
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
 import com.ffsensitivity.app.presentation.theme.AmberSoft
@@ -67,7 +70,8 @@ enum class AppDrawerAction {
     WEBSITE,
     PRIVACY,
     CONTACT_US,
-    ABOUT
+    ABOUT,
+    SIGN_OUT
 }
 
 @Composable
@@ -75,7 +79,8 @@ fun AppDrawerContent(
     appVersion: String,
     selectedRoute: String,
     onAction: (AppDrawerAction) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    configTick: Int = 0
 ) {
     // Material default max width is 360.dp (~87% phone) + near-black sheet = "full black screen".
     // Also avoid Modifier.weight inside ModalDrawerSheet — some devices get bad height constraints
@@ -138,46 +143,94 @@ fun AppDrawerContent(
             )
             Spacer(modifier = Modifier.height(10.dp))
 
+            val cfg = remember(configTick) { AppConfigRepository.snapshot() }
+            val copy = remember(configTick) {
+                com.ffsensitivity.app.data.remote.CopyRepository.snapshot()
+            }
+            val showScratch =
+                cfg.features["scratch"] != false && cfg.navigation["homeScratch"] != false
+            val showShop =
+                cfg.features["shop"] != false && cfg.navigation["homeShop"] != false
+            val showShare = cfg.features["share"] != false
+            val showSupport =
+                cfg.features["support"] != false && cfg.navigation["navSupport"] != false
+            val showAbout = cfg.navigation["navAbout"] != false
+
             DrawerItem(
                 label = "Home",
                 icon = Icons.Outlined.Home,
                 selected = selectedRoute == "home"
             ) { onAction(AppDrawerAction.HOME) }
-            DrawerItem(
-                label = "Scratch Cards",
-                icon = Icons.Outlined.Style,
-                selected = selectedRoute == "scratch_cards"
-            ) { onAction(AppDrawerAction.SCRATCH_CARDS) }
-            DrawerItem(
-                label = "Coin Shop",
-                icon = Icons.Outlined.ShoppingBag,
-                selected = selectedRoute == "coin_shop"
-            ) { onAction(AppDrawerAction.COIN_SHOP) }
+            if (showScratch) {
+                DrawerItem(
+                    label = "Scratch Cards",
+                    icon = Icons.Outlined.Style,
+                    selected = selectedRoute == "scratch_cards"
+                ) { onAction(AppDrawerAction.SCRATCH_CARDS) }
+            }
+            if (showShop) {
+                DrawerItem(
+                    label = "Coin Shop",
+                    icon = Icons.Outlined.ShoppingBag,
+                    selected = selectedRoute == "coin_shop"
+                ) { onAction(AppDrawerAction.COIN_SHOP) }
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
             Spacer(modifier = Modifier.height(8.dp))
-            DrawerItem("Rate App", Icons.Outlined.StarRate, selected = false) {
+            DrawerItem(
+                copy.legal.storeLabel.ifBlank { "Rate App" },
+                Icons.Outlined.StarRate,
+                selected = false
+            ) {
                 onAction(AppDrawerAction.RATE_APP)
             }
-            DrawerItem("Share App", Icons.Outlined.Share, selected = false) {
-                onAction(AppDrawerAction.SHARE_APP)
+            if (showShare) {
+                DrawerItem(
+                    copy.share.sheetTitle.ifBlank { "Share App" },
+                    Icons.Outlined.Share,
+                    selected = false
+                ) {
+                    onAction(AppDrawerAction.SHARE_APP)
+                }
             }
-            DrawerItem("Our Website", Icons.Outlined.Language, selected = false) {
+            DrawerItem(
+                copy.about.websiteCta.ifBlank { "Our Website" },
+                Icons.Outlined.Language,
+                selected = false
+            ) {
                 onAction(AppDrawerAction.WEBSITE)
             }
-            DrawerItem("Privacy Policy", Icons.Outlined.Policy, selected = false) {
+            DrawerItem(
+                copy.legal.privacyLabel.ifBlank { "Privacy Policy" },
+                Icons.Outlined.Policy,
+                selected = false
+            ) {
                 onAction(AppDrawerAction.PRIVACY)
             }
+            if (showSupport) {
+                DrawerItem(
+                    label = copy.legal.supportLabel.ifBlank { "Contact Us" },
+                    icon = Icons.Outlined.Mail,
+                    selected = selectedRoute == "contact"
+                ) { onAction(AppDrawerAction.CONTACT_US) }
+            }
+            if (showAbout) {
+                DrawerItem(
+                    label = "About",
+                    icon = Icons.Outlined.Info,
+                    selected = selectedRoute == "about"
+                ) { onAction(AppDrawerAction.ABOUT) }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
+            Spacer(modifier = Modifier.height(8.dp))
             DrawerItem(
-                label = "Contact Us",
-                icon = Icons.Outlined.Mail,
-                selected = selectedRoute == "contact"
-            ) { onAction(AppDrawerAction.CONTACT_US) }
-            DrawerItem(
-                label = "About",
-                icon = Icons.Outlined.Info,
-                selected = selectedRoute == "about"
-            ) { onAction(AppDrawerAction.ABOUT) }
+                label = "Sign out",
+                icon = Icons.Outlined.Logout,
+                selected = false
+            ) { onAction(AppDrawerAction.SIGN_OUT) }
 
             Spacer(modifier = Modifier.height(20.dp))
             val versionNumber = if (appVersion.startsWith("v", ignoreCase = true)) {
@@ -186,7 +239,7 @@ fun AppDrawerContent(
                 appVersion
             }
             Text(
-                text = "Version $versionNumber",
+                text = "${copy.about.versionPrefix.ifBlank { "Version" }} $versionNumber",
                 color = InkMuted,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,

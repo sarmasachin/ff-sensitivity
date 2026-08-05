@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ffsensitivity.app.data.StylishNameCatalog
 import com.ffsensitivity.app.data.StylishNameCatalog.GeneratedName
+import com.ffsensitivity.app.data.remote.NamesRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.AppScreenHeader
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
@@ -34,7 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val PAGE_SIZE = 20
-private const val ROUND_MAX = 100
 
 private enum class StylishRetryKind {
     RELOAD_CATALOG,
@@ -128,8 +128,10 @@ fun StylishNameScreen(
 
     suspend fun loadCatalog(): Boolean {
         return runCatching {
-            withContext(Dispatchers.Default) {
+            withContext(Dispatchers.IO) {
                 StylishNameCatalog.ensureLoaded(context)
+                // Best-effort Nest sync; offline catalog stays if API is down.
+                NamesRepository.syncCatalog(context)
             }
             catalogFailed = false
             catalogReady = true
@@ -161,7 +163,7 @@ fun StylishNameScreen(
                     all = all,
                     usedValues = usedSnapshot,
                     fontChoiceId = fontSnapshot,
-                    limit = ROUND_MAX
+                    limit = StylishNameCatalog.maxBatchSize
                 )
                 val remaining = all
                     .filter { fontSnapshot == null || it.id.startsWith(fontSnapshot + "_") }
@@ -342,13 +344,14 @@ fun StylishNameScreen(
             roundItems
         }
     }
-    val visible = filteredRound.take(visibleCount.coerceAtMost(ROUND_MAX))
+    val roundCap = StylishNameCatalog.maxBatchSize
+    val visible = filteredRound.take(visibleCount.coerceAtMost(roundCap))
     val canShowMore = filter.isBlank() &&
-        visibleCount < ROUND_MAX &&
+        visibleCount < roundCap &&
         visibleCount < roundItems.size
     val reachedRoundCap = filter.isBlank() &&
         roundItems.isNotEmpty() &&
-        (visibleCount >= ROUND_MAX || visibleCount >= roundItems.size)
+        (visibleCount >= roundCap || visibleCount >= roundItems.size)
 
     AtmosphereScaffold {
         Column(
@@ -431,7 +434,7 @@ fun StylishNameScreen(
                                         runCatching {
                                             visibleCount = minOf(
                                                 visibleCount + PAGE_SIZE,
-                                                ROUND_MAX,
+                                                roundCap,
                                                 roundItems.size
                                             )
                                         }.onFailure {

@@ -37,15 +37,15 @@ export const PROMO_PLACEMENT_LABEL: Record<PromoPlacement, string> = {
 export const PROMOS_CAPABILITIES = [
   {
     title: "Home banners",
-    body: "Ordered creatives on the Android home surface — title, art label, and CTA deep link.",
+    body: "Ordered creatives on Android home — Nest GET /api/v1/promos/live.",
   },
   {
     title: "Schedule window",
-    body: "Start / end timestamps control when a promo is eligible. Outside the window it stays out of the live set.",
+    body: "Start / end timestamps are enforced server-side. Outside the window stays out of the live set.",
   },
   {
     title: "Deep links",
-    body: "Route users into Redeem, Challenge, Shop, Scratch, or Names without guessing paths in the app.",
+    body: "Only allowlisted ffops:// routes (challenge, scratch, shop, redeem, names, home).",
   },
   {
     title: "Order & kill switch",
@@ -238,6 +238,11 @@ export function formToPromo(
   if (!title) return { error: "Title is required." };
   const deepLink = values.deepLink.trim();
   if (!deepLink) return { error: "Deep link is required." };
+  if (!/^ffops:\/\/[a-z0-9_]+$/i.test(deepLink)) {
+    return {
+      error: "Deep link must be ffops://path (allowlisted app route).",
+    };
+  }
   const sortOrder = Number(values.sortOrder);
   if (!Number.isFinite(sortOrder) || sortOrder < 1) {
     return { error: "Sort order must be a number ≥ 1." };

@@ -1,0 +1,36 @@
+export type AdminProfileView = {
+    id: string;
+    email: string;
+    role: string;
+    allowedModules: string[];
+    mustChangePassword: boolean;
+    lastLoginAt: Date | null;
+    displayName: string;
+    jobTitle: string;
+    deskLabel: string;
+    notifyEmail: string;
+    phone: string;
+    timezoneLabel: string;
+    digestDaily: boolean;
+    digestSecurity: boolean;
+};
+export declare function sanitizeProfileText(raw: string, max: number): string;
+export declare function assertSafeProfileText(text: string, field: string): void;
+export declare function assertPhone(phone: string): void;
+export declare function defaultDisplayName(email: string): string;
+export declare function toProfileView(admin: {
+    id: string;
+    email: string;
+    role: string;
+    allowedModules: string[];
+    mustChangePassword: boolean;
+    lastLoginAt: Date | null;
+    displayName: string | null;
+    jobTitle: string | null;
+    deskLabel: string | null;
+    notifyEmail: string | null;
+    phone: string | null;
+    timezoneLabel: string | null;
+    digestDaily: boolean;
+    digestSecurity: boolean;
+}): AdminProfileView;

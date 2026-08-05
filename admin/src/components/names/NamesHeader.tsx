@@ -1,8 +1,18 @@
 type Props = {
   onAddFrame?: () => void;
+  dirty?: boolean;
+  saving?: boolean;
+  onSave?: () => void;
+  onReset?: () => void;
 };
 
-export function NamesHeader({ onAddFrame }: Props) {
+export function NamesHeader({
+  onAddFrame,
+  dirty = false,
+  saving = false,
+  onSave,
+  onReset,
+}: Props) {
   return (
     <header className="relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-r from-slate-950 via-slate-900 to-teal-950 px-5 py-5 text-white sm:px-6">
       <div
@@ -24,18 +34,40 @@ export function NamesHeader({ onAddFrame }: Props) {
           </h1>
           <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-white/80">
             Frame packs, letter fonts, and FF character policy for the Android
-            Stylish Names tab — professional catalog control, not toy UI.
+            Stylish Names tab — live Nest catalog control.
           </p>
         </div>
-        {onAddFrame ? (
-          <button
-            type="button"
-            onClick={onAddFrame}
-            className="h-10 shrink-0 rounded-xl bg-white px-3.5 text-[13px] font-semibold text-slate-900 hover:bg-teal-50"
-          >
-            Add frame
-          </button>
-        ) : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {onReset ? (
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={saving || !dirty}
+              className="h-10 rounded-xl border border-white/20 bg-white/5 px-3.5 text-[13px] font-semibold text-white/90 hover:bg-white/10 disabled:opacity-40"
+            >
+              Reset
+            </button>
+          ) : null}
+          {onSave ? (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving || !dirty}
+              className="h-10 rounded-xl bg-teal-400 px-3.5 text-[13px] font-semibold text-slate-950 hover:bg-teal-300 disabled:opacity-40"
+            >
+              {saving ? "Saving…" : dirty ? "Save live" : "Saved"}
+            </button>
+          ) : null}
+          {onAddFrame ? (
+            <button
+              type="button"
+              onClick={onAddFrame}
+              className="h-10 shrink-0 rounded-xl bg-white px-3.5 text-[13px] font-semibold text-slate-900 hover:bg-teal-50"
+            >
+              Add frame
+            </button>
+          ) : null}
+        </div>
       </div>
     </header>
   );

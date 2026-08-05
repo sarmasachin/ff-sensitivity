@@ -22,7 +22,7 @@ import {
   type ShopListRow,
 } from "@/components/shop/shop-data";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 12;
 
 export default function ShopPage() {
   const [rows, setRows] = useState<ShopListRow[]>(() => [...SHOP_DEMO_ROWS]);

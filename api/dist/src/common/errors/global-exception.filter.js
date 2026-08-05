@@ -44,6 +44,10 @@ let GlobalExceptionFilter = class GlobalExceptionFilter {
                     code = 'VALIDATION_ERROR';
                 }
             }
+            if (status === common_1.HttpStatus.TOO_MANY_REQUESTS) {
+                code = 'RATE_LIMITED';
+                message = 'Too many requests. Please wait a moment.';
+            }
         }
         const payload = {
             error: { code, message, details, requestId, timestamp },

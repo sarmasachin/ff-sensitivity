@@ -60,115 +60,54 @@ export const PUSH_STATUS_CLASS: Record<PushStatus, string> = {
 export const PUSH_CAPABILITIES = [
   {
     title: "Compose",
-    body: "Title, body, and deep link for Android FCM. Keep copy short — tray space is limited.",
+    body: "Title, body, and allowlisted ffops:// deep link — saved on Nest PushCampaign.",
   },
   {
     title: "Audience",
-    body: "Target all tokens, recent actives, no-claim devices, or a named FCM topic.",
+    body: "Target registered device tokens: all, active 7d, no-claim, or an FCM topic.",
   },
   {
     title: "Schedule",
-    body: "Save as draft, queue for a wall-clock send, or mark send-now for Admin approval flow.",
+    body: "Draft, queue for a wall-clock send, or keep ready for Admin send.",
   },
   {
     title: "Send authority",
-    body: "Live send is Super Admin / Admin only. Operators can draft and schedule; send is gated.",
+    body: "Live send is Super Admin / Admin only. Module ACL gates the rest of the desk.",
   },
 ] as const;
 
-export const PUSH_DEMO_ROWS: PushCampaignRow[] = [
-  {
-    id: "push_challenge_open",
-    title: "Daily Challenge is live",
-    body: "Quiz window is open — claim coins before it closes.",
-    deepLink: "ffops://challenge",
-    audience: "ACTIVE_7D",
-    topic: "",
-    status: "SENT",
-    scheduledAt: null,
-    sentAt: "2026-08-03 09:15",
-    delivered: 18420,
-    failed: 112,
-    createdBy: "admin",
-    updatedAt: "2026-08-03 09:16",
-  },
-  {
-    id: "push_scratch_weekend",
-    title: "Scratch boost weekend",
-    body: "Higher redeem odds on milestone cards through Sunday.",
-    deepLink: "ffops://scratch",
-    audience: "ALL",
-    topic: "",
-    status: "SCHEDULED",
-    scheduledAt: "2026-08-04 10:00",
-    sentAt: null,
-    delivered: 0,
-    failed: 0,
-    createdBy: "admin",
-    updatedAt: "2026-08-02 18:40",
-  },
-  {
-    id: "push_redeem_nudge",
-    title: "Unused redeem codes",
-    body: "You still have codes waiting — open Redeem to claim.",
-    deepLink: "ffops://redeem",
-    audience: "NO_CLAIM",
-    topic: "",
-    status: "DRAFT",
-    scheduledAt: null,
-    sentAt: null,
-    delivered: 0,
-    failed: 0,
-    createdBy: "ops",
-    updatedAt: "2026-08-03 11:05",
-  },
-  {
-    id: "push_names_frames",
-    title: "New Stylish Name frames",
-    body: "Premium wraps just landed. Try them in Names.",
-    deepLink: "ffops://names",
-    audience: "TOPIC",
-    topic: "feature_names",
-    status: "SCHEDULED",
-    scheduledAt: "2026-08-05 12:00",
-    sentAt: null,
-    delivered: 0,
-    failed: 0,
-    createdBy: "admin",
-    updatedAt: "2026-08-01 14:22",
-  },
-  {
-    id: "push_shop_restock",
-    title: "Coin shop restock",
-    body: "Starter packs are back — limited inventory.",
-    deepLink: "ffops://shop",
-    audience: "ALL",
-    topic: "",
-    status: "FAILED",
-    scheduledAt: "2026-08-02 08:00",
-    sentAt: "2026-08-02 08:01",
-    delivered: 420,
-    failed: 8901,
-    createdBy: "admin",
-    updatedAt: "2026-08-02 08:05",
-  },
-  {
-    id: "push_july_wrap",
-    title: "July season wrap",
-    body: "Thanks for playing — rewards summary inside.",
-    deepLink: "ffops://home",
-    audience: "ACTIVE_7D",
-    topic: "",
-    status: "CANCELLED",
-    scheduledAt: "2026-07-31 20:00",
-    sentAt: null,
-    delivered: 0,
-    failed: 0,
-    createdBy: "ops",
-    updatedAt: "2026-07-31 19:10",
-  },
-];
+/** Client-side allowlist — must match Nest push-security. */
+export const PUSH_ALLOWED_DEEP_PATHS = new Set([
+  "home",
+  "challenge",
+  "daily_challenge",
+  "scratch",
+  "shop",
+  "coin_shop",
+  "redeem",
+  "names",
+  "stylish",
+]);
 
+export function assertClientDeepLink(raw: string): string | null {
+  const link = raw.trim().toLowerCase();
+  if (!link.startsWith("ffops://")) {
+    return "Deep link must use ffops://";
+  }
+  try {
+    const u = new URL(link);
+    if (u.username || u.password) return "Deep link must not include credentials.";
+    const path = (u.hostname || u.pathname.replace(/^\//, ""))
+      .split("/")[0]
+      ?.replace(/[^a-z0-9_]/g, "");
+    if (!path || !PUSH_ALLOWED_DEEP_PATHS.has(path)) {
+      return "Deep link path is not allowlisted.";
+    }
+  } catch {
+    return "Deep link is invalid.";
+  }
+  return null;
+}
 export function computePushStats(rows: PushCampaignRow[]) {
   let scheduled = 0;
   let drafts = 0;
@@ -237,8 +176,13 @@ export function formToCampaign(
   if (!body) return { error: "Body is required." };
   const deepLink = values.deepLink.trim();
   if (!deepLink) return { error: "Deep link is required." };
+  const linkErr = assertClientDeepLink(deepLink);
+  if (linkErr) return { error: linkErr };
   if (values.audience === "TOPIC" && !values.topic.trim()) {
     return { error: "Topic is required for FCM topic audience." };
+  }
+  if (values.audience === "TOPIC" && !/^[a-z0-9_]{1,64}$/i.test(values.topic.trim())) {
+    return { error: "Topic must be snake_case alphanumeric." };
   }
   if (values.scheduleMode === "later" && !parseStamp(values.scheduledAt)) {
     return { error: "Schedule must be YYYY-MM-DD HH:mm." };

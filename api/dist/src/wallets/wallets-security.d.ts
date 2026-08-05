@@ -1,0 +1,12 @@
+export declare const MAX_STAFF_ADJUST = 100000;
+export declare const MAX_COINS = 9999999;
+export declare function sanitizeWalletText(raw: string, max: number): string;
+export declare function assertSafeWalletText(text: string, field: string): void;
+export declare function assertUserId(raw: string): string;
+export declare function assertAdjustAmount(n: number): number;
+export declare function assertRequestId(raw: string): string;
+export declare function maskEmail(email: string): string;
+export declare function hoursAgo(from: Date, now?: Date): number;
+export declare function formatWhen(hours: number): string;
+export declare function mapLedgerKind(reason: string, delta: number): 'EARN' | 'SPEND' | 'GRANT' | 'REVOKE' | 'PURCHASE' | 'ADJUST';
+export declare function mapLedgerActor(reason: string): 'system' | 'staff' | 'store';

@@ -44,6 +44,7 @@ import com.ffsensitivity.app.data.DailyChallengeStore
 import com.ffsensitivity.app.data.ScratchCardDebug
 import com.ffsensitivity.app.data.ScratchHistoryStore
 import com.ffsensitivity.app.data.StreakMilestone
+import com.ffsensitivity.app.data.remote.ChallengeRemoteCache
 import com.ffsensitivity.app.data.streakMilestones
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
@@ -75,12 +76,12 @@ fun DailyChallengeRewardsTab(
     val context = LocalContext.current
     var scratchTarget by remember { mutableStateOf<StreakMilestone?>(null) }
     var claiming by remember { mutableStateOf(false) }
-    val milestones = remember {
-        runCatching { streakMilestones }.getOrElse {
-            AppLog.e("Milestone list failed", it)
-            emptyList()
-        }
-    }
+    val milestones =
+        ChallengeRemoteCache.milestones?.takeIf { it.isNotEmpty() }
+            ?: runCatching { streakMilestones }.getOrElse {
+                AppLog.e("Milestone list failed", it)
+                emptyList()
+            }
     val nextTarget = milestones.firstOrNull {
         snapshot.streak < it.days && !ScratchCardDebug.isForceUnlocked(it.days)
     }?.days

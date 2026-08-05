@@ -68,7 +68,7 @@ export const OPS_NOTIFICATION_SEED: OpsNotification[] = [
     title: "Claims spike",
     body: "Claims volume +22% vs yesterday (demo signal).",
     time: "Yesterday",
-    href: "/dash",
+    href: "/dashboard",
     read: true,
   },
 ];

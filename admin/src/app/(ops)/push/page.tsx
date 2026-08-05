@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PushCapabilities } from "@/components/push/PushCapabilities";
 import { PushComposeModal } from "@/components/push/PushComposeModal";
 import { PushEmptyState } from "@/components/push/PushEmptyState";
@@ -13,7 +13,13 @@ import {
   type PushFilterKey,
 } from "@/components/push/PushToolbar";
 import {
-  PUSH_DEMO_ROWS,
+  cancelPushCampaign,
+  deletePushCampaign,
+  fetchPushCampaigns,
+  sendPushCampaign,
+  upsertPushCampaign,
+} from "@/components/push/push-api";
+import {
   campaignToForm,
   computePushStats,
   emptyPushForm,
@@ -21,13 +27,7 @@ import {
   type PushFormValues,
 } from "@/components/push/push-data";
 
-const PAGE_SIZE = 5;
-
-function nowStamp(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+const PAGE_SIZE = 12;
 
 function sortCampaigns(rows: PushCampaignRow[]): PushCampaignRow[] {
   const rank: Record<PushCampaignRow["status"], number> = {
@@ -44,14 +44,49 @@ function sortCampaigns(rows: PushCampaignRow[]): PushCampaignRow[] {
   });
 }
 
+function canAccessPush(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as {
+      role?: string;
+      allowedModules?: string[];
+    };
+    if (admin.role === "SUPER_ADMIN") return true;
+    return Array.isArray(admin.allowedModules)
+      ? admin.allowedModules.includes("push")
+      : false;
+  } catch {
+    return false;
+  }
+}
+
+function canSendLive(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw =
+    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
+  if (!raw) return false;
+  try {
+    const admin = JSON.parse(raw) as { role?: string };
+    return admin.role === "SUPER_ADMIN" || admin.role === "ADMIN";
+  } catch {
+    return false;
+  }
+}
+
+// --- Start: Push live wire (Sachin) ---
 export default function PushPage() {
-  const [rows, setRows] = useState<PushCampaignRow[]>(() => [
-    ...PUSH_DEMO_ROWS,
-  ]);
+  const [allowed, setAllowed] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [rows, setRows] = useState<PushCampaignRow[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<PushFilterKey>("all");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
@@ -59,8 +94,33 @@ export default function PushPage() {
   const [formInitial, setFormInitial] = useState<PushFormValues>(emptyPushForm);
 
   useEffect(() => {
+    setAllowed(canAccessPush());
+  }, []);
+
+  useEffect(() => {
     setPage(1);
   }, [filter, query]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const campaigns = await fetchPushCampaigns();
+      setRows(campaigns);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load push campaigns.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [allowed, load]);
 
   const stats = useMemo(() => computePushStats(rows), [rows]);
 
@@ -112,69 +172,110 @@ export default function PushPage() {
 
   function openEdit(id: string) {
     const row = rows.find((r) => r.id === id);
-    if (!row || row.status === "SENT") return;
+    if (!row || row.status === "SENT" || row.status === "FAILED") return;
     setFormMode("edit");
     setEditingId(id);
     setFormInitial(campaignToForm(row));
     setFormOpen(true);
   }
 
-  function saveCampaign(row: PushCampaignRow) {
-    if (formMode === "add") {
-      if (rows.some((r) => r.id === row.id)) {
-        setNotice(`Campaign id “${row.id}” already exists.`);
-        return;
-      }
-      setRows((prev) => [row, ...prev]);
-      setNotice(`Saved campaign “${row.title}”.`);
+  async function onModalSave(row: PushCampaignRow) {
+    setBusy(true);
+    setError(null);
+    try {
+      const mode =
+        row.status === "SCHEDULED"
+          ? ("later" as const)
+          : ("draft" as const);
+      const saved = await upsertPushCampaign({
+        id: row.id,
+        title: row.title,
+        body: row.body,
+        deepLink: row.deepLink,
+        audience: row.audience,
+        topic: row.topic,
+        scheduleMode: mode,
+        scheduledAt: row.scheduledAt ?? undefined,
+      });
+      setRows((prev) => {
+        const without = prev.filter((r) => r.id !== saved.id);
+        return [saved, ...without];
+      });
+      setNotice(`Saved campaign “${saved.title}”.`);
+      setFormOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendCampaign(id: string) {
+    if (!canSendLive()) {
+      setError("Only Super Admin / Admin can send push campaigns.");
       return;
     }
-    if (!editingId) return;
-    setRows((prev) =>
-      prev.map((r) => (r.id === editingId ? { ...row, id: editingId } : r)),
-    );
-    setNotice(`Updated campaign “${row.title}”.`);
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await sendPushCampaign(id);
+      setRows((prev) => prev.map((r) => (r.id === id ? saved : r)));
+      setNotice(
+        `Sent “${saved.title}” — delivered ${saved.delivered} registered token(s).`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Send failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function sendCampaign(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    const stamp = nowStamp();
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              status: "SENT",
-              sentAt: stamp,
-              updatedAt: stamp,
-              delivered: r.delivered > 0 ? r.delivered : 12500,
-              failed: r.failed > 0 ? r.failed : 48,
-            }
-          : r,
-      ),
-    );
-    setNotice(`Sent “${row.title}” (Admin demo — FCM API next).`);
+  async function cancelCampaign(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await cancelPushCampaign(id);
+      setRows((prev) => prev.map((r) => (r.id === id ? saved : r)));
+      setNotice(`Cancelled “${saved.title}”.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Cancel failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function cancelCampaign(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, status: "CANCELLED", updatedAt: nowStamp() }
-          : r,
-      ),
-    );
-    setNotice(`Cancelled “${row.title}”.`);
+  async function removeCampaign(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await deletePushCampaign(id);
+      setRows((prev) => prev.filter((r) => r.id !== id));
+      setNotice("Campaign deleted.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function deleteCampaign(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    setNotice(`Deleted “${row.title}”.`);
+  if (!allowed) {
+    return (
+      <section className="mx-auto flex max-w-6xl flex-col gap-5">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-8 text-center text-[13px] font-medium text-rose-900">
+          You do not have access to Push. Ask a Super Admin for the push module.
+        </div>
+      </section>
+    );
+  }
+
+  if (loading) {
+    return (
+      <section className="mx-auto flex max-w-6xl flex-col gap-5">
+        <div className="rounded-2xl border border-[#e8eaee] bg-white px-5 py-10 text-center text-[13px] text-slate-500">
+          Loading push campaigns…
+        </div>
+      </section>
+    );
   }
 
   const queueEmpty = rows.length === 0;
@@ -182,7 +283,7 @@ export default function PushPage() {
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
-      <PushHeader onCompose={openCompose} />
+      <PushHeader onCompose={busy ? undefined : openCompose} />
       <PushStats
         total={stats.total}
         scheduled={stats.scheduled}
@@ -199,6 +300,14 @@ export default function PushPage() {
           {notice}
         </div>
       ) : null}
+      {error ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
+        >
+          {error}
+        </div>
+      ) : null}
 
       <PushToolbar
         query={query}
@@ -210,7 +319,7 @@ export default function PushPage() {
       {queueEmpty ? (
         <PushEmptyState
           title="No campaigns yet"
-          body="Compose an FCM campaign with title, body, audience, and schedule."
+          body="Compose a campaign with title, body, audience, and schedule."
         />
       ) : filterEmpty ? (
         <PushEmptyState
@@ -222,9 +331,15 @@ export default function PushPage() {
           <PushTable
             rows={paged}
             onEdit={openEdit}
-            onSend={sendCampaign}
-            onCancel={cancelCampaign}
-            onDelete={deleteCampaign}
+            onSend={(id) => {
+              if (!busy) void sendCampaign(id);
+            }}
+            onCancel={(id) => {
+              if (!busy) void cancelCampaign(id);
+            }}
+            onDelete={(id) => {
+              if (!busy) void removeCampaign(id);
+            }}
           />
           <PushPagination
             page={page}
@@ -244,8 +359,9 @@ export default function PushPage() {
         initial={formInitial}
         existing={editingRow}
         onClose={() => setFormOpen(false)}
-        onSave={saveCampaign}
+        onSave={(row) => void onModalSave(row)}
       />
     </section>
   );
 }
+// --- End: Push live wire (Sachin) ---

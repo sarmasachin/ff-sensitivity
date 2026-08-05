@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "923463573720",
+    "project_id": "ff-sesnitivity",
+    "storage_bucket": "ff-sesnitivity.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:923463573720:android:7fdc58f0dffb45b5d4f7ad",
+        "android_client_info": {
+          "package_name": "com.ffsensitivity.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuugg4zuq2LNV5o2u96cRUu5czQMnsosM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

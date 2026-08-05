@@ -1,43 +1,57 @@
 # FF Sensitivity Ops — API
 
-NestJS + Prisma + PostgreSQL.
+NestJS + Prisma + PostgreSQL (**local Postgres — Docker not required**).
 
-## Docker kya hai / kyun?
+## Setup (no Docker)
 
-Docker **sirf Postgres database** chalane ke liye hai.
+1. Install/start **PostgreSQL** Windows service (`postgresql-x64-16`).
+2. Create DB + user (once):
 
-| Cheez | Docker? |
-|--------|---------|
-| Postgres (DB) | Haan — `docker compose up -d` |
-| NestJS API | Nahi — `npm run start:dev` |
-| Next.js admin | Nahi — `npm run dev` (port 3002) |
+```sql
+CREATE USER ffops WITH PASSWORD 'ffops_dev_password';
+CREATE DATABASE ff_sensitivity_ops OWNER ffops;
+```
 
-**Fayda:** Windows pe alag se Postgres install nahi karna padta. Ek container = ready database.
+3. `.env` me:
 
-**Zaroori:** pehle **Docker Desktop** app open/running hona chahiye.
+```env
+DATABASE_URL="postgresql://ffops:ffops_dev_password@localhost:5432/ff_sensitivity_ops?schema=public"
+```
 
-Agar Docker nahi chahiye to apna Postgres install karke `.env` mein `DATABASE_URL` change karo.
-
-## Setup
+4. Then:
 
 ```bash
 cd api
-cp .env.example .env   # already present locally
-docker compose up -d   # start Postgres
-npx prisma migrate dev --name init_auth
+npx prisma db push
 npm run prisma:seed
 npm run start:dev
 ```
 
-API: http://localhost:4000
+API: http://localhost:4000  
+Phone (same Wi‑Fi): set `API_BASE_URL=http://<PC-LAN-IP>:4000` in `local.properties`.
 
 ### Auth endpoints
 
-- `POST /api/v1/auth/login` `{ "email", "password" }`
+- `POST /api/v1/auth/login` `{ "email", "password" }` — admin
+- `POST /api/v1/user/auth/google` `{ "idToken" }` — app user
 - `GET  /api/v1/auth/me` (Bearer access token)
 - `POST /api/v1/auth/logout`
 
-Default Super Admin (change after first login):
+### Community endpoints
 
-- email: `superadmin@ffops.local`
-- password: `ChangeMeNow123!`
+- `GET  /api/v1/community/feed` (user JWT) — approved + featured
+- `POST /api/v1/community/posts` (user JWT) — submit for review
+- `POST /api/v1/community/posts/:id/report` (user JWT)
+- `GET  /api/v1/admin/community/posts` (admin JWT + community module)
+- `GET  /api/v1/admin/community/stats`
+- `PATCH /api/v1/admin/community/posts/:id/status` `{ "status" }`
+
+### Claims endpoints
+
+- `GET  /api/v1/redeem/claims` (user JWT) — own claim history
+- `GET  /api/v1/admin/claims` (admin JWT + claims module)
+- `GET  /api/v1/admin/claims/stats`
+- `PATCH /api/v1/admin/claims/:id/flag` `{ "flagged", "note?" }`
+- `DELETE /api/v1/admin/claims/:id` — deletes row, does **not** restore stock
+
+Default Super Admin (change after first login): see `.env` `SUPERADMIN_*`.

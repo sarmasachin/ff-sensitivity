@@ -222,7 +222,11 @@ export const AUDIT_CAPABILITIES = [
   },
   {
     title: "Export",
-    body: "CSV for compliance review. Nest audit API wire-up next.",
+    body: "CSV from the filtered trail — secrets already redacted by Nest.",
+  },
+  {
+    title: "Live Nest wire",
+    body: "Rows load from GET /api/v1/admin/audit — append-only, no mutate.",
   },
 ] as const;
 

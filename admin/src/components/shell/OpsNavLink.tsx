@@ -15,6 +15,7 @@ import {
   IconEconomy,
   IconNames,
   IconOverview,
+  IconProfile,
   IconPromos,
   IconPush,
   IconRedeem,
@@ -23,6 +24,7 @@ import {
   IconShop,
   IconStaff,
   IconSupport,
+  IconUsers,
   IconWallets,
 } from "./OpsNavIcons";
 
@@ -44,10 +46,12 @@ const ICONS = {
   "/app": IconApp,
   "/devices": IconDevices,
   "/wallets": IconWallets,
+  "/users": IconUsers,
   "/copy": IconCopy,
   "/staff": IconStaff,
   "/audit": IconAudit,
   "/settings": IconSettings,
+  "/profile": IconProfile,
 } as const;
 
 type Props = {

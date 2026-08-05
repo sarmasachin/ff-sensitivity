@@ -2,10 +2,10 @@ export type StaffRole = "SUPER_ADMIN" | "ADMIN" | "SUB_ADMIN" | "VIEWER";
 
 export type StaffStatus = "ACTIVE" | "DISABLED" | "INVITED";
 
+/** UI module ids — `challenge` maps to Prisma `daily_challenge`. */
 export type StaffModuleId =
   | "redeem"
   | "shop"
-  | "economy"
   | "community"
   | "claims"
   | "challenge"
@@ -14,14 +14,15 @@ export type StaffModuleId =
   | "support"
   | "promos"
   | "push"
-  | "ads"
   | "app"
   | "devices"
   | "wallets"
+  | "users"
   | "copy"
   | "staff"
   | "audit"
-  | "settings";
+  | "settings"
+  | "overview";
 
 export type StaffListRow = {
   id: string;
@@ -55,7 +56,6 @@ export const STAFF_MODULE_META: {
 }[] = [
   { id: "redeem", label: "Redeem", group: "app" },
   { id: "shop", label: "Shop", group: "app" },
-  { id: "economy", label: "Economy", group: "app" },
   { id: "community", label: "Community", group: "app" },
   { id: "claims", label: "Claims", group: "app" },
   { id: "challenge", label: "Challenge", group: "app" },
@@ -64,12 +64,13 @@ export const STAFF_MODULE_META: {
   { id: "support", label: "Support", group: "app" },
   { id: "promos", label: "Promos", group: "app" },
   { id: "push", label: "Push", group: "system" },
-  { id: "ads", label: "Ads", group: "system" },
   { id: "app", label: "App", group: "system" },
   { id: "devices", label: "Devices", group: "system" },
   { id: "wallets", label: "Wallets", group: "system" },
+  { id: "users", label: "Users", group: "system" },
   { id: "copy", label: "Copy", group: "system" },
   { id: "staff", label: "Staff", group: "system" },
+  { id: "overview", label: "Overview", group: "system" },
   { id: "audit", label: "Audit", group: "system" },
   { id: "settings", label: "Settings", group: "system" },
 ];
@@ -82,11 +83,10 @@ export const ALL_MODULE_IDS: StaffModuleId[] = STAFF_MODULE_META.map(
 export function defaultModulesForRole(role: StaffRole): StaffModuleId[] {
   if (role === "SUPER_ADMIN" || role === "ADMIN") return [...ALL_MODULE_IDS];
   if (role === "SUB_ADMIN") {
-    return ALL_MODULE_IDS.filter(
-      (id) => id !== "staff" && id !== "settings" && id !== "audit",
-    );
+    return ALL_MODULE_IDS.filter((id) => id !== "staff");
   }
   return [
+    "overview",
     "redeem",
     "claims",
     "support",
@@ -96,121 +96,30 @@ export function defaultModulesForRole(role: StaffRole): StaffModuleId[] {
   ];
 }
 
-export const STAFF_DEMO_ROWS: StaffListRow[] = [
-  {
-    id: "s1",
-    name: "Naveen Root",
-    email: "admin@sensitivitysettings.com",
-    role: "SUPER_ADMIN",
-    status: "ACTIVE",
-    modules: [...ALL_MODULE_IDS],
-    lastLoginLabel: "12 min ago",
-    invitedAtLabel: "2024-11-02",
-    note: "Owner account. Can invite any role including Super Admin peers.",
-  },
-  {
-    id: "s2",
-    name: "Priya Ops",
-    email: "priya@sensitivitysettings.com",
-    role: "ADMIN",
-    status: "ACTIVE",
-    modules: [...ALL_MODULE_IDS],
-    lastLoginLabel: "1h ago",
-    invitedAtLabel: "2025-01-14",
-    note: "Full module access. Cannot create Super Admin seats.",
-  },
-  {
-    id: "s3",
-    name: "Arjun Claims",
-    email: "arjun@sensitivitysettings.com",
-    role: "SUB_ADMIN",
-    status: "ACTIVE",
-    modules: defaultModulesForRole("SUB_ADMIN"),
-    lastLoginLabel: "3h ago",
-    invitedAtLabel: "2025-03-08",
-    note: "Day-to-day redeem, claims, support. No staff/settings.",
-  },
-  {
-    id: "s4",
-    name: "Meera Support",
-    email: "meera@sensitivitysettings.com",
-    role: "SUB_ADMIN",
-    status: "ACTIVE",
-    modules: ["support", "claims", "community", "redeem"],
-    lastLoginLabel: "Yesterday",
-    invitedAtLabel: "2025-04-22",
-    note: "Support-focused module set.",
-  },
-  {
-    id: "s5",
-    name: "Kabir Viewer",
-    email: "kabir@sensitivitysettings.com",
-    role: "VIEWER",
-    status: "ACTIVE",
-    modules: defaultModulesForRole("VIEWER"),
-    lastLoginLabel: "2d ago",
-    invitedAtLabel: "2025-06-01",
-    note: "Read-only. Cannot mutate wallets, push send, or staff.",
-  },
-  {
-    id: "s6",
-    name: "Sana Invite",
-    email: "sana@sensitivitysettings.com",
-    role: "VIEWER",
-    status: "INVITED",
-    modules: defaultModulesForRole("VIEWER"),
-    lastLoginLabel: "Never",
-    invitedAtLabel: "2026-08-01",
-    note: "Invite pending — password not set yet.",
-  },
-  {
-    id: "s7",
-    name: "Rohit Disabled",
-    email: "rohit@sensitivitysettings.com",
-    role: "SUB_ADMIN",
-    status: "DISABLED",
-    modules: ["redeem", "shop", "economy"],
-    lastLoginLabel: "21d ago",
-    invitedAtLabel: "2025-02-11",
-    note: "Disabled after contractor offboarding.",
-  },
-  {
-    id: "s8",
-    name: "Isha Ads",
-    email: "isha@sensitivitysettings.com",
-    role: "SUB_ADMIN",
-    status: "ACTIVE",
-    modules: ["ads", "promos", "push", "copy", "app"],
-    lastLoginLabel: "5h ago",
-    invitedAtLabel: "2025-07-19",
-    note: "Growth / ads operator.",
-  },
-];
-
 export const STAFF_CAPABILITIES = [
   {
-    title: "Invite",
-    body: "Super Admin creates Admin / Sub-Admin / Viewer seats with email + role. Invite link expires.",
+    title: "Invite seats",
+    body: "Create ADMIN / SUB_ADMIN / VIEWER with temp password — must change on first login.",
   },
   {
-    title: "Roles",
-    body: "Super Admin · Admin · Sub-Admin · Viewer — send/mutate gates follow role, not just UI hide.",
+    title: "Module ACL",
+    body: "Assign Nest AdminModule access. Challenge maps to daily_challenge.",
   },
   {
-    title: "Module assign",
-    body: "Per-account module ACL. Viewers see allowed modules read-only; writers need Sub-Admin+.",
-  },
-  {
-    title: "Disable",
-    body: "Immediately revoke sessions without deleting audit history for that email.",
+    title: "Disable / enable",
+    body: "Soft-disable revokes sessions. Super Admin and self are protected.",
   },
   {
     title: "Resend invite",
-    body: "Pending invites can be resent. Active accounts use password reset instead.",
+    body: "Rotate temp password for seats that have not logged in yet.",
   },
   {
-    title: "Nest auth",
-    body: "Wire to Nest staff table + JWT claims next. UI is a local demo draft.",
+    title: "Role guards",
+    body: "Only Super Admin invites Admin seats or grants the staff module.",
+  },
+  {
+    title: "Live Nest wire",
+    body: "Rows load from GET /api/v1/admin/staff — no demo seats.",
   },
 ] as const;
 

@@ -234,14 +234,15 @@ object ShareCardBitmap {
     }
 
     fun captionText(card: SharedSensiCard): String {
-        return buildString {
+        val settings = buildString {
             appendLine("${card.name} · ${card.rank} · ${card.role}")
             appendLine("FF ID ${card.freeFireId} · ${card.deviceLabel}")
-            appendLine("KD ${card.kd} · HS ${card.headshots}")
-            appendLine()
-            appendLine("Get pro Free Fire sensitivity in the app")
-            append(APP_STORE_URL)
-        }
+            append("KD ${card.kd} · HS ${card.headshots}")
+        }.trim()
+        return com.ffsensitivity.app.data.remote.CopyRepository.formatShare(
+            device = card.deviceLabel,
+            settings = settings
+        )
     }
 
     private fun drawChip(c: Canvas, text: String, centerX: Float, baselineY: Float) {

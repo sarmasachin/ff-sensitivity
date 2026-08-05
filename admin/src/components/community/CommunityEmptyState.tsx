@@ -28,8 +28,8 @@ export function CommunityEmptyState({ kind, onClearFilter }: Props) {
     <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
       <p className="text-[15px] font-semibold text-slate-900">Queue empty</p>
       <p className="mx-auto mt-1 max-w-sm text-[13px] text-slate-500">
-        No shared sensitivity posts to moderate yet. New submissions will appear
-        here after the Community API is connected.
+        No shared sensitivity posts to moderate yet. When players submit from
+        Share Mine, they land here as Pending.
       </p>
     </div>
   );

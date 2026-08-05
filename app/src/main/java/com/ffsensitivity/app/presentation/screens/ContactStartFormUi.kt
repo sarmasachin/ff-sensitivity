@@ -57,7 +57,7 @@ fun ContactStartForm(
             .verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = "We usually reply within 24–48 hours once backend support is live. Your messages stay on this phone for now.",
+            text = "We usually reply within 24–48 hours. Messages sync to our support team when you’re signed in.",
             color = InkSecondary,
             fontSize = 13.sp,
             lineHeight = 18.sp

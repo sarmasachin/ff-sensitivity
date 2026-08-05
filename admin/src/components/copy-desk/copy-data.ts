@@ -89,11 +89,11 @@ export const COPY_CAPABILITIES = [
   },
   {
     title: "Validation",
-    body: "Required fields and placeholder checks before publish so empty prompts never ship.",
+    body: "Required fields, safe text, https footer, and placeholder checks before publish.",
   },
   {
-    title: "Remote publish",
-    body: "Nest CMS will push strings live to clients. UI is a local draft until then.",
+    title: "Live Nest wire",
+    body: "PUT /api/v1/admin/copy publishes to GET /api/v1/app/copy for Android.",
   },
 ] as const;
 
