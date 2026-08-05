@@ -72,9 +72,12 @@ let AuthController = class AuthController {
         });
     }
     cookieOpts() {
+        const corsOrigin = this.config.get('CORS_ORIGIN') ?? '';
+        const secure = process.env.NODE_ENV === 'production' ||
+            corsOrigin.startsWith('https://');
         return {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure,
             sameSite: 'strict',
             path: '/api/v1/auth',
         };

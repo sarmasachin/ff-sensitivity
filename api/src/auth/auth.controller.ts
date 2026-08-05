@@ -113,9 +113,13 @@ export class AuthController {
   }
 
   private cookieOpts() {
+    const corsOrigin = this.config.get<string>('CORS_ORIGIN') ?? '';
+    const secure =
+      process.env.NODE_ENV === 'production' ||
+      corsOrigin.startsWith('https://');
     return {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure,
       sameSite: 'strict' as const,
       path: '/api/v1/auth',
     };

@@ -214,12 +214,23 @@ export function LoginForm() {
       const data = (await res.json().catch(() => null)) as {
         accessToken?: string;
         admin?: { email: string; role: string };
-        error?: { message?: string };
+        error?: { code?: string; message?: string };
       } | null;
       if (!res.ok || !data?.accessToken) {
-        setErrors({
-          otp: data?.error?.message ?? "Verification failed. Try again.",
-        });
+        const code = data?.error?.code;
+        const message =
+          data?.error?.message ?? "Verification failed. Try again.";
+        if (
+          code === "AUTH_OTP_EXPIRED" ||
+          code === "AUTH_OTP_LOCKED" ||
+          code === "AUTH_OTP_USED"
+        ) {
+          setChallengeId("");
+          setOtp("");
+          setErrors({ form: message });
+          return;
+        }
+        setErrors({ otp: message });
         return;
       }
       completeLogin(data.accessToken, data.admin);
