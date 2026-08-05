@@ -1,12 +1,22 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import type { Admin } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomBytes } from 'crypto';
+import {
+  createHmac,
+  createHash,
+  randomBytes,
+  randomInt,
+  timingSafeEqual,
+} from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/errors/app-error';
 import { SettingsService } from '../settings/settings.service';
 import { LoginDto } from './dto/login.dto';
+import { ResendLoginOtpDto } from './dto/resend-login-otp.dto';
+import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
+import { LoginOtpMailService } from './login-otp-mail.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import {
@@ -19,6 +29,10 @@ import {
 const LOCK_WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILS = 5;
 const BCRYPT_ROUNDS = 12;
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_MAX_RESENDS = 3;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -28,6 +42,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly otpMail: LoginOtpMailService,
     @Optional() private readonly settings?: SettingsService,
   ) {}
 
@@ -48,6 +63,134 @@ export class AuthService {
 
     this.fails.delete(email);
 
+    if (this.otpEnabled()) {
+      const challenge = await this.createOtpChallenge(admin, ip);
+      return {
+        requiresOtp: true as const,
+        challengeId: challenge.id,
+        expiresInSec: Math.floor(OTP_TTL_MS / 1000),
+        resendAfterSec: Math.floor(OTP_RESEND_COOLDOWN_MS / 1000),
+        maskedEmail: this.maskEmail(admin.email),
+      };
+    }
+
+    return this.createSession(admin, ip);
+  }
+
+  async verifyLoginOtp(dto: VerifyLoginOtpDto, ip?: string) {
+    const challenge = await this.prisma.adminLoginOtp.findUnique({
+      where: { id: dto.challengeId },
+      include: { admin: true },
+    });
+    if (
+      !challenge ||
+      challenge.consumedAt ||
+      challenge.expiresAt.getTime() <= Date.now() ||
+      !challenge.admin.isActive
+    ) {
+      throw new AppError(
+        'AUTH_OTP_EXPIRED',
+        'This verification code has expired. Sign in again.',
+        401,
+      );
+    }
+    if (challenge.attempts >= OTP_MAX_ATTEMPTS) {
+      throw new AppError(
+        'AUTH_OTP_LOCKED',
+        'Too many incorrect attempts. Sign in again.',
+        429,
+      );
+    }
+
+    const expected = Buffer.from(challenge.codeHash, 'hex');
+    const actual = Buffer.from(this.hashOtp(challenge.id, dto.code), 'hex');
+    if (
+      expected.length !== actual.length ||
+      !timingSafeEqual(expected, actual)
+    ) {
+      await this.prisma.adminLoginOtp.update({
+        where: { id: challenge.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new AppError(
+        'AUTH_OTP_INVALID',
+        'The verification code is incorrect.',
+        401,
+      );
+    }
+
+    const consumed = await this.prisma.adminLoginOtp.updateMany({
+      where: { id: challenge.id, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+    if (consumed.count !== 1) {
+      throw new AppError(
+        'AUTH_OTP_USED',
+        'This verification code has already been used.',
+        401,
+      );
+    }
+
+    return this.createSession(challenge.admin, ip ?? challenge.ip ?? undefined);
+  }
+
+  async resendLoginOtp(dto: ResendLoginOtpDto) {
+    const challenge = await this.prisma.adminLoginOtp.findUnique({
+      where: { id: dto.challengeId },
+      include: { admin: true },
+    });
+    if (!challenge || challenge.consumedAt || !challenge.admin.isActive) {
+      throw new AppError(
+        'AUTH_OTP_EXPIRED',
+        'This verification session has expired. Sign in again.',
+        401,
+      );
+    }
+    const waitMs =
+      challenge.lastSentAt.getTime() +
+      OTP_RESEND_COOLDOWN_MS -
+      Date.now();
+    if (waitMs > 0) {
+      throw new AppError(
+        'AUTH_OTP_RESEND_WAIT',
+        `Wait ${Math.ceil(waitMs / 1000)} seconds before requesting another code.`,
+        429,
+      );
+    }
+    if (challenge.resendCount >= OTP_MAX_RESENDS) {
+      throw new AppError(
+        'AUTH_OTP_RESEND_LIMIT',
+        'Maximum resend attempts reached. Sign in again.',
+        429,
+      );
+    }
+
+    const code = this.generateOtp();
+    await this.otpMail.send({
+      to: challenge.admin.email,
+      code,
+      displayName: challenge.admin.displayName,
+      expiresMinutes: OTP_TTL_MS / 60_000,
+    });
+    await this.prisma.adminLoginOtp.update({
+      where: { id: challenge.id },
+      data: {
+        codeHash: this.hashOtp(challenge.id, code),
+        attempts: 0,
+        resendCount: { increment: 1 },
+        lastSentAt: new Date(),
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      },
+    });
+    return {
+      ok: true as const,
+      expiresInSec: Math.floor(OTP_TTL_MS / 1000),
+      resendAfterSec: Math.floor(OTP_RESEND_COOLDOWN_MS / 1000),
+      maskedEmail: this.maskEmail(challenge.admin.email),
+    };
+  }
+
+  private async createSession(admin: Admin, ip?: string) {
     const ttl = this.config.get<string>('JWT_ACCESS_TTL') ?? '15m';
     const accessToken = await this.jwt.signAsync(
       { sub: admin.id, email: admin.email, role: admin.role },
@@ -292,6 +435,66 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
     return { ok: true };
+  }
+
+  private async createOtpChallenge(admin: Admin, ip?: string) {
+    const id = randomBytes(32).toString('hex');
+    const code = this.generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+    await this.prisma.$transaction([
+      this.prisma.adminLoginOtp.updateMany({
+        where: { adminId: admin.id, consumedAt: null },
+        data: { consumedAt: new Date() },
+      }),
+      this.prisma.adminLoginOtp.create({
+        data: {
+          id,
+          adminId: admin.id,
+          codeHash: this.hashOtp(id, code),
+          expiresAt,
+          ip: ip ?? null,
+        },
+      }),
+    ]);
+
+    try {
+      await this.otpMail.send({
+        to: admin.email,
+        code,
+        displayName: admin.displayName,
+        expiresMinutes: OTP_TTL_MS / 60_000,
+      });
+    } catch (error) {
+      await this.prisma.adminLoginOtp.delete({ where: { id } }).catch(() => {});
+      throw error;
+    }
+
+    return { id, expiresAt };
+  }
+
+  private otpEnabled() {
+    return (
+      (this.config.get<string>('ADMIN_OTP_ENABLED') ?? 'false').toLowerCase() ===
+      'true'
+    );
+  }
+
+  private generateOtp() {
+    return randomInt(100_000, 1_000_000).toString();
+  }
+
+  private hashOtp(challengeId: string, code: string) {
+    const secret = this.config.getOrThrow<string>('ADMIN_OTP_SECRET');
+    return createHmac('sha256', secret)
+      .update(`${challengeId}:${code}`)
+      .digest('hex');
+  }
+
+  private maskEmail(email: string) {
+    const [local, domain] = email.split('@');
+    const visible = local.slice(0, Math.min(2, local.length));
+    return `${visible}${'*'.repeat(Math.max(3, local.length - visible.length))}@${domain}`;
   }
 
   private async requireActiveAdmin(adminId: string) {

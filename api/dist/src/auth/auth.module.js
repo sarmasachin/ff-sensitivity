@@ -16,6 +16,7 @@ const auth_controller_1 = require("./auth.controller");
 const auth_service_1 = require("./auth.service");
 const jwt_access_strategy_1 = require("./jwt-access.strategy");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
+const login_otp_mail_service_1 = require("./login-otp-mail.service");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -33,7 +34,12 @@ exports.AuthModule = AuthModule = __decorate([
             }),
         ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, jwt_access_strategy_1.JwtAccessStrategy, jwt_auth_guard_1.JwtAuthGuard],
+        providers: [
+            auth_service_1.AuthService,
+            login_otp_mail_service_1.LoginOtpMailService,
+            jwt_access_strategy_1.JwtAccessStrategy,
+            jwt_auth_guard_1.JwtAuthGuard,
+        ],
         exports: [auth_service_1.AuthService, jwt_auth_guard_1.JwtAuthGuard, jwt_access_strategy_1.JwtAccessStrategy, passport_1.PassportModule],
     })
 ], AuthModule);

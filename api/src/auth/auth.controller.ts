@@ -9,11 +9,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ResendLoginOtpDto } from './dto/resend-login-otp.dto';
+import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('api/v1/auth')
@@ -24,6 +27,7 @@ export class AuthController {
   ) {}
 
   @Post('login')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async login(
     @Body() dto: LoginDto,
     @Req() req: { ip?: string; headers: Record<string, string | undefined> },
@@ -34,11 +38,34 @@ export class AuthController {
       dto,
       typeof ip === 'string' ? ip : undefined,
     );
+    if ('requiresOtp' in result) return result;
     this.setRefreshCookie(res, result.refreshToken);
     return {
       accessToken: result.accessToken,
       admin: result.admin,
     };
+  }
+
+  @Post('login/verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async verifyLoginOtp(
+    @Body() dto: VerifyLoginOtpDto,
+    @Req() req: { ip?: string; headers: Record<string, string | undefined> },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const ip = req.ip ?? req.headers['x-forwarded-for'];
+    const result = await this.auth.verifyLoginOtp(
+      dto,
+      typeof ip === 'string' ? ip : undefined,
+    );
+    this.setRefreshCookie(res, result.refreshToken);
+    return { accessToken: result.accessToken, admin: result.admin };
+  }
+
+  @Post('login/resend-otp')
+  @Throttle({ default: { limit: 4, ttl: 10 * 60_000 } })
+  resendLoginOtp(@Body() dto: ResendLoginOtpDto) {
+    return this.auth.resendLoginOtp(dto);
   }
 
   @Post('logout')

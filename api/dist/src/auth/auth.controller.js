@@ -15,10 +15,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const throttler_1 = require("@nestjs/throttler");
 const auth_service_1 = require("./auth.service");
 const login_dto_1 = require("./dto/login.dto");
 const update_profile_dto_1 = require("./dto/update-profile.dto");
 const change_password_dto_1 = require("./dto/change-password.dto");
+const resend_login_otp_dto_1 = require("./dto/resend-login-otp.dto");
+const verify_login_otp_dto_1 = require("./dto/verify-login-otp.dto");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
 let AuthController = class AuthController {
     auth;
@@ -30,11 +33,22 @@ let AuthController = class AuthController {
     async login(dto, req, res) {
         const ip = req.ip ?? req.headers['x-forwarded-for'];
         const result = await this.auth.login(dto, typeof ip === 'string' ? ip : undefined);
+        if ('requiresOtp' in result)
+            return result;
         this.setRefreshCookie(res, result.refreshToken);
         return {
             accessToken: result.accessToken,
             admin: result.admin,
         };
+    }
+    async verifyLoginOtp(dto, req, res) {
+        const ip = req.ip ?? req.headers['x-forwarded-for'];
+        const result = await this.auth.verifyLoginOtp(dto, typeof ip === 'string' ? ip : undefined);
+        this.setRefreshCookie(res, result.refreshToken);
+        return { accessToken: result.accessToken, admin: result.admin };
+    }
+    resendLoginOtp(dto) {
+        return this.auth.resendLoginOtp(dto);
     }
     async logout(req, res) {
         await this.auth.logout(req.cookies?.refresh_token);
@@ -69,6 +83,7 @@ let AuthController = class AuthController {
 exports.AuthController = AuthController;
 __decorate([
     (0, common_1.Post)('login'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
     __param(2, (0, common_1.Res)({ passthrough: true })),
@@ -76,6 +91,24 @@ __decorate([
     __metadata("design:paramtypes", [login_dto_1.LoginDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "login", null);
+__decorate([
+    (0, common_1.Post)('login/verify-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __param(2, (0, common_1.Res)({ passthrough: true })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [verify_login_otp_dto_1.VerifyLoginOtpDto, Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifyLoginOtp", null);
+__decorate([
+    (0, common_1.Post)('login/resend-otp'),
+    (0, throttler_1.Throttle)({ default: { limit: 4, ttl: 10 * 60_000 } }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [resend_login_otp_dto_1.ResendLoginOtpDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "resendLoginOtp", null);
 __decorate([
     (0, common_1.Post)('logout'),
     __param(0, (0, common_1.Req)()),

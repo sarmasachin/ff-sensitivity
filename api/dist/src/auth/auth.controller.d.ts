@@ -4,11 +4,33 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ResendLoginOtpDto } from './dto/resend-login-otp.dto';
+import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
 export declare class AuthController {
     private readonly auth;
     private readonly config;
     constructor(auth: AuthService, config: ConfigService);
     login(dto: LoginDto, req: {
+        ip?: string;
+        headers: Record<string, string | undefined>;
+    }, res: Response): Promise<{
+        requiresOtp: true;
+        challengeId: string;
+        expiresInSec: number;
+        resendAfterSec: number;
+        maskedEmail: string;
+    } | {
+        accessToken: string;
+        admin: {
+            id: string;
+            email: string;
+            role: string;
+            allowedModules: string[];
+            mustChangePassword: boolean;
+            displayName: string;
+        };
+    }>;
+    verifyLoginOtp(dto: VerifyLoginOtpDto, req: {
         ip?: string;
         headers: Record<string, string | undefined>;
     }, res: Response): Promise<{
@@ -21,6 +43,12 @@ export declare class AuthController {
             mustChangePassword: boolean;
             displayName: string;
         };
+    }>;
+    resendLoginOtp(dto: ResendLoginOtpDto): Promise<{
+        ok: true;
+        expiresInSec: number;
+        resendAfterSec: number;
+        maskedEmail: string;
     }>;
     logout(req: {
         cookies?: {

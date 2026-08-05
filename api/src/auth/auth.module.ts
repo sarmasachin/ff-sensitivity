@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAccessStrategy } from './jwt-access.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { LoginOtpMailService } from './login-otp-mail.service';
 
 @Module({
   imports: [
@@ -21,7 +22,12 @@ import { JwtAuthGuard } from './jwt-auth.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAccessStrategy, JwtAuthGuard],
+  providers: [
+    AuthService,
+    LoginOtpMailService,
+    JwtAccessStrategy,
+    JwtAuthGuard,
+  ],
   exports: [AuthService, JwtAuthGuard, JwtAccessStrategy, PassportModule],
 })
 export class AuthModule {}

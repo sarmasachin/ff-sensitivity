@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 type FieldErrors = {
   email?: string;
   password?: string;
+  otp?: string;
   form?: string;
 };
 
@@ -108,9 +109,17 @@ export function LoginForm() {
   const [remember, setRemember] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [challengeId, setChallengeId] = useState("");
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [resending, setResending] = useState(false);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (challengeId) {
+      await verifyOtp();
+      return;
+    }
     const next: FieldErrors = {};
     const trimmed = email.trim();
 
@@ -137,28 +146,33 @@ export function LoginForm() {
       });
 
       const data = (await res.json().catch(() => null)) as {
+        requiresOtp?: boolean;
+        challengeId?: string;
+        maskedEmail?: string;
         accessToken?: string;
         admin?: { email: string; role: string };
         error?: { message?: string };
       } | null;
 
-      if (!res.ok || !data?.accessToken) {
+      if (!res.ok) {
         setErrors({
           form: data?.error?.message ?? "Sign in failed. Try again.",
         });
         return;
       }
-
-      const storage = remember ? localStorage : sessionStorage;
-      storage.setItem("ffops_access_token", data.accessToken);
-      if (data.admin) {
-        storage.setItem("ffops_admin", JSON.stringify(data.admin));
+      if (data?.requiresOtp && data.challengeId) {
+        setChallengeId(data.challengeId);
+        setMaskedEmail(data.maskedEmail ?? trimmed);
+        setPassword("");
+        setErrors({});
+        return;
       }
-      // clear the other store so remember toggle stays consistent
-      (remember ? sessionStorage : localStorage).removeItem("ffops_access_token");
-      (remember ? sessionStorage : localStorage).removeItem("ffops_admin");
+      if (!data?.accessToken) {
+        setErrors({ form: "Authentication response was incomplete." });
+        return;
+      }
 
-      router.replace("/dashboard");
+      completeLogin(data.accessToken, data.admin);
     } catch {
       setErrors({
         form: "Cannot reach authentication service. Is the API running?",
@@ -166,6 +180,185 @@ export function LoginForm() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function completeLogin(
+    accessToken: string,
+    admin?: { email: string; role: string },
+  ) {
+    const storage = remember ? localStorage : sessionStorage;
+    storage.setItem("ffops_access_token", accessToken);
+    if (admin) storage.setItem("ffops_admin", JSON.stringify(admin));
+    const other = remember ? sessionStorage : localStorage;
+    other.removeItem("ffops_access_token");
+    other.removeItem("ffops_admin");
+    router.replace("/dashboard");
+  }
+
+  async function verifyOtp() {
+    if (!/^\d{6}$/.test(otp)) {
+      setErrors({ otp: "Enter the 6-digit verification code." });
+      return;
+    }
+    setSubmitting(true);
+    setErrors({});
+    try {
+      const apiBase =
+        process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+      const res = await fetch(`${apiBase}/api/v1/auth/login/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ challengeId, code: otp }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        accessToken?: string;
+        admin?: { email: string; role: string };
+        error?: { message?: string };
+      } | null;
+      if (!res.ok || !data?.accessToken) {
+        setErrors({
+          otp: data?.error?.message ?? "Verification failed. Try again.",
+        });
+        return;
+      }
+      completeLogin(data.accessToken, data.admin);
+    } catch {
+      setErrors({ form: "Cannot reach authentication service." });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function resendOtp() {
+    if (resending) return;
+    setResending(true);
+    setErrors({});
+    try {
+      const apiBase =
+        process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+      const res = await fetch(`${apiBase}/api/v1/auth/login/resend-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeId }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      if (!res.ok) {
+        setErrors({
+          form: data?.error?.message ?? "Could not resend the code.",
+        });
+        return;
+      }
+      setOtp("");
+      setErrors({ form: "A new verification code has been sent." });
+    } catch {
+      setErrors({ form: "Cannot reach authentication service." });
+    } finally {
+      setResending(false);
+    }
+  }
+
+  if (challengeId) {
+    return (
+      <form onSubmit={onSubmit} noValidate className="space-y-4">
+        <div className="rounded-[16px] border border-[#bfdbfe] bg-gradient-to-b from-[#eff6ff] to-white p-5 text-center">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#1e3a8a] text-white shadow-[0_8px_20px_rgba(30,58,138,0.2)]">
+            <LockIcon />
+          </div>
+          <h2 className="mt-3 text-[17px] font-semibold text-[#0f172a]">
+            Check your email
+          </h2>
+          <p className="mt-1 text-[12px] leading-5 text-[#64748b]">
+            We sent a 6-digit security code to
+            <br />
+            <span className="font-semibold text-[#334155]">{maskedEmail}</span>
+          </p>
+        </div>
+
+        {errors.form ? (
+          <div
+            role="status"
+            className={`rounded-[12px] px-3.5 py-2.5 text-[12px] ${
+              errors.form.startsWith("A new")
+                ? "bg-[#eff6ff] text-[#1d4ed8]"
+                : "bg-[#fef2f2] text-[#dc2626]"
+            }`}
+          >
+            {errors.form}
+          </div>
+        ) : null}
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="ops-otp"
+            className="block text-center text-[12px] font-semibold uppercase tracking-[0.12em] text-[#64748b]"
+          >
+            Verification code
+          </label>
+          <input
+            id="ops-otp"
+            name="otp"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={otp}
+            autoFocus
+            onChange={(e) => {
+              setOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+              if (errors.otp || errors.form) setErrors({});
+            }}
+            className="h-[58px] w-full rounded-[14px] border border-[#cbd5e1] bg-[#f8fafc] px-4 text-center font-mono text-[26px] font-bold tracking-[0.35em] text-[#1e3a8a] outline-none transition focus:border-[#2563eb] focus:bg-white focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)]"
+            aria-invalid={Boolean(errors.otp)}
+            aria-describedby={errors.otp ? "ops-otp-err" : undefined}
+          />
+          {errors.otp ? (
+            <p
+              id="ops-otp-err"
+              className="text-center text-[12px] text-[#dc2626]"
+            >
+              {errors.otp}
+            </p>
+          ) : null}
+        </div>
+
+        <button
+          type="submit"
+          disabled={submitting || otp.length !== 6}
+          className="flex h-[46px] w-full items-center justify-center rounded-[12px] bg-[#1b3a8a] text-[14px] font-semibold text-white transition-colors hover:bg-[#152e6e] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {submitting ? "Verifying…" : "Verify and sign in"}
+        </button>
+
+        <div className="flex items-center justify-between gap-3 text-[12px]">
+          <button
+            type="button"
+            onClick={() => {
+              setChallengeId("");
+              setOtp("");
+              setErrors({});
+            }}
+            className="font-medium text-[#64748b] hover:text-[#1e3a8a]"
+          >
+            Use another account
+          </button>
+          <button
+            type="button"
+            disabled={resending}
+            onClick={resendOtp}
+            className="font-semibold text-[#1e3a8a] hover:underline disabled:opacity-50"
+          >
+            {resending ? "Sending…" : "Resend code"}
+          </button>
+        </div>
+
+        <p className="rounded-[10px] bg-[#fffbeb] px-3 py-2 text-center text-[11px] leading-4 text-[#92400e]">
+          Code expires in 10 minutes. Never share it with anyone.
+        </p>
+      </form>
+    );
   }
 
   return (

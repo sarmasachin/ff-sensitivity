@@ -73,6 +73,15 @@ cd /var/www/ff-sensitivity/api
 cp .env.example .env
 # edit .env: PORT=4010, CORS_ORIGIN=https://app.sensitivitysettings.com,
 # DATABASE_URL, JWT secrets, GOOGLE_WEB_CLIENT_ID, SUPERADMIN_*
+# Admin OTP:
+# ADMIN_OTP_ENABLED=true
+# ADMIN_OTP_SECRET=<random 64+ character secret>
+# SMTP_HOST=smtp.hostinger.com
+# SMTP_PORT=465
+# SMTP_USER=no-reply@sensitivitysettings.com
+# SMTP_PASSWORD=<Hostinger mailbox password>
+# SMTP_FROM_EMAIL=no-reply@sensitivitysettings.com
+# SMTP_FROM_NAME=FF Sensitivity Ops
 
 npm ci
 npx prisma generate
