@@ -71,14 +71,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ShareCommunityTab(modifier: Modifier = Modifier) {
+fun ShareCommunityTab(
+    modifier: Modifier = Modifier,
+    onRequireSignIn: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var viewing by remember { mutableStateOf<SharedSensiCard?>(null) }
     var sharing by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     var cards by remember { mutableStateOf<List<SharedSensiCard>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    var authRequired by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableStateOf(0) }
 
     fun reload() {
@@ -88,6 +93,7 @@ fun ShareCommunityTab(modifier: Modifier = Modifier) {
     LaunchedEffect(refreshKey) {
         loading = true
         loadError = null
+        authRequired = false
         val result = withContext(Dispatchers.IO) {
             CommunityRepository.feed(context)
         }
@@ -95,10 +101,12 @@ fun ShareCommunityTab(modifier: Modifier = Modifier) {
             onSuccess = { list ->
                 cards = list.filter { it.isValidForDisplay() }
                 loadError = null
+                authRequired = false
             },
             onFailure = { err ->
                 AppLog.e("Community feed load failed", err)
                 cards = emptyList()
+                authRequired = err is ApiException && err.code == "AUTH_REQUIRED"
                 loadError = when (err) {
                     is ApiException -> err.message
                     is java.net.ConnectException,
@@ -117,21 +125,28 @@ fun ShareCommunityTab(modifier: Modifier = Modifier) {
         if (sharing) return
         sharing = true
         scope.launch {
-            val ok = runCatching {
-                val bmp = withContext(Dispatchers.Default) {
-                    ShareCardBitmap.render(card)
-                }
-                val caption = ShareCardBitmap.captionText(card)
-                val shared = SafeOps.shareImageAndText(
-                    context = context,
-                    title = "Share sensitivity card",
-                    bitmap = bmp,
-                    caption = caption
-                )
-                runCatching { bmp.recycle() }
-                shared
-            }.getOrElse { false }
-            sharing = false
+            val ok = try {
+                runCatching {
+                    val bmp = withContext(Dispatchers.Default) {
+                        ShareCardBitmap.render(card)
+                    }
+                    try {
+                        val file = withContext(Dispatchers.IO) {
+                            SafeOps.writeSharePng(context, bmp)
+                        } ?: return@runCatching false
+                        SafeOps.shareImageFile(
+                            context = context,
+                            title = "Share sensitivity card",
+                            file = file,
+                            caption = ShareCardBitmap.captionText(card)
+                        )
+                    } finally {
+                        runCatching { bmp.recycle() }
+                    }
+                }.getOrElse { false }
+            } finally {
+                sharing = false
+            }
             if (!ok) {
                 SafeOps.toast(context, "Could not share card. Try again.")
             }
@@ -178,11 +193,13 @@ fun ShareCommunityTab(modifier: Modifier = Modifier) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Tap to retry",
+                        text = if (authRequired) "Sign in" else "Tap to retry",
                         color = Amber,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { reload() }
+                        modifier = Modifier.clickable {
+                            if (authRequired) onRequireSignIn() else reload()
+                        }
                     )
                 }
             }
@@ -230,24 +247,36 @@ fun ShareCommunityTab(modifier: Modifier = Modifier) {
                 },
                 onShare = { shareCardImage(card) },
                 onReport = {
+                    if (reporting) return@ViewSensitivityDialog
+                    reporting = true
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) {
-                            CommunityRepository.report(context, card.id)
-                        }
-                        result.fold(
-                            onSuccess = {
-                                SafeOps.toast(context, "Reported. Thanks — staff will review.")
-                                viewing = null
-                            },
-                            onFailure = { err ->
-                                AppLog.e("Community report failed", err)
-                                val msg = when (err) {
-                                    is ApiException -> err.message
-                                    else -> "Could not report. Try again."
-                                }
-                                SafeOps.toast(context, msg)
+                        try {
+                            val result = withContext(Dispatchers.IO) {
+                                CommunityRepository.report(context, card.id)
                             }
-                        )
+                            result.fold(
+                                onSuccess = {
+                                    SafeOps.toast(context, "Reported. Thanks — staff will review.")
+                                    viewing = null
+                                },
+                                onFailure = { err ->
+                                    AppLog.e("Community report failed", err)
+                                    if (err is ApiException && err.code == "AUTH_REQUIRED") {
+                                        SafeOps.toast(context, err.message)
+                                        viewing = null
+                                        onRequireSignIn()
+                                    } else {
+                                        val msg = when (err) {
+                                            is ApiException -> err.message
+                                            else -> "Could not report. Try again."
+                                        }
+                                        SafeOps.toast(context, msg)
+                                    }
+                                }
+                            )
+                        } finally {
+                            reporting = false
+                        }
                     }
                 }
             )
@@ -674,7 +703,9 @@ private fun formatCount(value: Int): String =
 private fun SharedSensiCard.isValidForDisplay(): Boolean {
     if (id.isBlank() || name.isBlank() || freeFireId.isBlank()) return false
     if (rank.isBlank() || role.isBlank() || deviceLabel.isBlank()) return false
-    if (matches < 0 || kills < 0 || headshots < 0) return false
+    if (matches !in 0..SHARE_STAT_MAX) return false
+    if (kills !in 0..SHARE_STAT_MAX) return false
+    if (headshots !in 0..SHARE_STAT_MAX) return false
     val values = listOf(general, redDot, scope2x, scope4x, awm, freeLook)
     return values.all { it in 0..200 }
 }

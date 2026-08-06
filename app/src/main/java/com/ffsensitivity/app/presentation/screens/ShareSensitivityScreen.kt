@@ -1,5 +1,6 @@
 package com.ffsensitivity.app.presentation.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.AppSession
 import com.ffsensitivity.app.data.DeviceInfoFetcher
 import com.ffsensitivity.app.data.SharedSensiCard
+import com.ffsensitivity.app.data.UserSessionStore
 import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.CommunityRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
@@ -50,7 +52,7 @@ private val ROLE_OPTIONS = listOf(
     "Rusher", "Sniper", "Entry", "Support", "Mixed"
 )
 
-private enum class ShareRetryKind { LOAD_DEVICE, SHARE_CARD }
+private enum class ShareRetryKind { LOAD_DEVICE, SHARE_CARD, SIGN_IN }
 
 private data class ShareUiError(
     val code: String,
@@ -62,7 +64,8 @@ private data class ShareUiError(
 @Composable
 fun ShareSensitivityScreen(
     contentPadding: PaddingValues,
-    onBack: () -> Boolean
+    onBack: () -> Boolean,
+    onRequireSignIn: () -> Boolean = { false }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -130,38 +133,62 @@ fun ShareSensitivityScreen(
         }
     }
 
+    fun goSignIn() {
+        clearError()
+        val ok = runCatching { onRequireSignIn() }.getOrElse {
+            AppLog.e("Share sign-in navigate failed", it)
+            false
+        }
+        if (!ok) {
+            showError(
+                code = "AUTH_REQUIRED",
+                title = "Sign in required",
+                message = "Please sign in again to use Community share.",
+                retryKind = ShareRetryKind.SIGN_IN
+            )
+        }
+    }
+
+    BackHandler {
+        backSafe()
+    }
+
     suspend fun loadDevice(force: Boolean = false) {
         if (!force && deviceLabel.isNotBlank()) return
+        if (deviceLoading) return
         deviceLoading = true
         deviceFailed = false
         clearError()
-        val info = withContext(Dispatchers.Default) {
-            runCatching { DeviceInfoFetcher.fetch(context) }.getOrElse {
-                AppLog.e("Share device fetch failed", it)
-                null
+        try {
+            val info = withContext(Dispatchers.Default) {
+                runCatching { DeviceInfoFetcher.fetch(context) }.getOrElse {
+                    AppLog.e("Share device fetch failed", it)
+                    null
+                }
             }
-        }
-        if (info != null && info.deviceLabel.isNotBlank()) {
-            AppSession.deviceInfo = info
-            deviceLabel = info.deviceLabel
-            deviceMeta = listOfNotNull(
-                info.ramLabel.takeIf { it.isNotBlank() },
-                info.maxRefreshLabel.takeIf { it.isNotBlank() }
-            ).joinToString(" · ")
-            deviceFailed = false
-            deviceManual = false
-        } else {
-            deviceFailed = true
-            if (deviceLabel.isBlank()) {
-                showError(
-                    code = "SHARE_DEVICE_FAILED",
-                    title = "Device not detected",
-                    message = "Could not detect your phone. Retry or enter the name manually.",
-                    retryKind = ShareRetryKind.LOAD_DEVICE
-                )
+            if (info != null && info.deviceLabel.isNotBlank()) {
+                AppSession.deviceInfo = info
+                deviceLabel = info.deviceLabel
+                deviceMeta = listOfNotNull(
+                    info.ramLabel.takeIf { it.isNotBlank() },
+                    info.maxRefreshLabel.takeIf { it.isNotBlank() }
+                ).joinToString(" · ")
+                deviceFailed = false
+                deviceManual = false
+            } else {
+                deviceFailed = true
+                if (deviceLabel.isBlank()) {
+                    showError(
+                        code = "SHARE_DEVICE_FAILED",
+                        title = "Device not detected",
+                        message = "Could not detect your phone. Retry or enter the name manually.",
+                        retryKind = ShareRetryKind.LOAD_DEVICE
+                    )
+                }
             }
+        } finally {
+            deviceLoading = false
         }
-        deviceLoading = false
     }
 
     fun shareCard() {
@@ -170,18 +197,26 @@ fun ShareSensitivityScreen(
             return
         }
         clearError()
+        if (UserSessionStore(context).accessToken().isBlank()) {
+            showError(
+                code = "AUTH_REQUIRED",
+                title = "Sign in required",
+                message = "Please sign in again to share to Community.",
+                retryKind = ShareRetryKind.SIGN_IN
+            )
+            return
+        }
         val matchesNum = matches.toIntOrNull()
         val killsNum = kills.toIntOrNull()
         val headshotsNum = headshots.toIntOrNull()
         val effectiveDevice = deviceLabel.trim()
         val ffIdOk = freeFireId.trim().length in 5..15
+        val statsOk = isStatValue(matches) && isStatValue(kills) && isStatValue(headshots)
         val canSubmit = name.trim().isNotEmpty() &&
             ffIdOk &&
             rank != null &&
             role != null &&
-            matchesNum != null && matchesNum >= 0 &&
-            killsNum != null && killsNum >= 0 &&
-            headshotsNum != null && headshotsNum >= 0 &&
+            statsOk &&
             effectiveDevice.isNotEmpty() &&
             effectiveDevice != "Device unavailable" &&
             listOf(general, redDot, scope2x, scope4x, awm, freeLook).all { isSensiValue(it) }
@@ -195,9 +230,9 @@ fun ShareSensitivityScreen(
                     ffIdOk = ffIdOk,
                     rank = rank,
                     role = role,
-                    matchesOk = matchesNum != null,
-                    killsOk = killsNum != null,
-                    headshotsOk = headshotsNum != null,
+                    matchesOk = isStatValue(matches),
+                    killsOk = isStatValue(kills),
+                    headshotsOk = isStatValue(headshots),
                     deviceOk = effectiveDevice.isNotEmpty(),
                     sensiOk = listOf(general, redDot, scope2x, scope4x, awm, freeLook)
                         .all { isSensiValue(it) }
@@ -208,85 +243,104 @@ fun ShareSensitivityScreen(
 
         sharing = true
         scope.launch {
-            val card = SharedSensiCard(
-                id = "mine_${System.currentTimeMillis()}",
-                name = name.trim(),
-                freeFireId = freeFireId.trim(),
-                rank = rank.orEmpty(),
-                role = role.orEmpty(),
-                deviceLabel = effectiveDevice,
-                deviceMeta = deviceMeta.trim(),
-                matches = matchesNum ?: 0,
-                kills = killsNum ?: 0,
-                headshots = headshotsNum ?: 0,
-                general = general.toInt(),
-                redDot = redDot.toInt(),
-                scope2x = scope2x.toInt(),
-                scope4x = scope4x.toInt(),
-                awm = awm.toInt(),
-                freeLook = freeLook.toInt()
-            )
+            try {
+                val card = SharedSensiCard(
+                    id = "mine_${System.currentTimeMillis()}",
+                    name = name.trim().take(24),
+                    freeFireId = freeFireId.trim(),
+                    rank = rank.orEmpty(),
+                    role = role.orEmpty(),
+                    deviceLabel = effectiveDevice.take(80),
+                    deviceMeta = deviceMeta.trim().take(80),
+                    matches = matchesNum ?: 0,
+                    kills = killsNum ?: 0,
+                    headshots = headshotsNum ?: 0,
+                    general = general.toInt(),
+                    redDot = redDot.toInt(),
+                    scope2x = scope2x.toInt(),
+                    scope4x = scope4x.toInt(),
+                    awm = awm.toInt(),
+                    freeLook = freeLook.toInt()
+                )
 
-            val nest = withContext(Dispatchers.IO) {
-                CommunityRepository.submit(context, card)
-            }
-            nest.fold(
-                onSuccess = { submitted ->
-                    val shared = runCatching {
-                        val bmp = withContext(Dispatchers.Default) {
-                            ShareCardBitmap.render(card)
-                        }
-                        val caption = ShareCardBitmap.captionText(card)
-                        val ok = SafeOps.shareImageAndText(
-                            context = context,
-                            title = "Share sensitivity card",
-                            bitmap = bmp,
-                            caption = caption
-                        )
-                        runCatching { bmp.recycle() }
-                        ok
-                    }.getOrElse {
-                        AppLog.e("Share card image failed", it)
-                        false
-                    }
-                    SafeOps.toast(
-                        context,
-                        if (shared) {
-                            "Submitted for review · share sheet opened"
-                        } else {
-                            submitted.message.ifBlank { "Submitted for review." }
-                        }
-                    )
-                },
-                onFailure = { err ->
-                    AppLog.e("Community submit failed", err)
-                    showError(
-                        code = when (err) {
-                            is ApiException -> err.code
-                            else -> "SHARE_SUBMIT_FAILED"
-                        },
-                        title = "Couldn’t submit to Community",
-                        message = when (err) {
-                            is ApiException -> err.message
-                            is java.net.ConnectException,
-                            is java.net.SocketTimeoutException,
-                            is java.net.UnknownHostException,
-                            is java.io.IOException ->
-                                "Can't reach the server. Check Wi‑Fi and make sure the API is running."
-                            else -> "Submit failed. Try again."
-                        },
-                        retryKind = ShareRetryKind.SHARE_CARD
-                    )
+                val nest = withContext(Dispatchers.IO) {
+                    CommunityRepository.submit(context, card)
                 }
-            )
-            sharing = false
+                nest.fold(
+                    onSuccess = { submitted ->
+                        val shared = runCatching {
+                            val bmp = withContext(Dispatchers.Default) {
+                                ShareCardBitmap.render(card)
+                            }
+                            try {
+                                val file = withContext(Dispatchers.IO) {
+                                    SafeOps.writeSharePng(context, bmp)
+                                } ?: return@runCatching false
+                                SafeOps.shareImageFile(
+                                    context = context,
+                                    title = "Share sensitivity card",
+                                    file = file,
+                                    caption = ShareCardBitmap.captionText(card)
+                                )
+                            } finally {
+                                runCatching { bmp.recycle() }
+                            }
+                        }.getOrElse {
+                            AppLog.e("Share card image failed", it)
+                            false
+                        }
+                        SafeOps.toast(
+                            context,
+                            if (shared) {
+                                "Submitted for review · share sheet opened"
+                            } else {
+                                submitted.message.ifBlank { "Submitted for review." }
+                            }
+                        )
+                    },
+                    onFailure = { err ->
+                        AppLog.e("Community submit failed", err)
+                        val auth = err is ApiException && err.code == "AUTH_REQUIRED"
+                        showError(
+                            code = when (err) {
+                                is ApiException -> err.code
+                                else -> "SHARE_SUBMIT_FAILED"
+                            },
+                            title = if (auth) "Sign in required" else "Couldn’t submit to Community",
+                            message = when (err) {
+                                is ApiException -> err.message
+                                is java.net.ConnectException,
+                                is java.net.SocketTimeoutException,
+                                is java.net.UnknownHostException,
+                                is java.io.IOException ->
+                                    "Can't reach the server. Check your connection and try again."
+                                else -> "Submit failed. Try again."
+                            },
+                            retryKind = if (auth) {
+                                ShareRetryKind.SIGN_IN
+                            } else {
+                                ShareRetryKind.SHARE_CARD
+                            }
+                        )
+                    }
+                )
+            } finally {
+                sharing = false
+            }
         }
     }
 
     fun runRetry(error: ShareUiError) {
         when (error.retryKind) {
-            ShareRetryKind.LOAD_DEVICE -> scope.launch { loadDevice(force = true) }
+            ShareRetryKind.LOAD_DEVICE -> {
+                if (deviceLoading) {
+                    showBusy()
+                    return
+                }
+                scope.launch { loadDevice(force = true) }
+            }
             ShareRetryKind.SHARE_CARD -> shareCard()
+            ShareRetryKind.SIGN_IN -> goSignIn()
             null -> Unit
         }
     }
@@ -310,9 +364,9 @@ fun ShareSensitivityScreen(
         ffIdOk &&
         rank != null &&
         role != null &&
-        matchesNum != null && matchesNum >= 0 &&
-        killsNum != null && killsNum >= 0 &&
-        headshotsNum != null && headshotsNum >= 0 &&
+        isStatValue(matches) &&
+        isStatValue(kills) &&
+        isStatValue(headshots) &&
         effectiveDevice.isNotEmpty() &&
         effectiveDevice != "Device unavailable" &&
         listOf(general, redDot, scope2x, scope4x, awm, freeLook).all { isSensiValue(it) }
@@ -326,9 +380,9 @@ fun ShareSensitivityScreen(
             ffIdOk = ffIdOk,
             rank = rank,
             role = role,
-            matchesOk = matchesNum != null,
-            killsOk = killsNum != null,
-            headshotsOk = headshotsNum != null,
+            matchesOk = isStatValue(matches),
+            killsOk = isStatValue(kills),
+            headshotsOk = isStatValue(headshots),
             deviceOk = effectiveDevice.isNotEmpty(),
             sensiOk = listOf(general, redDot, scope2x, scope4x, awm, freeLook).all { isSensiValue(it) }
         )
@@ -350,7 +404,11 @@ fun ShareSensitivityScreen(
                     title = err.title,
                     message = err.message,
                     onDismiss = { clearError() },
-                    retryLabel = if (err.retryKind != null) "Retry" else null,
+                    retryLabel = when (err.retryKind) {
+                        ShareRetryKind.SIGN_IN -> "Sign in"
+                        null -> null
+                        else -> "Retry"
+                    },
                     onRetry = if (err.retryKind != null) {
                         { runRetry(err) }
                     } else {
@@ -444,7 +502,7 @@ fun ShareSensitivityScreen(
                                 value = matches,
                                 onValueChange = {
                                     clearError()
-                                    matches = it.filter(Char::isDigit).take(7)
+                                    matches = clampStatInput(it)
                                 },
                                 label = "Matches",
                                 placeholder = "0",
@@ -455,7 +513,7 @@ fun ShareSensitivityScreen(
                                 value = kills,
                                 onValueChange = {
                                     clearError()
-                                    kills = it.filter(Char::isDigit).take(7)
+                                    kills = clampStatInput(it)
                                 },
                                 label = "Kills",
                                 placeholder = "0",
@@ -468,7 +526,7 @@ fun ShareSensitivityScreen(
                             value = headshots,
                             onValueChange = {
                                 clearError()
-                                headshots = it.filter(Char::isDigit).take(7)
+                                headshots = clampStatInput(it)
                             },
                             label = "Total Headshots",
                             placeholder = "0",
@@ -489,7 +547,11 @@ fun ShareSensitivityScreen(
                             meta = deviceMeta,
                             showRetry = deviceFailed || (!deviceLoading && effectiveDevice.isEmpty()),
                             onRetry = {
-                                scope.launch { loadDevice(force = true) }
+                                if (deviceLoading) {
+                                    showBusy()
+                                } else {
+                                    scope.launch { loadDevice(force = true) }
+                                }
                             },
                             onEnterManual = { deviceManual = true }
                         )
@@ -567,7 +629,8 @@ fun ShareSensitivityScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp)
+                            .padding(horizontal = 20.dp),
+                        onRequireSignIn = { goSignIn() }
                     )
                 }
             }

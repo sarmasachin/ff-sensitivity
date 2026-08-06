@@ -217,7 +217,7 @@ export const APP_DEFAULT_CONFIG: AppRemoteConfig = {
   links: {
     playStoreUrl:
       "https://play.google.com/store/apps/details?id=com.ffsensitivity.app",
-    privacyUrl: "https://sensitivitysettings.com/privacy-policy",
+    privacyUrl: "https://app.sensitivitysettings.com/privacy",
     websiteUrl: "https://sensitivitysettings.com",
     supportEmail: "support@sensitivitysettings.com",
   },

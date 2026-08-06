@@ -79,6 +79,10 @@ fun AboutScreen(
     }
 
     val copy = com.ffsensitivity.app.data.remote.CopyRepository.snapshot()
+    // App About is owned by the Android app — not website CMS one-liners.
+    val appAbout = remember {
+        com.ffsensitivity.app.data.remote.CopyDefaults.bundle().about
+    }
 
     val websiteHost = remember {
         runCatching {
@@ -216,7 +220,7 @@ fun AboutScreen(
                         letterSpacing = 1.4.sp
                     )
                     Text(
-                        text = copy.about.headline.ifBlank { "FF Sensitivity" },
+                        text = appAbout.headline,
                         color = InkPrimary,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.SemiBold
@@ -249,23 +253,21 @@ fun AboutScreen(
                     .padding(18.dp)
             ) {
                 Text(
-                    text = copy.about.headline.ifBlank { "Precision tools for Free Fire & Max" },
+                    text = "Made for Free Fire players",
                     color = InkPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = copy.about.blurb.ifBlank {
-                        "Sensitivity, HUD, graphics, safe DPI, stylish names, redeem codes, daily challenges and share cards — tuned for your device."
-                    },
+                    text = appAbout.blurb,
                     color = InkSecondary,
                     fontSize = 13.sp,
                     lineHeight = 19.sp
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
-                    text = copy.about.websiteCta.ifBlank { "Website" },
+                    text = appAbout.websiteCta,
                     color = InkMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -292,7 +294,7 @@ fun AboutScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = copy.about.privacyCta.ifBlank { "View privacy policy" },
+                    text = appAbout.privacyCta,
                     color = AmberHot,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -303,7 +305,7 @@ fun AboutScreen(
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
-                    text = "${copy.about.versionPrefix.ifBlank { "Version" }} $safeVersion",
+                    text = "${appAbout.versionPrefix} $safeVersion",
                     color = InkMuted,
                     fontSize = 12.sp
                 )

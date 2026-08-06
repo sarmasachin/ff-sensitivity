@@ -11,7 +11,8 @@ import com.ffsensitivity.app.BuildConfig
  * (release builds already ignore it even if left true).
  */
 object ScratchCardDebug {
-    const val UNLOCK_FIRST_THREE_FOR_QA = true
+    /** Keep false for real streak gating (debug QA unlock off). */
+    const val UNLOCK_FIRST_THREE_FOR_QA = false
 
     val forceUnlockDays: Set<Int>
         get() = if (BuildConfig.DEBUG && UNLOCK_FIRST_THREE_FOR_QA) {

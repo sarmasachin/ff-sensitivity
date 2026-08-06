@@ -29,10 +29,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.BuildConfig
+import com.ffsensitivity.app.data.AppLinks
 import com.ffsensitivity.app.data.GoogleAuthClient
 import com.ffsensitivity.app.data.GoogleSignInOutcome
 import com.ffsensitivity.app.data.GoogleSignInResult
@@ -41,13 +41,13 @@ import com.ffsensitivity.app.data.remote.NestUserSession
 import com.ffsensitivity.app.data.remote.UserAuthApi
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.Danger
-import com.ffsensitivity.app.presentation.theme.Hairline
 import com.ffsensitivity.app.presentation.theme.InkMuted
 import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.presentation.theme.SurfaceCard
 import com.ffsensitivity.app.presentation.theme.SurfaceLift
 import com.ffsensitivity.app.presentation.theme.VoidBlack
 import com.ffsensitivity.app.util.AppLog
+import com.ffsensitivity.app.util.SafeOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,11 +63,37 @@ fun LoginScreen(
 ) {
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var termsAccepted by remember { mutableStateOf(false) }
+    var showTermsSheet by remember { mutableStateOf(false) }
+    var showPrivacySheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val activity = context as? Activity
     val authClient = remember(context) { GoogleAuthClient(context) }
     val cardShape = RoundedCornerShape(24.dp)
+
+    if (showTermsSheet) {
+        LoginTermsSheet(
+            onDismiss = { showTermsSheet = false },
+            onReadMore = {
+                val ok = SafeOps.openUrl(context, AppLinks.TERMS)
+                if (!ok) {
+                    SafeOps.toast(context, "Could not open Terms & Conditions")
+                }
+            }
+        )
+    }
+    if (showPrivacySheet) {
+        LoginPrivacySheet(
+            onDismiss = { showPrivacySheet = false },
+            onReadMore = {
+                val ok = SafeOps.openUrl(context, AppLinks.PRIVACY_POLICY)
+                if (!ok) {
+                    SafeOps.toast(context, "Could not open Privacy Policy")
+                }
+            }
+        )
+    }
 
     Box(
         modifier = modifier
@@ -128,6 +154,10 @@ fun LoginScreen(
                         loading = loading,
                         onClick = {
                             if (loading) return@LoginGoogleButton
+                            if (!termsAccepted) {
+                                error = "Please accept the Terms & Conditions to continue."
+                                return@LoginGoogleButton
+                            }
                             if (activity == null) {
                                 error = "Something went wrong. Please try again."
                                 return@LoginGoogleButton
@@ -167,9 +197,9 @@ fun LoginScreen(
                                                     is java.net.ConnectException,
                                                     is java.net.SocketTimeoutException,
                                                     is java.net.UnknownHostException ->
-                                                        "Can't reach the server. Check Wi‑Fi and make sure the API is running."
+                                                        "Can't reach the server. Check your connection and try again."
                                                     is java.io.IOException ->
-                                                        "Can't reach the server. Check Wi‑Fi and make sure the API is running."
+                                                        "Can't reach the server. Check your connection and try again."
                                                     // Google succeeded; the API exchange is what failed.
                                                     else -> if (BuildConfig.DEBUG) {
                                                         "Signed in with Google, but the server call failed.\n[debug] ${err.javaClass.simpleName}: ${err.message?.take(240)}"
@@ -193,6 +223,18 @@ fun LoginScreen(
                         }
                     )
 
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    LoginTermsCheckboxRow(
+                        checked = termsAccepted,
+                        onCheckedChange = {
+                            termsAccepted = it
+                            if (it) error = null
+                        },
+                        onOpenTerms = { showTermsSheet = true },
+                        onOpenPrivacy = { showPrivacySheet = true }
+                    )
+
                     if (!error.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
@@ -203,26 +245,6 @@ fun LoginScreen(
                             lineHeight = 17.sp
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(Hairline)
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Text(
-                        text = "No email/password · no guest access. Google Sign-In only.",
-                        color = InkMuted,
-                        fontSize = 11.sp,
-                        lineHeight = 16.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
 
@@ -239,15 +261,8 @@ fun LoginScreen(
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 0.4.sp
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "By continuing you agree to the app terms & privacy policy.",
-                    color = InkMuted.copy(alpha = 0.85f),
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 15.sp
-                )
             }
         }
     }
 }
+

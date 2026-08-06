@@ -26,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +63,7 @@ import com.ffsensitivity.app.presentation.components.ScratchMysteryUnderlay
 import com.ffsensitivity.app.presentation.components.ScratchRevealOutcome
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
+import com.ffsensitivity.app.presentation.theme.Danger
 import com.ffsensitivity.app.presentation.theme.HairlineStrong
 import com.ffsensitivity.app.presentation.theme.InkMuted
 import com.ffsensitivity.app.presentation.theme.InkPrimary
@@ -88,66 +88,93 @@ private const val SCRATCH_BRUSH_DP = 28f
 fun MilestoneScratchCardDialog(
     milestone: StreakMilestone,
     onDismiss: () -> Unit,
-    onUnlocked: () -> Boolean
+    /** True when user already scratched but claim failed — foil stays open across reopen. */
+    startRevealed: Boolean = false,
+    onRevealed: () -> Unit = {},
+    /** Server claim — coins only when this returns true. */
+    onClaim: suspend () -> ScratchClaimUiResult
 ) {
     val context = LocalContext.current
     val obsidianFoil = remember(context) { ShopStore.hasObsidianFoil(context) }
-    var revealed by remember { mutableStateOf(false) }
+    var revealed by remember { mutableStateOf(startRevealed) }
     var unlockInFlight by remember { mutableStateOf(false) }
     var claimOk by remember { mutableStateOf(false) }
-    var revealPreview by remember { mutableStateOf(ScratchRevealOutcome.PENDING) }
-    var foilSession by remember { mutableIntStateOf(0) }
-    val foilAlpha = remember { Animatable(1f) }
+    var claimError by remember { mutableStateOf<String?>(null) }
+    var revealPreview by remember {
+        mutableStateOf(
+            if (startRevealed) ScratchRevealOutcome.WIN else ScratchRevealOutcome.PENDING
+        )
+    }
+    val foilAlpha = remember { Animatable(if (startRevealed) 0f else 1f) }
     val foilAlphaValue = foilAlpha.value
     val scope = rememberCoroutineScope()
     val canDismiss = !unlockInFlight
     val outcome = when {
-        claimOk -> ScratchRevealOutcome.WIN
+        claimOk || revealed -> ScratchRevealOutcome.WIN
         revealPreview != ScratchRevealOutcome.PENDING -> revealPreview
         else -> ScratchRevealOutcome.PENDING
     }
 
-    fun finishReveal() {
-        if (revealed || unlockInFlight) return
-        revealed = true
+    fun runClaim() {
+        if (unlockInFlight || claimOk) return
         unlockInFlight = true
+        claimError = null
         scope.launch {
-            revealPreview = ScratchRevealOutcome.WIN
             try {
-                foilAlpha.animateTo(0f, tween(420))
-                val ok = runCatching { onUnlocked() }.getOrElse {
-                    AppLog.e("Scratch unlock callback failed", it)
-                    false
+                val result = runCatching { onClaim() }.getOrElse {
+                    AppLog.e("Scratch claim callback failed", it)
+                    ScratchClaimUiResult(
+                        ok = false,
+                        message = "Claim failed. Try again."
+                    )
                 }
-                if (!ok) {
-                    runCatching {
-                        foilAlpha.snapTo(1f)
-                        revealed = false
-                        claimOk = false
-                        revealPreview = ScratchRevealOutcome.PENDING
-                        foilSession++
-                    }.onFailure {
-                        AppLog.e("Scratch reset failed", it)
-                    }
-                } else {
+                if (result.ok) {
                     claimOk = true
+                    claimError = null
+                } else {
+                    // Keep foil open — user already scratched; allow Retry claim.
+                    claimError = result.message.ifBlank { "Claim failed. Try again." }
                 }
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {
-                AppLog.e("Scratch reveal failed", t)
-                runCatching {
-                    foilAlpha.snapTo(1f)
-                    revealed = false
-                    claimOk = false
-                    revealPreview = ScratchRevealOutcome.PENDING
-                    foilSession++
-                }.onFailure {
-                    AppLog.e("Scratch reset failed", it)
-                }
+                AppLog.e("Scratch claim failed", t)
+                claimError = "Claim failed. Try again."
             } finally {
                 unlockInFlight = false
             }
+        }
+    }
+
+    fun finishReveal() {
+        if (revealed || unlockInFlight || claimOk) return
+        revealed = true
+        unlockInFlight = true
+        claimError = null
+        onRevealed()
+        scope.launch {
+            revealPreview = ScratchRevealOutcome.WIN
+            try {
+                foilAlpha.animateTo(0f, tween(420))
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                AppLog.e("Scratch foil animate failed", t)
+            }
+            unlockInFlight = false
+            // Foil stays cleared even if claim fails.
+            runClaim()
+        }
+    }
+
+    LaunchedEffect(startRevealed) {
+        if (startRevealed && !claimOk) {
+            revealed = true
+            revealPreview = ScratchRevealOutcome.WIN
+            if (foilAlpha.value > 0.02f) {
+                runCatching { foilAlpha.snapTo(0f) }
+            }
+            runClaim()
         }
     }
 
@@ -171,6 +198,8 @@ fun MilestoneScratchCardDialog(
             ScratchDialogHeader(
                 title = when {
                     claimOk -> "REWARD CLAIMED"
+                    claimError != null -> "CLAIM PENDING"
+                    revealed -> "PRIZE REVEALED"
                     else -> "SCRATCH REWARD"
                 },
                 subtitle = "Day ${milestone.days} · ${milestone.title}",
@@ -180,16 +209,23 @@ fun MilestoneScratchCardDialog(
             Spacer(modifier = Modifier.height(14.dp))
             Text(
                 text = when {
-                    unlockInFlight -> "Revealing…"
+                    unlockInFlight && !revealed -> "Revealing…"
+                    unlockInFlight -> "Claiming reward…"
                     claimOk -> "You won · close when ready"
+                    claimError != null -> "Prize revealed · claim to collect coins"
                     else -> "Scratch the foil · unlocks at 40%"
                 },
                 color = when {
                     claimOk -> Success
+                    claimError != null -> AmberHot
                     else -> InkSecondary
                 },
                 fontSize = 12.sp,
-                fontWeight = if (claimOk) FontWeight.SemiBold else FontWeight.Normal,
+                fontWeight = if (claimOk || claimError != null) {
+                    FontWeight.SemiBold
+                } else {
+                    FontWeight.Normal
+                },
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -204,6 +240,7 @@ fun MilestoneScratchCardDialog(
                         1.dp,
                         when {
                             claimOk -> AmberHot.copy(alpha = 0.55f)
+                            claimError != null -> Amber.copy(alpha = 0.5f)
                             else -> Amber.copy(alpha = 0.35f)
                         },
                         RoundedCornerShape(20.dp)
@@ -212,21 +249,19 @@ fun MilestoneScratchCardDialog(
                 when (outcome) {
                     ScratchRevealOutcome.WIN -> PrizeUnderlay(
                         milestone = milestone,
-                        celebrating = true
+                        celebrating = claimOk
                     )
                     ScratchRevealOutcome.PENDING -> ScratchMysteryUnderlay()
                 }
                 if (foilAlphaValue > 0.02f) {
-                    key(foilSession) {
-                        ScratchFoilLayer(
-                            alpha = foilAlphaValue,
-                            enabled = !revealed,
-                            obsidian = obsidianFoil,
-                            onProgress = { ratio ->
-                                if (ratio >= SCRATCH_UNLOCK_RATIO) finishReveal()
-                            }
-                        )
-                    }
+                    ScratchFoilLayer(
+                        alpha = foilAlphaValue,
+                        enabled = !revealed,
+                        obsidian = obsidianFoil,
+                        onProgress = { ratio ->
+                            if (ratio >= SCRATCH_UNLOCK_RATIO) finishReveal()
+                        }
+                    )
                 }
                 PremiumWinConfetti(
                     active = claimOk,
@@ -235,21 +270,67 @@ fun MilestoneScratchCardDialog(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                text = when {
-                    unlockInFlight -> "Almost there…"
-                    claimOk -> "Tap ✕ to close"
-                    else -> "Finger scratch · premium foil clears at 40%"
-                },
-                color = if (claimOk) Success else InkMuted,
-                fontSize = 11.sp,
-                fontWeight = if (claimOk) FontWeight.SemiBold else FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+
+            if (claimError != null && !claimOk) {
+                Text(
+                    text = claimError.orEmpty(),
+                    color = Danger,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Brush.horizontalGradient(listOf(Amber, AmberHot)))
+                        .clickable(enabled = !unlockInFlight, onClick = { runClaim() })
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (unlockInFlight) "Claiming…" else "Retry claim",
+                        color = VoidBlack,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Foil stays open · reopen keeps prize · coins only after claim succeeds",
+                    color = InkMuted,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Text(
+                    text = when {
+                        unlockInFlight && revealed -> "Securing coins on server…"
+                        unlockInFlight -> "Almost there…"
+                        claimOk -> "Tap ✕ to close"
+                        else -> "Finger scratch · premium foil clears at 40%"
+                    },
+                    color = if (claimOk) Success else InkMuted,
+                    fontSize = 11.sp,
+                    fontWeight = if (claimOk) FontWeight.SemiBold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
+
+/** Result of post-scratch server claim (coins/code only when ok). */
+data class ScratchClaimUiResult(
+    val ok: Boolean,
+    val message: String = "",
+    /** Redeem: real gift code after successful claim. */
+    val revealedCode: String? = null
+)
 
 @Composable
 private fun ScratchDialogHeader(

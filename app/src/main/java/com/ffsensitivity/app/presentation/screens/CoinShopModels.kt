@@ -5,7 +5,7 @@ import java.util.Locale
 
 internal enum class ShopTab { STORE, OWNED }
 
-internal enum class ShopRetryKind { REFRESH, BUY }
+internal enum class ShopRetryKind { REFRESH, BUY, SIGN_IN }
 
 internal data class ShopUiError(
     val code: String,

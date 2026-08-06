@@ -93,7 +93,7 @@ object AppConfigApi {
 
 object AppConfigDefaults {
     const val WEBSITE = "https://sensitivitysettings.com"
-    const val PRIVACY = "https://sensitivitysettings.com/privacy-policy"
+    const val PRIVACY = "https://app.sensitivitysettings.com/privacy"
     const val PLAY_STORE =
         "https://play.google.com/store/apps/details?id=com.ffsensitivity.app"
     const val SUPPORT_EMAIL = "support@sensitivitysettings.com"

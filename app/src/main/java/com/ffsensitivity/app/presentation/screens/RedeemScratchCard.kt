@@ -29,7 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +67,7 @@ import com.ffsensitivity.app.presentation.components.ScratchMysteryUnderlay
 import com.ffsensitivity.app.presentation.components.ScratchRevealOutcome
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
+import com.ffsensitivity.app.presentation.theme.Danger
 import com.ffsensitivity.app.presentation.theme.HairlineStrong
 import com.ffsensitivity.app.presentation.theme.InkMuted
 import com.ffsensitivity.app.presentation.theme.InkPrimary
@@ -92,64 +92,76 @@ private const val REDEEM_SCRATCH_BRUSH = 28f
 fun RedeemScratchCardDialog(
     item: RedeemCodeItem,
     onDismiss: () -> Unit,
-    // --- Start: Redeem live wire (Sachin) ---
-    onUnlocked: suspend () -> Boolean
-    // --- End: Redeem live wire (Sachin) ---
+    onClaim: suspend () -> ScratchClaimUiResult
 ) {
     val context = LocalContext.current
     val obsidianFoil = remember(context) { ShopStore.hasObsidianFoil(context) }
     var revealed by remember { mutableStateOf(false) }
     var unlockInFlight by remember { mutableStateOf(false) }
     var claimOk by remember { mutableStateOf(false) }
+    var claimError by remember { mutableStateOf<String?>(null) }
+    var unlockedCode by remember { mutableStateOf<String?>(null) }
     var revealPreview by remember { mutableStateOf(ScratchRevealOutcome.PENDING) }
-    var foilSession by remember { mutableIntStateOf(0) }
     val foilAlpha = remember { Animatable(1f) }
     val foilAlphaValue = foilAlpha.value
     val scope = rememberCoroutineScope()
     val canDismiss = !unlockInFlight
+    val displayCode = unlockedCode?.takeIf { it.isNotBlank() } ?: "••••-••••-••••-••••"
     val outcome = when {
-        claimOk -> ScratchRevealOutcome.WIN
+        claimOk || revealed -> ScratchRevealOutcome.WIN
         revealPreview != ScratchRevealOutcome.PENDING -> revealPreview
         else -> ScratchRevealOutcome.PENDING
     }
 
-    fun finishReveal() {
-        if (revealed || unlockInFlight) return
-        revealed = true
+    fun runClaim() {
+        if (unlockInFlight || claimOk) return
         unlockInFlight = true
+        claimError = null
         scope.launch {
-            revealPreview = ScratchRevealOutcome.WIN
             try {
-                foilAlpha.animateTo(0f, tween(420))
-                val ok = runCatching { onUnlocked() }.getOrElse {
-                    AppLog.e("Redeem scratch unlock callback failed", it)
-                    false
+                val result = runCatching { onClaim() }.getOrElse {
+                    AppLog.e("Redeem scratch claim callback failed", it)
+                    ScratchClaimUiResult(
+                        ok = false,
+                        message = "Couldn't unlock this code. Try again."
+                    )
                 }
-                if (!ok) {
-                    runCatching {
-                        foilAlpha.snapTo(1f)
-                        revealed = false
-                        claimOk = false
-                        revealPreview = ScratchRevealOutcome.PENDING
-                        foilSession++
-                    }.onFailure { AppLog.e("Redeem scratch reset failed", it) }
-                } else {
+                if (result.ok) {
                     claimOk = true
+                    claimError = null
+                    unlockedCode = result.revealedCode?.takeIf { it.isNotBlank() }
+                } else {
+                    claimError = result.message.ifBlank {
+                        "Couldn't unlock this code. Try again."
+                    }
                 }
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {
-                AppLog.e("Redeem scratch reveal failed", t)
-                runCatching {
-                    foilAlpha.snapTo(1f)
-                    revealed = false
-                    claimOk = false
-                    revealPreview = ScratchRevealOutcome.PENDING
-                    foilSession++
-                }.onFailure { AppLog.e("Redeem scratch reset failed", it) }
+                AppLog.e("Redeem scratch claim failed", t)
+                claimError = "Couldn't unlock this code. Try again."
             } finally {
                 unlockInFlight = false
             }
+        }
+    }
+
+    fun finishReveal() {
+        if (revealed || unlockInFlight || claimOk) return
+        revealed = true
+        unlockInFlight = true
+        claimError = null
+        scope.launch {
+            revealPreview = ScratchRevealOutcome.WIN
+            try {
+                foilAlpha.animateTo(0f, tween(420))
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                AppLog.e("Redeem scratch foil animate failed", t)
+            }
+            unlockInFlight = false
+            runClaim()
         }
     }
 
@@ -173,6 +185,8 @@ fun RedeemScratchCardDialog(
             RedeemScratchHeader(
                 title = when {
                     claimOk -> "CODE UNLOCKED"
+                    claimError != null -> "CLAIM PENDING"
+                    revealed -> "PRIZE REVEALED"
                     else -> "SCRATCH TO UNLOCK"
                 },
                 subtitle = item.title,
@@ -182,13 +196,23 @@ fun RedeemScratchCardDialog(
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = when {
-                    unlockInFlight -> "Revealing…"
+                    unlockInFlight && !revealed -> "Revealing…"
+                    unlockInFlight -> "Unlocking code…"
                     claimOk -> "You won · copy code, then close"
+                    claimError != null -> "Foil open · retry to unlock the real code"
                     else -> "Scratch the foil · unlocks at 40%"
                 },
-                color = if (claimOk) Success else InkSecondary,
+                color = when {
+                    claimOk -> Success
+                    claimError != null -> AmberHot
+                    else -> InkSecondary
+                },
                 fontSize = 12.sp,
-                fontWeight = if (claimOk) FontWeight.SemiBold else FontWeight.Normal,
+                fontWeight = if (claimOk || claimError != null) {
+                    FontWeight.SemiBold
+                } else {
+                    FontWeight.Normal
+                },
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -203,6 +227,7 @@ fun RedeemScratchCardDialog(
                         1.dp,
                         when {
                             claimOk -> AmberHot.copy(alpha = 0.55f)
+                            claimError != null -> Amber.copy(alpha = 0.5f)
                             else -> Amber.copy(alpha = 0.35f)
                         },
                         RoundedCornerShape(20.dp)
@@ -210,23 +235,21 @@ fun RedeemScratchCardDialog(
             ) {
                 when (outcome) {
                     ScratchRevealOutcome.WIN -> RedeemPrizeUnderlay(
-                        code = item.code,
+                        code = displayCode,
                         valueLabel = item.valueLabel,
-                        celebrating = true
+                        celebrating = claimOk
                     )
                     ScratchRevealOutcome.PENDING -> ScratchMysteryUnderlay()
                 }
                 if (foilAlphaValue > 0.02f) {
-                    key(foilSession) {
-                        RedeemScratchFoil(
-                            alpha = foilAlphaValue,
-                            enabled = !revealed,
-                            obsidian = obsidianFoil,
-                            onProgress = { ratio ->
-                                if (ratio >= REDEEM_SCRATCH_UNLOCK) finishReveal()
-                            }
-                        )
-                    }
+                    RedeemScratchFoil(
+                        alpha = foilAlphaValue,
+                        enabled = !revealed,
+                        obsidian = obsidianFoil,
+                        onProgress = { ratio ->
+                            if (ratio >= REDEEM_SCRATCH_UNLOCK) finishReveal()
+                        }
+                    )
                 }
                 PremiumWinConfetti(
                     active = claimOk,
@@ -235,7 +258,41 @@ fun RedeemScratchCardDialog(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-            if (claimOk) {
+            if (claimError != null && !claimOk) {
+                Text(
+                    text = claimError.orEmpty(),
+                    color = Danger,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Brush.horizontalGradient(listOf(Amber, AmberHot)))
+                        .clickable(enabled = !unlockInFlight, onClick = { runClaim() })
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (unlockInFlight) "Unlocking…" else "Retry unlock",
+                        color = VoidBlack,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Foil stays open · real code only after unlock succeeds",
+                    color = InkMuted,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else if (claimOk) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -243,10 +300,16 @@ fun RedeemScratchCardDialog(
                         .background(Brush.horizontalGradient(listOf(Amber, AmberHot)))
                         .clickable {
                             runCatching {
-                                val ok = SafeOps.copyText(context, "redeem_code", item.code)
+                                val code = unlockedCode.orEmpty()
+                                val ok = code.isNotBlank() &&
+                                    SafeOps.copyText(context, "redeem_code", code)
                                 SafeOps.toast(
                                     context,
-                                    if (ok) "Code Copied Successfully!" else "Could not copy code. Try again."
+                                    if (ok) {
+                                        "Code Copied Successfully!"
+                                    } else {
+                                        "Could not copy code. Try again."
+                                    }
                                 )
                             }.onFailure {
                                 AppLog.e("Redeem scratch copy failed", it)
@@ -276,14 +339,16 @@ fun RedeemScratchCardDialog(
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "Tap ✕ to close",
-                    color = InkMuted,
+                    color = Success,
                     fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
             } else {
                 Text(
                     text = when {
+                        unlockInFlight && revealed -> "Securing code on server…"
                         unlockInFlight -> "Almost there…"
                         else -> "Finger scratch · foil clears at 40%"
                     },

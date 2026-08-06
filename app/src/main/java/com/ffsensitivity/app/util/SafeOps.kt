@@ -80,20 +80,37 @@ object SafeOps {
         }
     }
 
-    /** Share premium card image + caption/link text. */
-    fun shareImageAndText(
-        context: Context,
-        title: String,
-        bitmap: Bitmap,
-        caption: String
-    ): Boolean {
+    /**
+     * Compress PNG to cache. Call from a background dispatcher (IO) — not Main.
+     * Returns null if write/compress fails.
+     */
+    fun writeSharePng(context: Context, bitmap: Bitmap): File? {
         return runCatching {
             val dir = File(context.cacheDir, "share").apply { mkdirs() }
             val file = File(dir, "sensi_card_${System.currentTimeMillis()}.png")
             FileOutputStream(file).use { out ->
                 if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-                    return false
+                    return null
                 }
+            }
+            file
+        }.getOrElse {
+            AppLog.e("Share PNG write failed", it)
+            null
+        }
+    }
+
+    /** Launch share sheet for a cached PNG. Call from Main. */
+    fun shareImageFile(
+        context: Context,
+        title: String,
+        file: File,
+        caption: String
+    ): Boolean {
+        return runCatching {
+            if (!file.exists() || file.length() <= 0L) {
+                AppLog.w("Share image blocked: missing file")
+                return false
             }
             val uri = FileProvider.getUriForFile(
                 context,
@@ -123,6 +140,17 @@ object SafeOps {
             AppLog.e("Share image failed", it)
             false
         }
+    }
+
+    /** Share premium card image + caption. Prefer IO write + Main launch from callers. */
+    fun shareImageAndText(
+        context: Context,
+        title: String,
+        bitmap: Bitmap,
+        caption: String
+    ): Boolean {
+        val file = writeSharePng(context, bitmap) ?: return false
+        return shareImageFile(context, title, file, caption)
     }
 
     inline fun <T> runOrNull(label: String, block: () -> T): T? {

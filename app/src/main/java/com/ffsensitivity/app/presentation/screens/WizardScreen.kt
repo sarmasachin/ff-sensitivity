@@ -685,7 +685,7 @@ private fun fingerSubtitle(option: FingerCount): String = when (option) {
     FingerCount.TWO -> "Classic thumbs — simple and stable"
     FingerCount.THREE -> "Claw hybrid — faster peeks and sprays"
     FingerCount.FOUR -> "Full claw — max control for ranked"
-    FingerCount.FIVE -> "Advanced claw — high APM and movement"
+    FingerCount.FIVE -> "Advanced claw — high speed and movement"
     FingerCount.SIX -> "Pro claw — elite multi-finger control"
 }
 

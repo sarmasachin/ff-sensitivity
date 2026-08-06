@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -57,8 +56,6 @@ import com.ffsensitivity.app.presentation.theme.VoidBlack
 internal fun StylishNameComposer(
     baseName: String,
     onBaseNameChange: (String) -> Unit,
-    filter: String,
-    onFilterChange: (String) -> Unit,
     catalogReady: Boolean,
     roundIndex: Int,
     remainingUnique: Int,
@@ -96,36 +93,7 @@ internal fun StylishNameComposer(
             enabled = catalogReady,
             label = { Text("Name") },
             placeholder = { Text("e.g. GHOST") },
-            supportingText = {
-                Text(
-                    text = "${baseName.length}/12 · letters only, no spaces",
-                    color = InkMuted,
-                    fontSize = 11.sp
-                )
-            },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            shape = RoundedCornerShape(12.dp),
-            colors = stylishFieldColors()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = filter,
-            onValueChange = onFilterChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            enabled = catalogReady && baseName.isNotBlank(),
-            placeholder = { Text("Filter style or text…") },
-            leadingIcon = {
-                Icon(
-                    Icons.Outlined.Search,
-                    contentDescription = null,
-                    tint = InkMuted,
-                    modifier = Modifier.size(18.dp)
-                )
-            },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             shape = RoundedCornerShape(12.dp),
             colors = stylishFieldColors()
         )
@@ -190,34 +158,6 @@ private fun StylishMetaPill(
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = FontFamily.Monospace
-        )
-    }
-}
-
-@Composable
-internal fun StylishNameIdleState() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(SurfaceDeep.copy(alpha = 0.4f))
-            .border(1.dp, Hairline, RoundedCornerShape(16.dp))
-            .padding(horizontal = 20.dp, vertical = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Ready when you are",
-            color = InkPrimary,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = "Enter a name above to generate unique stylish tags for Free Fire.",
-            color = InkMuted,
-            fontSize = 12.sp,
-            lineHeight = 17.sp,
-            textAlign = TextAlign.Center
         )
     }
 }
@@ -484,7 +424,5 @@ private fun stylishFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedLabelColor = Amber,
     unfocusedLabelColor = InkMuted,
     focusedPlaceholderColor = InkMuted,
-    unfocusedPlaceholderColor = InkMuted,
-    focusedSupportingTextColor = InkMuted,
-    unfocusedSupportingTextColor = InkMuted
+    unfocusedPlaceholderColor = InkMuted
 )

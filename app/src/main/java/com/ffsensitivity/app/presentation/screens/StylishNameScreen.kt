@@ -61,7 +61,6 @@ fun StylishNameScreen(
     var catalogReady by remember { mutableStateOf(StylishNameCatalog.isLoaded) }
     var catalogFailed by remember { mutableStateOf(false) }
     var baseName by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf("") }
     var fontChoiceId by remember { mutableStateOf<String?>(null) }
 
     var usedValues by remember { mutableStateOf(setOf<String>()) }
@@ -242,7 +241,6 @@ fun StylishNameScreen(
             return
         }
         usedValues = usedValues + roundItems.map { it.value }.toSet()
-        filter = ""
         scope.launch {
             val pool = buildRoundSuspend(resetUsed = false)
             if (pool.isEmpty() && actionError == null) {
@@ -313,7 +311,6 @@ fun StylishNameScreen(
     LaunchedEffect(baseName, catalogReady) {
         if (!catalogReady) return@LaunchedEffect
         if (baseName.isBlank()) {
-            filter = ""
             fontChoiceId = null
             usedValues = emptySet()
             roundItems = emptyList()
@@ -325,31 +322,17 @@ fun StylishNameScreen(
             return@LaunchedEffect
         }
         delay(400)
-        filter = ""
         fontChoiceId = null
         clearError()
         buildRoundSuspend(resetUsed = true)
     }
 
-    val filteredRound = remember(roundItems, filter) {
-        runCatching {
-            val q = filter.trim()
-            if (q.isEmpty()) roundItems
-            else roundItems.filter {
-                it.styleLabel.contains(q, ignoreCase = true) ||
-                    it.value.contains(q, ignoreCase = true)
-            }
-        }.getOrElse {
-            AppLog.e("Stylish filter failed", it)
-            roundItems
-        }
-    }
     val roundCap = StylishNameCatalog.maxBatchSize
-    val visible = filteredRound.take(visibleCount.coerceAtMost(roundCap))
-    val canShowMore = filter.isBlank() &&
+    val visible = roundItems.take(visibleCount.coerceAtMost(roundCap))
+    val canShowMore =
         visibleCount < roundCap &&
         visibleCount < roundItems.size
-    val reachedRoundCap = filter.isBlank() &&
+    val reachedRoundCap =
         roundItems.isNotEmpty() &&
         (visibleCount >= roundCap || visibleCount >= roundItems.size)
 
@@ -393,11 +376,6 @@ fun StylishNameScreen(
                         clearError()
                         baseName = raw.filter { !it.isWhitespace() }.take(12)
                     },
-                    filter = filter,
-                    onFilterChange = {
-                        clearError()
-                        filter = it
-                    },
                     catalogReady = catalogReady,
                     roundIndex = roundIndex,
                     remainingUnique = remainingUnique,
@@ -408,12 +386,12 @@ fun StylishNameScreen(
 
                 when {
                     !catalogReady -> StylishNameHint("Loading stylish fonts…")
-                    baseName.isBlank() -> StylishNameIdleState()
+                    baseName.isBlank() -> Unit
                     generating && visible.isEmpty() -> {
                         StylishNameHint("Generating unique styles…")
                     }
                     visible.isEmpty() -> {
-                        StylishNameHint("No styles match “$filter” in this batch.")
+                        StylishNameHint("No styles in this batch.")
                     }
                     else -> {
                         LazyColumn(

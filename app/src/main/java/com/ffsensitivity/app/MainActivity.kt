@@ -13,10 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -37,6 +33,7 @@ import com.ffsensitivity.app.data.remote.AppRemoteGate
 import com.ffsensitivity.app.data.remote.ScreenSessionTracker
 import com.ffsensitivity.app.presentation.components.AppDrawerContent
 import com.ffsensitivity.app.presentation.components.AppRemoteGateOverlay
+import com.ffsensitivity.app.presentation.components.OverlayAppDrawer
 import com.ffsensitivity.app.presentation.components.SignOutConfirmDialog
 import com.ffsensitivity.app.presentation.theme.FFSensitivityTheme
 import com.ffsensitivity.app.presentation.theme.VoidBlack
@@ -70,12 +67,12 @@ class MainActivity : ComponentActivity() {
             FFSensitivityTheme {
                 val navController = rememberNavController()
                 val backStack by navController.currentBackStackEntryAsState()
-                val drawerState = rememberDrawerState(DrawerValue.Closed)
                 val scope = rememberCoroutineScope()
                 val context = LocalContext.current
                 val sessionStore = remember { UserSessionStore(context) }
                 var signedIn by remember { mutableStateOf(sessionStore.isSignedIn()) }
                 var showSignOutConfirm by remember { mutableStateOf(false) }
+                var menuOpen by remember { mutableStateOf(false) }
                 val startDestination = if (signedIn) "home" else "login"
                 val route = backStack?.destination?.route ?: startDestination
                 val showBottomBar =
@@ -163,16 +160,18 @@ class MainActivity : ComponentActivity() {
                 }
 
                 fun openMenu() {
-                    scope.launch {
-                        runCatching { drawerState.open() }
-                            .onFailure { AppLog.e("Open drawer failed", it) }
-                    }
+                    // Overlay drawer — home stays visible (no content slide / black peek).
+                    menuOpen = true
                 }
 
                 fun closeMenu() {
-                    scope.launch {
-                        runCatching { drawerState.close() }
-                            .onFailure { AppLog.e("Close drawer failed", it) }
+                    menuOpen = false
+                }
+
+                // Leave deep screens → force menu closed so it never sticks open over wizard/etc.
+                LaunchedEffect(route, signedIn) {
+                    if (!signedIn || !showBottomBar) {
+                        menuOpen = false
                     }
                 }
 
@@ -214,13 +213,10 @@ class MainActivity : ComponentActivity() {
                 if (signedIn && remoteGate !is AppRemoteGate.None) {
                     AppRemoteGateOverlay(gate = remoteGate)
                 } else {
-                ModalNavigationDrawer(
-                    drawerState = drawerState,
-                    gesturesEnabled = showBottomBar && route != "login",
-                    // Light enough that home peeks on the right; heavy scrim + dark drawer = "all black".
-                    scrimColor = Color.Black.copy(alpha = 0.28f),
+                OverlayAppDrawer(
+                    open = menuOpen && signedIn,
+                    onClose = { closeMenu() },
                     drawerContent = {
-                        // configTick forces drawer to re-read Nest kill-switches after sync
                         AppDrawerContent(
                             appVersion = appVersion,
                             selectedRoute = route.substringBefore('/'),

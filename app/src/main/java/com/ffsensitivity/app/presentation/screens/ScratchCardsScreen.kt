@@ -143,7 +143,7 @@ fun ScratchCardsScreen(
         if (!ok) {
             showError(
                 code = "SCRATCH_ARCHIVE_BACK_FAILED",
-                title = "Couldnâ€™t go back",
+                title = "Couldn’t go back",
                 message = "Navigation failed. Try again."
             )
         }

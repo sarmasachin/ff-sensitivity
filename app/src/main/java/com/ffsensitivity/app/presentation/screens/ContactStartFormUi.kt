@@ -148,7 +148,7 @@ fun ContactStartForm(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "App version $appVersion (attached locally)",
+            text = "App version $appVersion",
             color = InkMuted,
             fontSize = 11.sp
         )

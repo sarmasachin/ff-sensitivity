@@ -73,7 +73,6 @@ import com.ffsensitivity.app.presentation.theme.Danger
 import com.ffsensitivity.app.presentation.theme.Ember
 import com.ffsensitivity.app.presentation.theme.HairlineStrong
 import com.ffsensitivity.app.presentation.theme.InfoBlue
-import com.ffsensitivity.app.presentation.theme.InkMuted
 import com.ffsensitivity.app.presentation.theme.InkPrimary
 import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.presentation.theme.SurfaceCard
@@ -105,7 +104,7 @@ private val defaultHomeFeatures = listOf(
     HomeFeature(
         id = "sensi",
         title = "Best Sensitivity",
-        subtitle = "200-limit engine tuned to your RAM, Hz & playstyle.",
+        subtitle = "Sensitivity tuned to your RAM, Hz & playstyle.",
         icon = Icons.Outlined.Speed,
         accent = Amber
     ),
@@ -242,7 +241,7 @@ fun HomeScreen(
         features.isEmpty() -> HomeUiError(
             code = "HOME_CATALOG_EMPTY",
             title = "No tools available",
-            message = "The home catalog is empty. Restart the app and try again."
+            message = "No tools to show. Restart the app and try again."
         )
         else -> null
     }
@@ -255,7 +254,7 @@ fun HomeScreen(
         actionError = HomeUiError(
             code = "HOME_OPEN_FAILED",
             title = "Couldn’t open ${feature.title}",
-            message = "Navigation failed. Check your connection to the app state and try again.",
+            message = "Couldn’t open this tool. Try again.",
             retryFeature = feature
         )
     }
@@ -264,7 +263,7 @@ fun HomeScreen(
         actionError = HomeUiError(
             code = "HOME_FEATURE_INVALID",
             title = "Tool unavailable",
-            message = "“${feature.title}” is not available in this build.",
+            message = "“${feature.title}” is not available right now.",
             retryFeature = null
         )
         AppLog.w("Blocked invalid home feature id=${feature.id}")
@@ -464,12 +463,6 @@ private fun HomeCatalogError(
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
                 textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Ref: ${error.code}",
-                color = InkMuted,
-                fontSize = 11.sp
             )
         }
     }

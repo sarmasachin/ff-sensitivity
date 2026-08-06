@@ -21,10 +21,25 @@ export class EconomyService {
     const boosts = await this.prisma.userBoostCharge.findMany({
       where: { userId, charges: { gt: 0 } },
     });
+    const shopRows = await this.prisma.walletLedger.findMany({
+      where: { userId, reason: { startsWith: 'shop:' } },
+      select: { reason: true },
+    });
+    const shopBuyCounts: Record<string, number> = {};
+    for (const row of shopRows) {
+      const id = row.reason.slice('shop:'.length);
+      if (!id) continue;
+      shopBuyCounts[id] = (shopBuyCounts[id] ?? 0) + 1;
+    }
+    const ownedShopIds = Object.values(SHOP_CATALOG)
+      .filter((item) => item.oneTime && (shopBuyCounts[item.id] ?? 0) > 0)
+      .map((item) => item.id);
     return {
       coins: user.coins,
       frozen: user.walletFrozen,
       boosts: Object.fromEntries(boosts.map((b) => [b.boostId, b.charges])),
+      ownedShopIds,
+      shopBuyCounts,
     };
   }
 

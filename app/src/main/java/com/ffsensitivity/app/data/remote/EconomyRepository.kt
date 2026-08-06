@@ -24,6 +24,11 @@ object EconomyRepository {
             }
             DailyChallengeStore.setCoins(context, wallet.coins, "Wallet synced")
             syncBoostsLocal(context, wallet.boosts)
+            ShopStore.syncInventoryFromServer(
+                context = context,
+                ownedShopIds = wallet.ownedShopIds,
+                shopBuyCounts = wallet.shopBuyCounts
+            )
             wallet.coins
         }
     }
@@ -45,14 +50,24 @@ object EconomyRepository {
     fun earnMilestone(context: Context, days: Int): Result<EconomyEarnResult> =
         earn(context, "MILESTONE", milestoneDays = days)
 
-    fun purchaseShop(context: Context, itemId: String): Result<EconomyPurchaseResult> {
+    fun purchaseShop(
+        context: Context,
+        itemId: String,
+        requestId: String
+    ): Result<EconomyPurchaseResult> {
         val token = UserSessionStore(context).accessToken()
         if (token.isBlank()) {
             return Result.failure(
                 ApiException("AUTH_REQUIRED", "Please sign in again to buy this item.")
             )
         }
-        return EconomyApi.purchaseShop(token, itemId).map { result ->
+        val safeReq = requestId.trim()
+        if (safeReq.length < 8 || safeReq.length > 80) {
+            return Result.failure(
+                ApiException("SHOP_BAD_REQUEST", "Invalid purchase request. Try again.")
+            )
+        }
+        return EconomyApi.purchaseShop(token, itemId, safeReq).map { result ->
             DailyChallengeStore.setCoins(context, result.coins, "Shop · $itemId")
             result
         }

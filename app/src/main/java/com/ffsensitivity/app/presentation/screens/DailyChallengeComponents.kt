@@ -323,14 +323,14 @@ internal fun WalletHeroCard(
 
         Spacer(modifier = Modifier.height(14.dp))
         Text(
-            text = "Today’s progress · $doneCount/3",
+            text = "Today’s progress · $doneCount/2",
             color = InkSecondary,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            repeat(3) { i ->
+            repeat(2) { i ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -343,7 +343,7 @@ internal fun WalletHeroCard(
         if (lastRewardNote.isNotBlank()) {
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "Last added · $lastRewardNote",
+                text = "Latest reward · $lastRewardNote",
                 color = Success,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold

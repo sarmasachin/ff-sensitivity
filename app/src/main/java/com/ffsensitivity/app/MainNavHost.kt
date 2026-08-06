@@ -72,7 +72,11 @@ internal fun MainNavHost(
     ) {
         composable("login") {
             BackHandler {
-                activity.finish()
+                // Mid-session auth (e.g. Share Community) → pop back.
+                // Cold-start login root → leave the app.
+                if (!navController.popBackStack()) {
+                    activity.finish()
+                }
             }
             LoginScreen(
                 onContinueWithGoogle = { google, session ->
@@ -318,6 +322,17 @@ internal fun MainNavHost(
                         AppLog.e("Coin shop back failed", it)
                         false
                     }
+                },
+                onRequireSignIn = {
+                    runCatching {
+                        navController.navigate("login") {
+                            launchSingleTop = true
+                        }
+                        true
+                    }.getOrElse {
+                        AppLog.e("Coin shop open login failed", it)
+                        false
+                    }
                 }
             )
         }
@@ -332,6 +347,17 @@ internal fun MainNavHost(
                         AppLog.e("Share sensi back failed", it)
                         false
                     }
+                },
+                onRequireSignIn = {
+                    runCatching {
+                        navController.navigate("login") {
+                            launchSingleTop = true
+                        }
+                        true
+                    }.getOrElse {
+                        AppLog.e("Share sensi open login failed", it)
+                        false
+                    }
                 }
             )
         }
@@ -344,6 +370,17 @@ internal fun MainNavHost(
                         true
                     }.getOrElse {
                         AppLog.e("Daily challenge back failed", it)
+                        false
+                    }
+                },
+                onRequireSignIn = {
+                    runCatching {
+                        navController.navigate("login") {
+                            launchSingleTop = true
+                        }
+                        true
+                    }.getOrElse {
+                        AppLog.e("Daily challenge open login failed", it)
                         false
                     }
                 }

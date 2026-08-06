@@ -4,6 +4,7 @@ import android.content.Context
 import com.ffsensitivity.app.data.DailyChallengeStore
 import com.ffsensitivity.app.data.RedeemCatalogCache
 import com.ffsensitivity.app.data.RedeemCodeItem
+import com.ffsensitivity.app.data.RedeemStatus
 import com.ffsensitivity.app.data.UserSessionStore
 
 // --- Start: Redeem live wire (Sachin) ---
@@ -25,6 +26,55 @@ object RedeemRepository {
         return loadCatalog(context).map { list ->
             list.firstOrNull { it.id == itemId }
         }
+    }
+
+    /**
+     * Local gate before opening scratch dialog.
+     * Failures should show on Redeem Now — do not open the card.
+     */
+    fun precheckScratch(
+        context: Context,
+        item: RedeemCodeItem,
+        alreadyUnlockedLocally: Boolean
+    ): Result<Unit> {
+        val token = UserSessionStore(context).accessToken()
+        if (token.isBlank()) {
+            return Result.failure(
+                ApiException("AUTH_REQUIRED", "Please sign in again to unlock this code.")
+            )
+        }
+        if (item.status != RedeemStatus.ACTIVE) {
+            return Result.failure(
+                ApiException("REDEEM_ALREADY_CLAIMED", "This code is no longer active.")
+            )
+        }
+        if (alreadyUnlockedLocally || item.serverUnlocked) {
+            return Result.failure(
+                ApiException(
+                    "REDEEM_ALREADY_UNLOCKED",
+                    "Already unlocked. Use Copy Code on this card."
+                )
+            )
+        }
+        val stock = item.stockLeft
+        if (stock != null && stock <= 0) {
+            return Result.failure(
+                ApiException("REDEEM_OUT_OF_STOCK", "This reward is out of stock.")
+            )
+        }
+        val cost = item.coinCost
+        if (cost != null && cost > 0) {
+            val coins = DailyChallengeStore.snapshot(context).coins
+            if (coins < cost) {
+                return Result.failure(
+                    ApiException(
+                        "NOT_ENOUGH_COINS",
+                        "You need $cost coins to unlock this reward."
+                    )
+                )
+            }
+        }
+        return Result.success(Unit)
     }
 
     fun claimCode(context: Context, item: RedeemCodeItem): Result<RedeemClaimResult> {

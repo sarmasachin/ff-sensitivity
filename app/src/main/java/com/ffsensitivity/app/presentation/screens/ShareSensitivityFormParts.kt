@@ -1,4 +1,4 @@
-﻿package com.ffsensitivity.app.presentation.screens
+package com.ffsensitivity.app.presentation.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -103,7 +103,7 @@ internal fun LiveProPreviewCard(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "ID Â· $freeFireId",
+            text = "ID · $freeFireId",
             color = InkSecondary,
             fontSize = 12.sp,
             maxLines = 1,
@@ -525,7 +525,7 @@ internal fun SensiCell(
         modifier = modifier,
         singleLine = true,
         label = { Text(label) },
-        placeholder = { Text("0â€“200") },
+        placeholder = { Text("0-200") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         shape = RoundedCornerShape(12.dp),
         colors = shareFieldColors()
@@ -581,7 +581,18 @@ internal fun deviceMetaFromSession(): String {
     return listOfNotNull(
         info.ramLabel.takeIf { it.isNotBlank() },
         info.maxRefreshLabel.takeIf { it.isNotBlank() }
-    ).joinToString(" Â· ")
+    ).joinToString(" · ")
+}
+
+/** Matches Nest community DTO @Max(999_999). */
+internal const val SHARE_STAT_MAX = 999_999
+
+internal fun clampStatInput(raw: String): String =
+    raw.filter(Char::isDigit).take(6)
+
+internal fun isStatValue(raw: String): Boolean {
+    val n = raw.toIntOrNull() ?: return false
+    return n in 0..SHARE_STAT_MAX
 }
 
 internal fun missingSubmitHint(

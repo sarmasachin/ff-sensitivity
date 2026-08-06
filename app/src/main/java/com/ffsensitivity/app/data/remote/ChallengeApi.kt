@@ -8,10 +8,18 @@ import org.json.JSONObject
 
 // --- Start: Challenge live wire (Sachin) ---
 data class ChallengeTodayPayload(
+    val dayKey: String,
     val question: DailyQuizQuestion?,
     val milestones: List<StreakMilestone>,
     val alreadyCorrect: Boolean,
-    val wrongAttempts: Int
+    val wrongAttempts: Int,
+    /** null = field absent (older API) — do not overwrite local. */
+    val streakDays: Int?,
+    val checkinDone: Boolean?,
+    val adDone: Boolean?,
+    val claimedMilestoneDays: Set<Int>?,
+    val quizLockUntilMs: Long?,
+    val quizOpenUntilMs: Long?
 )
 
 data class ChallengeQuizSubmitResult(
@@ -75,11 +83,33 @@ object ChallengeApi {
                     }
                 }
                 val state = root.optJSONObject("quizState")
+                val claimedArr = root.optJSONArray("claimedMilestoneDays")
+                val claimed: Set<Int>? = if (claimedArr != null) {
+                    buildSet {
+                        for (i in 0 until claimedArr.length()) {
+                            val n = claimedArr.optInt(i, -1)
+                            if (n > 0) add(n)
+                        }
+                    }
+                } else {
+                    null
+                }
                 ChallengeTodayPayload(
+                    dayKey = root.optString("dayKey"),
                     question = question,
                     milestones = milestones,
                     alreadyCorrect = state?.optBoolean("alreadyCorrect") == true,
-                    wrongAttempts = state?.optInt("wrongAttempts") ?: 0
+                    wrongAttempts = state?.optInt("wrongAttempts") ?: 0,
+                    streakDays = if (root.has("streakDays")) root.optInt("streakDays") else null,
+                    checkinDone = if (root.has("checkinDone")) root.optBoolean("checkinDone") else null,
+                    adDone = if (root.has("adDone")) root.optBoolean("adDone") else null,
+                    claimedMilestoneDays = claimed,
+                    quizLockUntilMs = state?.let {
+                        if (it.isNull("lockUntilMs")) null else it.optLong("lockUntilMs")
+                    },
+                    quizOpenUntilMs = state?.let {
+                        if (it.isNull("openUntilMs")) null else it.optLong("openUntilMs")
+                    }
                 )
             }
         }.onFailure { AppLog.e("ChallengeApi.getToday failed", it) }

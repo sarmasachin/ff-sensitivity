@@ -79,11 +79,14 @@ const goodBody = {
     hashtags: '#FreeFire #FFSensitivity',
   },
   about: {
-    headline: 'FF Sensitivity',
-    blurb: 'Device-aware Free Fire sensitivity tools.',
+    headline: 'FF Sensitivity Settings',
+    blurb:
+      'FF Sensitivity Settings is a mobile companion built for Free Fire players who want cleaner aim, smarter controls, and a faster setup — without guesswork.\n\n' +
+      'The app helps you find device-aware sensitivity, HUD and graphics guidance, safe DPI limits, stylish names, daily challenges with rewards, a coin shop, redeem codes, and shareable sensitivity cards — all in one place.\n\n' +
+      'This is an independent fan-made utility. It is not owned by, affiliated with, or endorsed by Garena or any game publisher. Always follow Free Fire’s rules and fair-play policy.',
     versionPrefix: 'Version',
-    websiteCta: 'Visit website',
-    privacyCta: 'View privacy policy',
+    websiteCta: 'Our website',
+    privacyCta: 'Read privacy policy',
   },
   legal: {
     privacyLabel: 'Privacy policy',
@@ -292,7 +295,7 @@ async function main() {
   await req('PUT', '/api/v1/admin/copy', { token: tok, body: goodBody });
 
   const pub2 = await req('GET', '/api/v1/app/copy');
-  pub2.status === 200 && pub2.json?.about?.headline === 'FF Sensitivity'
+  pub2.status === 200 && pub2.json?.about?.headline === 'FF Sensitivity Settings'
     ? pass('public_reflects_save')
     : fail('public_reflects_save', JSON.stringify(pub2.json));
 

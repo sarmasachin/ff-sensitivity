@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ffsensitivity.app.BuildConfig
 import com.ffsensitivity.app.data.DailyChallengeStore
 import com.ffsensitivity.app.data.ScratchCardDebug
 import com.ffsensitivity.app.data.ScratchHistoryStore
@@ -49,6 +49,7 @@ import com.ffsensitivity.app.data.streakMilestones
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
 import com.ffsensitivity.app.presentation.theme.AmberSoft
+import com.ffsensitivity.app.presentation.theme.Danger
 import com.ffsensitivity.app.presentation.theme.Hairline
 import com.ffsensitivity.app.presentation.theme.HairlineStrong
 import com.ffsensitivity.app.presentation.theme.InkMuted
@@ -62,6 +63,9 @@ import com.ffsensitivity.app.presentation.theme.VoidBlack
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class MilestoneState { LOCKED, READY, CLAIMED }
 
@@ -74,8 +78,11 @@ fun DailyChallengeRewardsTab(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var scratchTarget by remember { mutableStateOf<StreakMilestone?>(null) }
     var claiming by remember { mutableStateOf(false) }
+    var openingDays by remember { mutableStateOf<Int?>(null) }
+    var buttonErrors by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
     val milestones =
         ChallengeRemoteCache.milestones?.takeIf { it.isNotEmpty() }
             ?: runCatching { streakMilestones }.getOrElse {
@@ -99,54 +106,45 @@ fun DailyChallengeRewardsTab(
     scratchTarget?.let { target ->
         MilestoneScratchCardDialog(
             milestone = target,
+            startRevealed = DailyChallengeStore.isMilestoneScratchPending(context, target.days),
+            onRevealed = {
+                DailyChallengeStore.markMilestoneScratchPending(context, target.days)
+            },
             onDismiss = {
                 if (!claiming) scratchTarget = null
             },
-            onUnlocked = {
-                if (claiming) return@MilestoneScratchCardDialog false
+            onClaim = {
                 claiming = true
-                onClearError()
-                val ok = runCatching {
-                    val result = DailyChallengeStore.claimMilestone(context, target.days)
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        DailyChallengeStore.claimMilestone(context, target.days)
+                    }
                     onSnapshot(result.snapshot)
                     if (result.ok) {
+                        DailyChallengeStore.clearMilestoneScratchPending(context, target.days)
                         runCatching {
                             ScratchHistoryStore.addMilestone(context, target)
                         }.onFailure {
                             AppLog.e("Milestone history save failed", it)
-                            onError(
-                                ChallengeUiError(
-                                    code = "CHALLENGE_MILESTONE_HISTORY_FAILED",
-                                    title = "Claimed, archive failed",
-                                    message = "Reward claimed, but Scratch Cards history did not save."
-                                )
-                            )
                         }
                         SafeOps.toast(context, result.message)
+                        ScratchClaimUiResult(ok = true, message = result.message)
                     } else {
-                        onError(
-                            ChallengeUiError(
-                                code = "CHALLENGE_MILESTONE_REJECTED",
-                                title = "Couldn’t claim reward",
-                                message = result.message.ifBlank { "Milestone claim was declined." }
-                            )
+                        // Keep error inside card + Retry — do not reset foil.
+                        ScratchClaimUiResult(
+                            ok = false,
+                            message = result.message.ifBlank { "Claim failed. Try again." }
                         )
                     }
-                    claiming = false
-                    result.ok
-                }.getOrElse {
-                    AppLog.e("Scratch claim failed", it)
-                    claiming = false
-                    onError(
-                        ChallengeUiError(
-                            code = "CHALLENGE_MILESTONE_FAILED",
-                            title = "Claim failed",
-                            message = "Something went wrong claiming this milestone. Try again."
-                        )
+                } catch (t: Throwable) {
+                    AppLog.e("Scratch claim failed", t)
+                    ScratchClaimUiResult(
+                        ok = false,
+                        message = "Claim failed. Try again."
                     )
-                    false
+                } finally {
+                    claiming = false
                 }
-                ok
             }
         )
     }
@@ -215,20 +213,40 @@ fun DailyChallengeRewardsTab(
                     forceUnlocked = ScratchCardDebug.isForceUnlocked(milestone.days) &&
                         milestone.days !in snapshot.claimedMilestones &&
                         snapshot.streak < milestone.days,
-                    enabled = state == MilestoneState.READY && !claiming && scratchTarget == null,
+                    enabled = state == MilestoneState.READY &&
+                        !claiming &&
+                        scratchTarget == null &&
+                        openingDays == null,
+                    buttonError = buttonErrors[milestone.days],
+                    opening = openingDays == milestone.days,
                     onScratch = {
-                        if (claiming || scratchTarget != null) {
-                            onError(
-                                ChallengeUiError(
-                                    code = "CHALLENGE_BUSY",
-                                    title = "Please wait",
-                                    message = "A scratch claim is already in progress."
+                        if (claiming || scratchTarget != null || openingDays != null) {
+                            buttonErrors = buttonErrors + (
+                                milestone.days to "Please wait — another scratch is in progress."
                                 )
-                            )
                             return@MilestoneCard
                         }
                         onClearError()
-                        scratchTarget = milestone
+                        buttonErrors = buttonErrors - milestone.days
+                        openingDays = milestone.days
+                        scope.launch {
+                            val check = withContext(Dispatchers.IO) {
+                                DailyChallengeStore.precheckMilestoneScratch(
+                                    context,
+                                    milestone.days
+                                )
+                            }
+                            openingDays = null
+                            if (!check.ok) {
+                                buttonErrors = buttonErrors + (
+                                    milestone.days to check.message.ifBlank {
+                                        "Can't open scratch card."
+                                    }
+                                    )
+                                return@launch
+                            }
+                            scratchTarget = milestone
+                        }
                     }
                 )
             }
@@ -252,7 +270,7 @@ private fun QaDebugBanner() {
             .padding(12.dp)
     ) {
         Text(
-            text = "QA ONLY · DEBUG BUILD",
+            text = "TEST MODE",
             color = AmberHot,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
@@ -260,19 +278,11 @@ private fun QaDebugBanner() {
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Day 7 / 15 / 20 scratch cards force-unlocked for testing. " +
-                "Off in release, or set ScratchCardDebug.UNLOCK_FIRST_THREE_FOR_QA = false.",
+            text = "Some milestone scratch cards are unlocked for testing.",
             color = InkSecondary,
             fontSize = 11.sp,
             lineHeight = 15.sp
         )
-        if (!BuildConfig.DEBUG) {
-            Text(
-                text = "Unexpected: debug flag active outside DEBUG.",
-                color = InkMuted,
-                fontSize = 10.sp
-            )
-        }
     }
 }
 
@@ -393,150 +403,165 @@ private fun MilestoneCard(
     streak: Int,
     forceUnlocked: Boolean,
     enabled: Boolean,
+    buttonError: String? = null,
+    opening: Boolean = false,
     onScratch: () -> Unit
 ) {
-    val borderColor = when (state) {
-        MilestoneState.CLAIMED -> Success.copy(alpha = 0.4f)
-        MilestoneState.READY -> Amber.copy(alpha = 0.45f)
-        MilestoneState.LOCKED -> HairlineStrong
+    val borderColor = when {
+        !buttonError.isNullOrBlank() -> Danger.copy(alpha = 0.55f)
+        state == MilestoneState.CLAIMED -> Success.copy(alpha = 0.4f)
+        state == MilestoneState.READY -> Amber.copy(alpha = 0.45f)
+        else -> HairlineStrong
     }
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
             .background(Brush.verticalGradient(listOf(SurfaceLift, SurfaceCard)))
             .border(1.dp, borderColor, RoundedCornerShape(18.dp))
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(14.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(
-                    when (state) {
-                        MilestoneState.CLAIMED -> Success.copy(alpha = 0.14f)
-                        MilestoneState.READY -> AmberSoft
-                        MilestoneState.LOCKED -> SurfaceDeep.copy(alpha = 0.7f)
-                    }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        when (state) {
+                            MilestoneState.CLAIMED -> Success.copy(alpha = 0.14f)
+                            MilestoneState.READY -> AmberSoft
+                            MilestoneState.LOCKED -> SurfaceDeep.copy(alpha = 0.7f)
+                        }
+                    )
+                    .border(
+                        1.dp,
+                        when (state) {
+                            MilestoneState.CLAIMED -> Success.copy(alpha = 0.4f)
+                            MilestoneState.READY -> Amber.copy(alpha = 0.4f)
+                            MilestoneState.LOCKED -> Hairline
+                        },
+                        RoundedCornerShape(14.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                when (state) {
+                    MilestoneState.CLAIMED -> Icon(
+                        Icons.Outlined.CheckCircle,
+                        contentDescription = null,
+                        tint = Success,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    MilestoneState.READY -> Icon(
+                        Icons.Outlined.Style,
+                        contentDescription = null,
+                        tint = Amber,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    MilestoneState.LOCKED -> Icon(
+                        Icons.Outlined.Lock,
+                        contentDescription = null,
+                        tint = InkMuted,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "DAY ${milestone.days}",
+                    color = Amber,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp
                 )
-                .border(
-                    1.dp,
-                    when (state) {
-                        MilestoneState.CLAIMED -> Success.copy(alpha = 0.4f)
-                        MilestoneState.READY -> Amber.copy(alpha = 0.4f)
-                        MilestoneState.LOCKED -> Hairline
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = milestone.title,
+                    color = InkPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = milestone.rewardLabel,
+                    color = InkSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                when {
+                    state == MilestoneState.LOCKED -> {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "${(milestone.days - streak).coerceAtLeast(0)} days left",
+                            color = InkMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                    forceUnlocked -> {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Test unlock · ready to scratch",
+                            color = AmberHot,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    state == MilestoneState.READY -> {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Scratch card ready",
+                            color = Amber,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        when (state) {
+                            MilestoneState.READY -> Brush.horizontalGradient(listOf(Amber, AmberHot))
+                            else -> Brush.horizontalGradient(listOf(SurfaceDeep, SurfaceDeep))
+                        }
+                    )
+                    .border(
+                        1.dp,
+                        if (state == MilestoneState.READY) Amber.copy(alpha = 0.35f) else Hairline,
+                        RoundedCornerShape(12.dp)
+                    )
+                    .clickable(enabled = enabled, onClick = onScratch)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = when {
+                        state == MilestoneState.CLAIMED -> "Claimed"
+                        opening -> "Opening…"
+                        state == MilestoneState.READY -> "Scratch"
+                        else -> "Locked"
                     },
-                    RoundedCornerShape(14.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            when (state) {
-                MilestoneState.CLAIMED -> Icon(
-                    Icons.Outlined.CheckCircle,
-                    contentDescription = null,
-                    tint = Success,
-                    modifier = Modifier.size(24.dp)
-                )
-                MilestoneState.READY -> Icon(
-                    Icons.Outlined.Style,
-                    contentDescription = null,
-                    tint = Amber,
-                    modifier = Modifier.size(24.dp)
-                )
-                MilestoneState.LOCKED -> Icon(
-                    Icons.Outlined.Lock,
-                    contentDescription = null,
-                    tint = InkMuted,
-                    modifier = Modifier.size(20.dp)
+                    color = when (state) {
+                        MilestoneState.READY -> VoidBlack
+                        MilestoneState.CLAIMED -> Success
+                        MilestoneState.LOCKED -> InkMuted
+                    },
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        if (!buttonError.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "DAY ${milestone.days}",
-                color = Amber,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = milestone.title,
-                color = InkPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = milestone.rewardLabel,
-                color = InkSecondary,
+                text = buttonError,
+                color = Danger,
                 fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            when {
-                state == MilestoneState.LOCKED -> {
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "${(milestone.days - streak).coerceAtLeast(0)} days left",
-                        color = InkMuted,
-                        fontSize = 11.sp
-                    )
-                }
-                forceUnlocked -> {
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "QA unlock · scratch to test",
-                        color = AmberHot,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                state == MilestoneState.READY -> {
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "Scratch card ready",
-                        color = Amber,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    when (state) {
-                        MilestoneState.READY -> Brush.horizontalGradient(listOf(Amber, AmberHot))
-                        else -> Brush.horizontalGradient(listOf(SurfaceDeep, SurfaceDeep))
-                    }
-                )
-                .border(
-                    1.dp,
-                    if (state == MilestoneState.READY) Amber.copy(alpha = 0.35f) else Hairline,
-                    RoundedCornerShape(12.dp)
-                )
-                .clickable(enabled = enabled, onClick = onScratch)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = when (state) {
-                    MilestoneState.CLAIMED -> "Claimed"
-                    MilestoneState.READY -> "Scratch"
-                    MilestoneState.LOCKED -> "Locked"
-                },
-                color = when (state) {
-                    MilestoneState.READY -> VoidBlack
-                    MilestoneState.CLAIMED -> Success
-                    MilestoneState.LOCKED -> InkMuted
-                },
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Medium,
+                lineHeight = 16.sp
             )
         }
     }
@@ -560,12 +585,11 @@ private fun InstructionsCard() {
             letterSpacing = 1.3.sp
         )
         Spacer(modifier = Modifier.height(10.dp))
-        InstructionLine("1. Complete Daily Challenge every day to grow streak.")
-        InstructionLine("2. Miss a day and streak resets to 1 on next check-in.")
-        InstructionLine("3. Reach a milestone → Scratch button unlocks.")
-        InstructionLine("4. Scratch the foil — card fully opens at 40%.")
-        InstructionLine("5. Coins go to your Wallet after scratch unlock.")
-        InstructionLine("6. Each scratch card can be claimed only once.")
+        InstructionLine("1. Check in daily to grow your streak.")
+        InstructionLine("2. Miss a day and the streak resets.")
+        InstructionLine("3. Hit a milestone to unlock a scratch card.")
+        InstructionLine("4. Scratch the foil — prize reveals at 40%.")
+        InstructionLine("5. Each scratch card can be claimed only once.")
     }
 }
 

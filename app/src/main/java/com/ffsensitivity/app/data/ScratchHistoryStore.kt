@@ -71,12 +71,20 @@ object ScratchHistoryStore {
     fun addShopToken(
         context: Context,
         item: ShopItem,
-        scratchedAtMs: Long = System.currentTimeMillis()
+        scratchedAtMs: Long = System.currentTimeMillis(),
+        /** Stable across purchase Retry — same id will not duplicate the entry. */
+        requestId: String? = null
     ) {
+        val safeReq = requestId?.trim().orEmpty()
+        val id = if (safeReq.isNotBlank()) {
+            "shop_${item.id}_$safeReq"
+        } else {
+            "shop_${item.id}_$scratchedAtMs"
+        }
         add(
             context,
             ScratchedCardEntry(
-                id = "shop_${item.id}_$scratchedAtMs",
+                id = id,
                 kind = ScratchCardKind.SHOP,
                 title = item.title,
                 detail = "Coin Shop purchase",

@@ -100,12 +100,6 @@ internal fun CommentsFatalPane(
                 lineHeight = 18.sp,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Ref: $code",
-                color = InkMuted,
-                fontSize = 11.sp
-            )
         }
     }
 }

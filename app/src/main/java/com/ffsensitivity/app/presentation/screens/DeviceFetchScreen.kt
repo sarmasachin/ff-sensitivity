@@ -354,11 +354,6 @@ fun DeviceFetchScreen(
                                 }
                             )
                             Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "Ref: ${err.code}",
-                                color = InkMuted,
-                                fontSize = 11.sp
-                            )
                             if (featureInvalid) {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 PrimaryButton(text = "Back to Home") { backSafe() }

@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,7 @@ import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -47,6 +49,7 @@ fun RedeemScreen(
     onOpenComments: (String) -> Boolean
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val unlocked = remember { mutableStateMapOf<String, Boolean>() }
     val revealed = remember { mutableStateMapOf<String, Boolean>() }
     val votes = remember { mutableStateMapOf<String, Boolean?>() }
@@ -187,30 +190,32 @@ fun RedeemScreen(
             return
         }
         clearError()
-        runCatching {
-            when {
-                item.status != RedeemStatus.ACTIVE ->
-                    showError(
-                        code = "REDEEM_ALREADY_CLAIMED",
-                        title = "Already claimed",
-                        message = "This code is no longer active. Pick another reward."
-                    )
-                unlocked[item.id] == true ->
-                    showError(
-                        code = "REDEEM_ALREADY_UNLOCKED",
-                        title = "Already unlocked",
-                        message = "Use Copy Code on this card to copy your reward."
-                    )
-                else -> scratchTarget = item
+        isBusy = true
+        scope.launch {
+            val check = withContext(Dispatchers.IO) {
+                RedeemRepository.precheckScratch(
+                    context = context,
+                    item = item,
+                    alreadyUnlockedLocally = unlocked[item.id] == true
+                )
             }
-        }.onFailure {
-            AppLog.e("Redeem now failed", it)
-            showError(
-                code = "REDEEM_SCRATCH_OPEN_FAILED",
-                title = "Couldn’t open scratch card",
-                message = "Something went wrong opening this reward. Try again.",
-                retryKind = RedeemRetryKind.SCRATCH,
-                retryItemId = item.id
+            isBusy = false
+            check.fold(
+                onSuccess = { scratchTarget = item },
+                onFailure = { err ->
+                    AppLog.e("Redeem scratch precheck failed", err)
+                    val message = when (err) {
+                        is ApiException -> err.message
+                        else -> "Couldn't open scratch card. Try again."
+                    }
+                    showError(
+                        code = (err as? ApiException)?.code ?: "REDEEM_SCRATCH_OPEN_FAILED",
+                        title = "Couldn’t open scratch card",
+                        message = message,
+                        retryKind = RedeemRetryKind.SCRATCH,
+                        retryItemId = item.id
+                    )
+                }
             )
         }
     }
@@ -301,55 +306,53 @@ fun RedeemScreen(
         RedeemScratchCardDialog(
             item = target,
             onDismiss = { if (!isBusy) scratchTarget = null },
-            onUnlocked = {
-                // --- Start: Redeem live wire (Sachin) ---
+            onClaim = {
                 isBusy = true
-                val result = withContext(Dispatchers.IO) {
-                    RedeemRepository.claimCode(context, target)
-                }
-                result.fold(
-                    onSuccess = { claim ->
-                        val updated = target.copy(
-                            code = claim.code,
-                            serverUnlocked = true,
-                            status = RedeemStatus.ACTIVE,
-                            stockLeft = target.stockLeft?.let { left ->
-                                if (claim.alreadyClaimed) left else (left - 1).coerceAtLeast(0)
-                            }
-                        )
-                        codes = codes.map { if (it.id == target.id) updated else it }
-                        RedeemCatalogCache.put(updated)
-                        unlocked[target.id] = true
-                        revealed[target.id] = true
-                        runCatching {
-                            ScratchHistoryStore.addRedeem(context, updated)
-                        }.onFailure {
-                            AppLog.e("Redeem unlock / history failed", it)
-                        }
-                        clearError()
-                        SafeOps.toast(context, "Code unlocked · you can copy now")
-                        scratchTarget = null
-                        isBusy = false
-                        true
-                    },
-                    onFailure = { err ->
-                        AppLog.e("Redeem claim failed", err)
-                        val message = when (err) {
-                            is ApiException -> err.message
-                            else -> "Couldn't unlock this code. Please try again."
-                        }
-                        showError(
-                            code = (err as? ApiException)?.code ?: "REDEEM_CLAIM_FAILED",
-                            title = "Unlock failed",
-                            message = message,
-                            retryKind = RedeemRetryKind.SCRATCH,
-                            retryItemId = target.id
-                        )
-                        isBusy = false
-                        false
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        RedeemRepository.claimCode(context, target)
                     }
-                )
-                // --- End: Redeem live wire (Sachin) ---
+                    result.fold(
+                        onSuccess = { claim ->
+                            val updated = target.copy(
+                                code = claim.code,
+                                serverUnlocked = true,
+                                status = RedeemStatus.ACTIVE,
+                                stockLeft = target.stockLeft?.let { left ->
+                                    if (claim.alreadyClaimed) left else (left - 1).coerceAtLeast(0)
+                                }
+                            )
+                            codes = codes.map { if (it.id == target.id) updated else it }
+                            RedeemCatalogCache.put(updated)
+                            unlocked[target.id] = true
+                            revealed[target.id] = true
+                            runCatching {
+                                ScratchHistoryStore.addRedeem(context, updated)
+                            }.onFailure {
+                                AppLog.e("Redeem unlock / history failed", it)
+                            }
+                            clearError()
+                            SafeOps.toast(context, "Code unlocked · you can copy now")
+                            // Keep dialog open so user can copy the real code.
+                            ScratchClaimUiResult(
+                                ok = true,
+                                message = "Code unlocked",
+                                revealedCode = claim.code
+                            )
+                        },
+                        onFailure = { err ->
+                            AppLog.e("Redeem claim failed", err)
+                            val message = when (err) {
+                                is ApiException -> err.message
+                                else -> "Couldn't unlock this code. Please try again."
+                            }
+                            // Error stays in-card with Retry — do not reset foil.
+                            ScratchClaimUiResult(ok = false, message = message)
+                        }
+                    )
+                } finally {
+                    isBusy = false
+                }
             }
         )
     }

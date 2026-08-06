@@ -2,8 +2,10 @@ package com.ffsensitivity.app.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.ffsensitivity.app.data.remote.ChallengeTodayPayload
 import com.ffsensitivity.app.util.AppLog
-import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
@@ -20,6 +22,7 @@ object DailyChallengeStore {
     private const val KEY_AD = "ad_date"
     private const val KEY_LAST_REWARD = "last_reward"
     private const val KEY_CLAIMED = "claimed_milestones"
+    private const val KEY_PENDING_SCRATCH = "pending_scratch_days"
     private const val COINS_MIN = -9_999_999
     private const val COINS_MAX = 9_999_999
 
@@ -41,7 +44,7 @@ object DailyChallengeStore {
         val quizCountdownEndsAtMs: Long = 0L
     ) {
         val todayDoneCount: Int
-            get() = listOf(checkedInToday, quizDoneToday, adDoneToday).count { it }
+            get() = listOf(checkedInToday, quizDoneToday).count { it }
     }
 
     data class Result(
@@ -75,6 +78,113 @@ object DailyChallengeStore {
         }
     }
 
+    /**
+     * Align local prefs with Nest GET /challenge/today (UTC day + streak + flags).
+     * Call after a successful sync — server is source of truth for today.
+     */
+    fun applyRemoteToday(context: Context, payload: ChallengeTodayPayload): Snapshot {
+        return runCatching {
+            synchronized(this) {
+                val prefs = prefs(context)
+                val today = payload.dayKey.trim().ifBlank { today() }
+                val editor = prefs.edit()
+
+                payload.streakDays?.let { days ->
+                    editor.putInt(KEY_STREAK, days.coerceAtLeast(0))
+                }
+
+                payload.checkinDone?.let { done ->
+                    if (done) {
+                        editor.putString(KEY_CHECKIN, today)
+                    } else if (prefs.getString(KEY_CHECKIN, null) == today) {
+                        editor.remove(KEY_CHECKIN)
+                    }
+                }
+
+                payload.adDone?.let { done ->
+                    if (done) {
+                        editor.putString(KEY_AD, today)
+                    } else if (prefs.getString(KEY_AD, null) == today) {
+                        editor.remove(KEY_AD)
+                    }
+                }
+
+                when {
+                    payload.alreadyCorrect -> {
+                        editor.putString(KEY_QUIZ, today)
+                            .putBoolean(KEY_QUIZ_OK, true)
+                            .putLong(KEY_QUIZ_LOCK_UNTIL, 0L)
+                            .putLong(KEY_QUIZ_OPEN_UNTIL, 0L)
+                    }
+                    payload.wrongAttempts > 0 -> {
+                        val lock = payload.quizLockUntilMs ?: 0L
+                        val open = payload.quizOpenUntilMs ?: 0L
+                        editor.putString(KEY_QUIZ, today)
+                            .putBoolean(KEY_QUIZ_OK, false)
+                        if (lock > 0L && open > 0L) {
+                            editor.putLong(KEY_QUIZ_LOCK_UNTIL, lock)
+                                .putLong(KEY_QUIZ_OPEN_UNTIL, open)
+                        }
+                    }
+                }
+
+                payload.claimedMilestoneDays?.let { remoteClaimed ->
+                    if (remoteClaimed.isNotEmpty()) {
+                        val merged = readClaimed(prefs) + remoteClaimed
+                        val claimedStrings = HashSet<String>(merged.size).apply {
+                            merged.forEach { add(it.toString()) }
+                        }
+                        editor.putStringSet(KEY_CLAIMED, claimedStrings)
+                        val pending = HashSet(
+                            prefs.getStringSet(KEY_PENDING_SCRATCH, null) ?: emptySet()
+                        )
+                        var pendingChanged = false
+                        remoteClaimed.forEach { day ->
+                            if (pending.remove(day.toString())) pendingChanged = true
+                        }
+                        if (pendingChanged) {
+                            editor.putStringSet(KEY_PENDING_SCRATCH, pending)
+                        }
+                    }
+                }
+
+                val saved = editor.commit()
+                if (!saved) {
+                    AppLog.w("DailyChallenge applyRemoteToday commit failed")
+                }
+                snapshot(context)
+            }
+        }.getOrElse {
+            AppLog.e("DailyChallenge applyRemoteToday failed", it)
+            snapshot(context)
+        }
+    }
+
+    fun isMilestoneScratchPending(context: Context, days: Int): Boolean {
+        return synchronized(this) {
+            days.toString() in (prefs(context).getStringSet(KEY_PENDING_SCRATCH, null) ?: emptySet())
+        }
+    }
+
+    fun markMilestoneScratchPending(context: Context, days: Int) {
+        synchronized(this) {
+            val prefs = prefs(context)
+            val next = HashSet(prefs.getStringSet(KEY_PENDING_SCRATCH, null) ?: emptySet())
+            next.add(days.toString())
+            prefs.edit().putStringSet(KEY_PENDING_SCRATCH, next).apply()
+        }
+    }
+
+    fun clearMilestoneScratchPending(context: Context, days: Int) {
+        synchronized(this) {
+            val prefs = prefs(context)
+            val next = HashSet(prefs.getStringSet(KEY_PENDING_SCRATCH, null) ?: emptySet())
+            if (next.remove(days.toString())) {
+                prefs.edit().putStringSet(KEY_PENDING_SCRATCH, next).apply()
+            }
+        }
+    }
+
     fun claimCheckIn(context: Context): Result {
         return runCatching {
             synchronized(this) {
@@ -96,6 +206,21 @@ object DailyChallengeStore {
             synchronized(this) {
                 val prefs = prefs(context)
                 val today = today()
+                if (earn.alreadyApplied) {
+                    // Server already credited — sync local flag, never inflate streak.
+                    val saved = prefs.edit()
+                        .putString(KEY_CHECKIN, today)
+                        .putString(KEY_LAST_REWARD, "Already checked in today")
+                        .commit()
+                    if (!saved) {
+                        return@synchronized Result(false, "Could not save check-in", snapshot(context))
+                    }
+                    return@synchronized Result(
+                        true,
+                        "Already checked in today",
+                        snapshot(context)
+                    )
+                }
                 if (prefs.getString(KEY_CHECKIN, null) == today) {
                     return@synchronized Result(true, "Already checked in today", snapshot(context))
                 }
@@ -216,37 +341,50 @@ object DailyChallengeStore {
     }
 
     fun claimAdBonus(context: Context): Result {
+        // No rewarded-ad SDK in the app yet — never grant free daily coins.
+        return Result(
+            false,
+            "Ad bonus is not available yet.",
+            snapshot(context)
+        )
+    }
+
+    /**
+     * Local gate before opening the scratch dialog.
+     * Failures should surface on the Scratch button — do not open the card.
+     */
+    fun precheckMilestoneScratch(context: Context, days: Int): Result {
         return runCatching {
+            streakMilestones.firstOrNull { it.days == days }
+                ?: return Result(false, "Unknown milestone", snapshot(context))
+            val token =
+                com.ffsensitivity.app.data.UserSessionStore(context).accessToken()
+            if (token.isBlank()) {
+                return Result(
+                    false,
+                    "Please sign in again to claim rewards.",
+                    snapshot(context)
+                )
+            }
             synchronized(this) {
                 val prefs = prefs(context)
-                val today = today()
-                if (prefs.getString(KEY_AD, null) == today) {
-                    return Result(false, "Ad bonus already claimed today", snapshot(context))
+                val streak = prefs.getInt(KEY_STREAK, 0).coerceAtLeast(0)
+                val claimed = readClaimed(prefs)
+                when {
+                    days in claimed ->
+                        return Result(false, "Already claimed", snapshot(context))
+                    streak < days ->
+                        return Result(
+                            false,
+                            "Need $days-day streak first",
+                            snapshot(context)
+                        )
                 }
             }
-            // --- Start: Economy live wire (Sachin) ---
-            val remote = com.ffsensitivity.app.data.remote.EconomyRepository.earnAd(context)
-            val earn = remote.getOrElse {
-                AppLog.e("Ad economy earn failed", it)
-                val msg = (it as? com.ffsensitivity.app.data.remote.ApiException)?.message
-                    ?: "Ad bonus failed. Check connection."
-                return Result(false, msg, snapshot(context))
-            }
-            // --- End: Economy live wire (Sachin) ---
-            synchronized(this) {
-                val prefs = prefs(context)
-                val today = today()
-                val note = "Ad bonus +${earn.delta}"
-                val saved = prefs.edit()
-                    .putString(KEY_AD, today)
-                    .putString(KEY_LAST_REWARD, note)
-                    .commit()
-                if (!saved) return@synchronized Result(false, "Could not save ad bonus", snapshot(context))
-                Result(true, "+${earn.delta} coins · ad bonus", snapshot(context))
-            }
+            Result(true, "Ready to scratch", snapshot(context))
         }.getOrElse {
-            AppLog.e("DailyChallenge ad bonus failed", it)
-            Result(false, "Ad bonus failed. Try again.", snapshot(context))
+            AppLog.e("Milestone scratch precheck failed", it)
+            Result(false, "Can't open scratch card. Try again.", snapshot(context))
         }
     }
 
@@ -259,9 +397,11 @@ object DailyChallengeStore {
                 val streak = prefs.getInt(KEY_STREAK, 0).coerceAtLeast(0)
                 val claimed = readClaimed(prefs)
                 when {
-                    days in claimed ->
-                        return Result(false, "Already claimed", snapshot(context))
-                    streak < days && !ScratchCardDebug.isForceUnlocked(days) ->
+                    days in claimed -> {
+                        clearMilestoneScratchPending(context, days)
+                        return Result(true, "Already claimed · Day $days", snapshot(context))
+                    }
+                    streak < days ->
                         return Result(false, "Need $days-day streak first", snapshot(context))
                 }
             }
@@ -277,6 +417,22 @@ object DailyChallengeStore {
             synchronized(this) {
                 val prefs = prefs(context)
                 val claimed = readClaimed(prefs)
+                if (earn.alreadyApplied || days in claimed) {
+                    val nextClaimed = claimed + days
+                    val claimedStrings = HashSet<String>(nextClaimed.size).apply {
+                        nextClaimed.forEach { add(it.toString()) }
+                    }
+                    prefs.edit()
+                        .putStringSet(KEY_CLAIMED, claimedStrings)
+                        .putString(KEY_LAST_REWARD, "Milestone ${days}d already claimed")
+                        .commit()
+                    clearMilestoneScratchPending(context, days)
+                    return@synchronized Result(
+                        true,
+                        "Already claimed · Day $days",
+                        snapshot(context)
+                    )
+                }
                 val nextClaimed = claimed + days
                 val claimedStrings = HashSet<String>(nextClaimed.size).apply {
                     nextClaimed.forEach { add(it.toString()) }
@@ -287,6 +443,7 @@ object DailyChallengeStore {
                     .putString(KEY_LAST_REWARD, note)
                     .commit()
                 if (!saved) return@synchronized Result(false, "Could not claim reward", snapshot(context))
+                clearMilestoneScratchPending(context, days)
                 Result(true, "+${earn.delta} coins · ${milestone.title}", snapshot(context))
             }
         }.getOrElse {
@@ -381,7 +538,10 @@ object DailyChallengeStore {
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private fun today(): String = LocalDate.now().format(fmt)
+    /** UTC calendar date — matches Nest `utcDateKey()`. */
+    private fun today(): String =
+        Instant.now().atZone(ZoneOffset.UTC).toLocalDate().format(fmt)
 
-    private fun yesterday(): String = LocalDate.now().minus(1, ChronoUnit.DAYS).format(fmt)
+    private fun yesterday(): String =
+        Instant.now().atZone(ZoneOffset.UTC).toLocalDate().minus(1, ChronoUnit.DAYS).format(fmt)
 }

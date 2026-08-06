@@ -15,6 +15,7 @@ object ShopStore {
     private const val KEY_COUNTS = "buy_counts_json"
     private const val KEY_HISTORY = "history_json"
     private const val KEY_BOOSTS = "boost_charges_json"
+    private const val KEY_PENDING_REQ = "pending_buy_req_json"
 
     const val ID_BOOST_QUIZ_DOUBLE = "boost_quiz_double"
     const val ID_BOOST_CHECKIN_PLUS = "boost_checkin_plus"
@@ -34,7 +35,8 @@ object ShopStore {
     data class BuyResult(
         val ok: Boolean,
         val message: String,
-        val coinsLeft: Int
+        val coinsLeft: Int,
+        val errorCode: String? = null
     )
 
     fun ownedIds(context: Context): Set<String> = readOwned(context)
@@ -64,6 +66,63 @@ object ShopStore {
     fun replaceBoostCharges(context: Context, charges: Map<String, Int>) {
         synchronized(this) {
             writeBoosts(context, charges.filterValues { it > 0 })
+        }
+    }
+
+    /**
+     * Merge server ledger ownership into local prefs (reinstall / multi-device restore).
+     * Server counts win for known shop ids; local-only keys are kept if server omits them.
+     */
+    fun syncInventoryFromServer(
+        context: Context,
+        ownedShopIds: List<String>,
+        shopBuyCounts: Map<String, Int>
+    ) {
+        runCatching {
+            synchronized(this) {
+                val owned = readOwned(context).toMutableSet()
+                owned.addAll(ownedShopIds.filter { it.isNotBlank() })
+                writeOwned(context, owned)
+
+                val counts = readCounts(context).toMutableMap()
+                shopBuyCounts.forEach { (id, n) ->
+                    if (id.isBlank() || n <= 0) return@forEach
+                    counts[id] = n
+                }
+                writeCounts(context, counts.filterValues { it > 0 })
+            }
+        }.onFailure {
+            AppLog.e("Shop syncInventoryFromServer failed", it)
+        }
+    }
+
+    /** Persisted idempotency id for in-flight / Retry buys (survives leaving the shop). */
+    fun peekPendingRequestId(context: Context, itemId: String): String? {
+        if (itemId.isBlank()) return null
+        return synchronized(this) {
+            readPendingRequests(context)[itemId]?.takeIf { it.length in 8..80 }
+        }
+    }
+
+    fun putPendingRequestId(context: Context, itemId: String, requestId: String) {
+        val safeItem = itemId.trim()
+        val safeReq = requestId.trim()
+        if (safeItem.isBlank() || safeReq.length < 8 || safeReq.length > 80) return
+        synchronized(this) {
+            val map = readPendingRequests(context).toMutableMap()
+            map[safeItem] = safeReq
+            writePendingRequests(context, map)
+        }
+    }
+
+    fun clearPendingRequestId(context: Context, itemId: String) {
+        val safeItem = itemId.trim()
+        if (safeItem.isBlank()) return
+        synchronized(this) {
+            val map = readPendingRequests(context).toMutableMap()
+            if (map.remove(safeItem) != null) {
+                writePendingRequests(context, map)
+            }
         }
     }
     // --- End: Economy live wire (Sachin) ---
@@ -103,12 +162,21 @@ object ShopStore {
         return true to "OK"
     }
 
-    fun purchase(context: Context, itemId: String): BuyResult {
+    /**
+     * Purchase via Nest. Call from a background dispatcher (IO) — not Main.
+     * [requestId] must be stable across Retry for the same attempt (idempotency).
+     */
+    fun purchase(context: Context, itemId: String, requestId: String): BuyResult {
+        val coinsNow = { DailyChallengeStore.snapshot(context).coins }
         return runCatching {
             val item = ShopAdminTable.findById(itemId)
-                ?: return BuyResult(false, "Item not found", DailyChallengeStore.snapshot(context).coins)
+                ?: return BuyResult(false, "Item not found", coinsNow())
             if (!item.enabled) {
-                return BuyResult(false, "Item unavailable", DailyChallengeStore.snapshot(context).coins)
+                return BuyResult(false, "Item unavailable", coinsNow())
+            }
+            val safeReq = requestId.trim()
+            if (safeReq.length < 8 || safeReq.length > 80) {
+                return BuyResult(false, "Invalid purchase request. Try again.", coinsNow())
             }
             synchronized(this) {
                 val snap = DailyChallengeStore.snapshot(context)
@@ -116,53 +184,107 @@ object ShopStore {
                 if (!ok) return BuyResult(false, reason, snap.coins)
             }
 
-            // --- Start: Economy live wire (Sachin) ---
-            val remote = com.ffsensitivity.app.data.remote.EconomyRepository.purchaseShop(context, itemId)
-            val paid = remote.getOrElse {
-                AppLog.e("Shop economy purchase failed", it)
-                val msg = (it as? com.ffsensitivity.app.data.remote.ApiException)?.message
-                    ?: "Purchase failed. Check connection."
-                return BuyResult(false, msg, DailyChallengeStore.snapshot(context).coins)
+            val remote = com.ffsensitivity.app.data.remote.EconomyRepository.purchaseShop(
+                context,
+                itemId,
+                safeReq
+            )
+            val paid = remote.getOrElse { err ->
+                AppLog.e("Shop economy purchase failed", err)
+                val api = err as? com.ffsensitivity.app.data.remote.ApiException
+                if (api?.code == "SHOP_ALREADY_OWNED") {
+                    // Reinstall / desync: restore local one-time ownership without charging again.
+                    runCatching {
+                        synchronized(this) {
+                            if (item.oneTime) {
+                                val owned = readOwned(context).toMutableSet()
+                                owned.add(item.id)
+                                writeOwned(context, owned)
+                                val counts = readCounts(context).toMutableMap()
+                                if ((counts[item.id] ?: 0) < 1) {
+                                    counts[item.id] = 1
+                                    writeCounts(context, counts)
+                                }
+                            }
+                        }
+                    }.onFailure { AppLog.e("Shop restore owned failed", it) }
+                }
+                val msg = api?.message ?: "Purchase failed. Check connection."
+                return BuyResult(false, msg, coinsNow(), errorCode = api?.code)
             }
-            // --- End: Economy live wire (Sachin) ---
 
-            synchronized(this) {
-                val owned = readOwned(context).toMutableSet()
-                if (item.oneTime) owned.add(item.id)
-                val counts = readCounts(context).toMutableMap()
-                counts[item.id] = (counts[item.id] ?: 0) + 1
-                val history = readHistory(context).toMutableList()
-                history.add(
-                    0,
-                    OwnedItem(
-                        itemId = item.id,
-                        title = item.title,
-                        rewardTag = item.rewardTag,
-                        category = item.category,
-                        purchasedAtMs = System.currentTimeMillis(),
-                        qty = counts[item.id] ?: 1
-                    )
-                )
-                while (history.size > 100) history.removeAt(history.lastIndex)
+            // Coins already updated by EconomyRepository. Local grant must not throw as "failed buy"
+            // or Retry with a new requestId could double-charge stackable items.
+            var refreshBoosts = false
+            runCatching {
+                synchronized(this) {
+                    if (paid.alreadyApplied) {
+                        // Idempotent replay — ensure one-time owned, do not bump counts/history again.
+                        if (item.oneTime) {
+                            val owned = readOwned(context).toMutableSet()
+                            owned.add(item.id)
+                            writeOwned(context, owned)
+                        }
+                        when (item.id) {
+                            ID_PACK_SCRATCH_BONUS ->
+                                ScratchHistoryStore.addShopToken(
+                                    context,
+                                    item,
+                                    requestId = safeReq
+                                )
+                            ID_BOOST_QUIZ_DOUBLE,
+                            ID_BOOST_CHECKIN_PLUS -> refreshBoosts = true
+                        }
+                    } else {
+                        val owned = readOwned(context).toMutableSet()
+                        if (item.oneTime) owned.add(item.id)
+                        val counts = readCounts(context).toMutableMap()
+                        counts[item.id] = (counts[item.id] ?: 0) + 1
+                        val history = readHistory(context).toMutableList()
+                        history.add(
+                            0,
+                            OwnedItem(
+                                itemId = item.id,
+                                title = item.title,
+                                rewardTag = item.rewardTag,
+                                category = item.category,
+                                purchasedAtMs = System.currentTimeMillis(),
+                                qty = counts[item.id] ?: 1
+                            )
+                        )
+                        while (history.size > 100) history.removeAt(history.lastIndex)
 
-                writeOwned(context, owned)
-                writeCounts(context, counts)
-                writeHistory(context, history)
+                        writeOwned(context, owned)
+                        writeCounts(context, counts)
+                        writeHistory(context, history)
 
-                when (item.id) {
-                    ID_PACK_SCRATCH_BONUS -> ScratchHistoryStore.addShopToken(context, item)
-                    // Boost charges live on Nest; refresh local UI cache.
-                    ID_BOOST_QUIZ_DOUBLE,
-                    ID_BOOST_CHECKIN_PLUS -> {
-                        com.ffsensitivity.app.data.remote.EconomyRepository.refreshWallet(context)
+                        when (item.id) {
+                            ID_PACK_SCRATCH_BONUS ->
+                                ScratchHistoryStore.addShopToken(
+                                    context,
+                                    item,
+                                    requestId = safeReq
+                                )
+                            ID_BOOST_QUIZ_DOUBLE,
+                            ID_BOOST_CHECKIN_PLUS -> refreshBoosts = true
+                        }
                     }
                 }
-
-                BuyResult(true, "Purchased · ${item.title}", paid.coins)
+                if (refreshBoosts) {
+                    com.ffsensitivity.app.data.remote.EconomyRepository.refreshWallet(context)
+                }
+            }.onFailure {
+                AppLog.e("Shop local grant after paid failed", it)
             }
+
+            val message = when {
+                paid.alreadyApplied -> "Purchase confirmed"
+                else -> "Purchased · ${item.title}"
+            }
+            BuyResult(true, message, paid.coins)
         }.getOrElse {
             AppLog.e("Shop purchase failed", it)
-            BuyResult(false, "Purchase failed. Try again.", DailyChallengeStore.snapshot(context).coins)
+            BuyResult(false, "Purchase failed. Try again.", coinsNow())
         }
     }
 
@@ -285,6 +407,22 @@ object ShopStore {
         val o = JSONObject()
         boosts.filterValues { it > 0 }.forEach { (k, v) -> o.put(k, v) }
         prefs(context).edit().putString(KEY_BOOSTS, o.toString()).apply()
+    }
+
+    private fun readPendingRequests(context: Context): Map<String, String> {
+        val raw = prefs(context).getString(KEY_PENDING_REQ, null).orEmpty()
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val o = JSONObject(raw)
+            o.keys().asSequence().associateWith { o.optString(it) }
+                .filterValues { it.length in 8..80 }
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun writePendingRequests(context: Context, pending: Map<String, String>) {
+        val o = JSONObject()
+        pending.forEach { (k, v) -> o.put(k, v) }
+        prefs(context).edit().putString(KEY_PENDING_REQ, o.toString()).apply()
     }
 
     private fun prefs(context: Context) =

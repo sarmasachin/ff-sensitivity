@@ -24,8 +24,12 @@ object CommunityApi {
                 val arr = JSONArray(raw)
                 buildList {
                     for (i in 0 until arr.length()) {
-                        val o = arr.getJSONObject(i)
-                        add(parseCard(o))
+                        runCatching {
+                            val o = arr.optJSONObject(i) ?: return@runCatching
+                            parseCard(o)?.let { add(it) }
+                        }.onFailure {
+                            AppLog.e("CommunityApi.feed skip bad item[$i]", it)
+                        }
                     }
                 }
             }
@@ -91,24 +95,32 @@ object CommunityApi {
         }
     }
 
-    private fun parseCard(o: JSONObject): SharedSensiCard {
+    private fun parseCard(o: JSONObject): SharedSensiCard? {
+        val id = o.optString("id").trim()
+        if (id.isBlank()) return null
+        fun mustInt(key: String): Int {
+            if (!o.has(key) || o.isNull(key)) {
+                throw IllegalArgumentException("missing $key")
+            }
+            return o.getInt(key)
+        }
         return SharedSensiCard(
-            id = o.getString("id"),
+            id = id,
             name = o.optString("name"),
             freeFireId = o.optString("freeFireId"),
             rank = o.optString("rank"),
             role = o.optString("role"),
             deviceLabel = o.optString("deviceLabel"),
             deviceMeta = o.optString("deviceMeta"),
-            matches = o.optInt("matches"),
-            kills = o.optInt("kills"),
-            headshots = o.optInt("headshots"),
-            general = o.optInt("general"),
-            redDot = o.optInt("redDot"),
-            scope2x = o.optInt("scope2x"),
-            scope4x = o.optInt("scope4x"),
-            awm = o.optInt("awm"),
-            freeLook = o.optInt("freeLook")
+            matches = mustInt("matches"),
+            kills = mustInt("kills"),
+            headshots = mustInt("headshots"),
+            general = mustInt("general"),
+            redDot = mustInt("redDot"),
+            scope2x = mustInt("scope2x"),
+            scope4x = mustInt("scope4x"),
+            awm = mustInt("awm"),
+            freeLook = mustInt("freeLook")
         )
     }
 }

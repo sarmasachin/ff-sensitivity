@@ -197,12 +197,6 @@ internal fun RedeemCatalogErrorPane(
                 lineHeight = 18.sp,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Ref: ${error.code}",
-                color = InkMuted,
-                fontSize = 11.sp
-            )
             if (onRetry != null) {
                 Spacer(modifier = Modifier.height(16.dp))
                 TextButton(onClick = onRetry) {

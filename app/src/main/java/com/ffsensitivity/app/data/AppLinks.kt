@@ -14,6 +14,10 @@ object AppLinks {
         get() = AppConfigRepository.snapshot().links.privacyUrl
             .ifBlank { AppConfigDefaults.PRIVACY }
 
+    /** App Terms page (hosted on app.sensitivitysettings.com). */
+    val TERMS: String
+        get() = "https://app.sensitivitysettings.com/terms"
+
     val PLAY_STORE: String
         get() = AppConfigRepository.snapshot().links.playStoreUrl
             .ifBlank { AppConfigDefaults.PLAY_STORE }

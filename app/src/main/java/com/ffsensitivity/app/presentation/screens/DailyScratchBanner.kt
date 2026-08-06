@@ -57,7 +57,7 @@ fun DailyScratchBanner(
         Text(
             text = when {
                 eligibility == null -> "Syncing card…"
-                eligibility.canRoll -> "Tap to reveal today’s Nest roll"
+                eligibility.canRoll -> "Tap to reveal today’s scratch"
                 !eligibility.checkinDone -> "Check in first on Daily Challenge"
                 else -> "No cards left today (${eligibility.rollsUsed}/${eligibility.cardsPerDay})"
             },
@@ -67,7 +67,7 @@ fun DailyScratchBanner(
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Server RNG · coins or redeem · admin odds",
+            text = "Win coins or a redeem code",
             color = VoidBlack.copy(alpha = 0.65f),
             fontSize = 12.sp
         )

@@ -1,5 +1,6 @@
 package com.ffsensitivity.app.presentation.screens.login
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,11 +27,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ffsensitivity.app.presentation.theme.SurfaceCard
-import com.ffsensitivity.app.presentation.theme.SurfaceLift
+import com.ffsensitivity.app.R
 
 @Composable
 fun LoginGoogleButton(
@@ -75,7 +77,12 @@ fun LoginGoogleButton(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                GoogleGMark()
+                Image(
+                    painter = painterResource(id = R.drawable.ic_google_g),
+                    contentDescription = "Google",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(22.dp)
+                )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "Continue with Google",
@@ -86,25 +93,5 @@ fun LoginGoogleButton(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun GoogleGMark() {
-    val shape = RoundedCornerShape(6.dp)
-    Box(
-        modifier = Modifier
-            .size(22.dp)
-            .clip(shape)
-            .background(SurfaceLift)
-            .border(1.dp, SurfaceCard, shape),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "G",
-            color = Color(0xFF4285F4),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
     }
 }

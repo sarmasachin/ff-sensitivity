@@ -4,7 +4,14 @@ import com.ffsensitivity.app.data.DailyChallengeStore
 
 internal enum class ChallengeTab { TODAY, REWARDS }
 
-enum class ChallengeRetryKind { REFRESH_SNAPSHOT, CHECK_IN, QUIZ, AD, CLAIM_MILESTONE }
+enum class ChallengeRetryKind {
+    REFRESH_SNAPSHOT,
+    CHECK_IN,
+    QUIZ,
+    AD,
+    CLAIM_MILESTONE,
+    SIGN_IN
+}
 
 data class ChallengeUiError(
     val code: String,

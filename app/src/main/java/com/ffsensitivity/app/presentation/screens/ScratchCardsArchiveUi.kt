@@ -67,7 +67,7 @@ fun ScratchArchiveLoadFailedHint() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Couldnâ€™t load archive",
+            text = "Couldn’t load archive",
             color = InkPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold
@@ -215,7 +215,7 @@ fun EmptyScratchArchive() {
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Scratch a Daily Challenge reward or Redeem code â€” wins show up here.",
+            text = "Scratch a Daily Challenge reward or Redeem code — wins show up here.",
             color = InkMuted,
             fontSize = 13.sp,
             lineHeight = 18.sp
@@ -231,11 +231,11 @@ fun ScratchedArchiveCard(
     val daysLeft = entry.daysLeft()
     val dateLabel = remember(entry.scratchedAtMs) {
         runCatching {
-            SimpleDateFormat("dd MMM yyyy Â· HH:mm", Locale.getDefault())
+            SimpleDateFormat("dd MMM yyyy · HH:mm", Locale.getDefault())
                 .format(Date(entry.scratchedAtMs))
         }.getOrElse {
             AppLog.e("Scratch archive date format failed", it)
-            "â€”"
+            "—"
         }
     }
     val isRedeem = entry.kind == ScratchCardKind.REDEEM
@@ -345,7 +345,7 @@ fun ScratchedArchiveCard(
                 if (!entry.badge.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Badge Â· ${entry.badge}",
+                        text = "Badge · ${entry.badge}",
                         color = Success,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold

@@ -32,6 +32,7 @@ object ChallengeRepository {
         }
         return ChallengeApi.getToday(token).map { payload ->
             ChallengeRemoteCache.setToday(payload.question, payload.milestones)
+            DailyChallengeStore.applyRemoteToday(context, payload)
             payload
         }.onFailure { AppLog.e("ChallengeRepository.syncToday failed", it) }
     }

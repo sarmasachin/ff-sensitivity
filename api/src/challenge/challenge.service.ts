@@ -162,24 +162,73 @@ export class ChallengeService {
     const todayQ = this.pickTodayQuestion(enabledQuiz, dayOfYear);
     const day = utcDateKey();
 
-    const alreadyCorrect = await this.prisma.walletLedger.findFirst({
-      where: {
-        userId,
-        idempotencyKey: `earn:quiz:ok:${userId}:${day}`,
-      },
-      select: { id: true },
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { streakDays: true },
     });
-    const wrongCount = await this.prisma.walletLedger.count({
-      where: {
-        userId,
-        reason: 'earn:quiz:wrong',
-        idempotencyKey: { startsWith: `earn:quiz:wrong:${userId}:${day}:` },
-      },
-    });
+
+    const [alreadyCorrect, wrongCount, lastWrong, checkinDone, adDone, milestoneRows] =
+      await Promise.all([
+        this.prisma.walletLedger.findFirst({
+          where: {
+            userId,
+            idempotencyKey: `earn:quiz:ok:${userId}:${day}`,
+          },
+          select: { id: true },
+        }),
+        this.prisma.walletLedger.count({
+          where: {
+            userId,
+            reason: 'earn:quiz:wrong',
+            idempotencyKey: { startsWith: `earn:quiz:wrong:${userId}:${day}:` },
+          },
+        }),
+        this.prisma.walletLedger.findFirst({
+          where: {
+            userId,
+            reason: 'earn:quiz:wrong',
+            idempotencyKey: { startsWith: `earn:quiz:wrong:${userId}:${day}:` },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        }),
+        this.prisma.walletLedger.findFirst({
+          where: { userId, idempotencyKey: `earn:checkin:${userId}:${day}` },
+          select: { id: true },
+        }),
+        this.prisma.walletLedger.findFirst({
+          where: { userId, idempotencyKey: `earn:ad:${userId}:${day}` },
+          select: { id: true },
+        }),
+        this.prisma.walletLedger.findMany({
+          where: { userId, reason: { startsWith: 'earn:milestone:' } },
+          select: { reason: true },
+        }),
+      ]);
+
+    const lockMs = config.wrongAnswerLockHours * 60 * 60 * 1000;
+    const openMs = config.quizOpenWindowHours * 60 * 60 * 1000;
+    let lockUntilMs: number | null = null;
+    let openUntilMs: number | null = null;
+    if (lastWrong && !alreadyCorrect) {
+      lockUntilMs = lastWrong.createdAt.getTime() + lockMs;
+      openUntilMs = lockUntilMs + openMs;
+    }
+
+    const claimedMilestoneDays = milestoneRows
+      .map((row) => {
+        const parts = row.reason.split(':');
+        return Number.parseInt(parts[2] ?? '', 10);
+      })
+      .filter((n) => Number.isFinite(n) && n > 0);
 
     return {
       dayKey: day,
       dayOfYear,
+      streakDays: user.streakDays,
+      checkinDone: !!checkinDone,
+      adDone: !!adDone,
+      claimedMilestoneDays,
       rules: this.mapRules(config),
       question: todayQ
         ? {
@@ -197,6 +246,8 @@ export class ChallengeService {
         alreadyCorrect: !!alreadyCorrect,
         wrongAttempts: wrongCount,
         maxWrongAttempts: 2,
+        lockUntilMs,
+        openUntilMs,
       },
       milestones: milestones.map((m) => this.mapMilestone(m)),
     };

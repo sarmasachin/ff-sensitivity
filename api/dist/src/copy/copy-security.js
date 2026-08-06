@@ -92,11 +92,11 @@ exports.DEFAULT_COPY_CONFIG = {
         hashtags: '#FreeFire #FFSensitivity',
     },
     about: {
-        headline: 'FF Sensitivity',
-        blurb: 'Device-aware Free Fire sensitivity, stylish names, daily challenges, and redeem tools — built for serious players.',
+        headline: 'FF Sensitivity Settings',
+        blurb: 'FF Sensitivity Settings is a mobile companion built for Free Fire players who want cleaner aim, smarter controls, and a faster setup — without guesswork.\n\nThe app helps you find device-aware sensitivity, HUD and graphics guidance, safe DPI limits, stylish names, daily challenges with rewards, a coin shop, redeem codes, and shareable sensitivity cards — all in one place.\n\nThis is an independent fan-made utility. It is not owned by, affiliated with, or endorsed by Garena or any game publisher. Always follow Free Fire’s rules and fair-play policy.',
         versionPrefix: 'Version',
-        websiteCta: 'Visit website',
-        privacyCta: 'View privacy policy',
+        websiteCta: 'Our website',
+        privacyCta: 'Read privacy policy',
     },
     legal: {
         privacyLabel: 'Privacy policy',

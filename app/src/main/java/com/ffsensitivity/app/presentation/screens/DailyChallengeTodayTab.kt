@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -28,13 +29,13 @@ import com.ffsensitivity.app.data.ShopStore
 import com.ffsensitivity.app.data.remote.ChallengeRemoteCache
 import com.ffsensitivity.app.data.remote.ChallengeRepository
 import com.ffsensitivity.app.presentation.theme.Amber
-import com.ffsensitivity.app.presentation.theme.InkMuted
 import com.ffsensitivity.app.presentation.theme.InkPrimary
 import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -46,6 +47,7 @@ fun DailyChallengeTodayTab(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var question by remember {
         mutableStateOf(
             ChallengeRemoteCache.todayQuestion
@@ -107,34 +109,38 @@ fun DailyChallengeTodayTab(
         }
         onClearError()
         busy = true
-        val result = runCatching { block() }.getOrElse {
-            AppLog.e("Daily challenge action failed", it)
-            null
-        }
-        busy = false
-        when {
-            result == null -> {
-                onError(
-                    ChallengeUiError(
-                        code = failCode,
-                        title = failTitle,
-                        message = "Something went wrong. Try again."
-                    )
-                )
+        scope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) { block() }
+            }.getOrElse {
+                AppLog.e("Daily challenge action failed", it)
+                null
             }
-            result.ok -> {
-                onSnapshot(result.snapshot)
-                SafeOps.toast(context, result.message)
-            }
-            else -> {
-                onSnapshot(result.snapshot)
-                onError(
-                    ChallengeUiError(
-                        code = failCode,
-                        title = failTitle,
-                        message = result.message.ifBlank { "Action was declined." }
+            busy = false
+            when {
+                result == null -> {
+                    onError(
+                        ChallengeUiError(
+                            code = failCode,
+                            title = failTitle,
+                            message = "Something went wrong. Try again."
+                        )
                     )
-                )
+                }
+                result.ok -> {
+                    onSnapshot(result.snapshot)
+                    SafeOps.toast(context, result.message)
+                }
+                else -> {
+                    onSnapshot(result.snapshot)
+                    onError(
+                        ChallengeUiError(
+                            code = failCode,
+                            title = failTitle,
+                            message = result.message.ifBlank { "Action was declined." }
+                        )
+                    )
+                }
             }
         }
     }
@@ -161,7 +167,7 @@ fun DailyChallengeTodayTab(
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Check-in · answer 1 quiz · optional ad bonus. Keep your streak alive.",
+            text = "Check in and answer today’s quiz to keep your streak alive.",
             color = InkSecondary,
             fontSize = 13.sp,
             lineHeight = 18.sp
@@ -171,7 +177,7 @@ fun DailyChallengeTodayTab(
         WalletHeroCard(
             coins = snapshot.coins,
             streak = snapshot.streak,
-            doneCount = snapshot.todayDoneCount.coerceIn(0, 3),
+            doneCount = snapshot.todayDoneCount.coerceIn(0, 2),
             lastRewardNote = snapshot.lastRewardNote,
             goldStyle = runCatching {
                 ShopStore.hasGoldWalletStyle(context)
@@ -263,24 +269,15 @@ fun DailyChallengeTodayTab(
         ChallengeTaskCard(
             icon = Icons.Outlined.PlayCircle,
             title = "Watch Ad Bonus",
-            subtitle = if (snapshot.adDoneToday) "Bonus claimed for today"
-            else "Optional · earn +30 coins (1 per day)",
+            subtitle = if (snapshot.adDoneToday) {
+                "Bonus claimed for today"
+            } else {
+                "Ad bonus not available yet"
+            },
             done = snapshot.adDoneToday,
-            actionLabel = if (snapshot.adDoneToday) "Claimed" else "Claim +30",
-            actionEnabled = !snapshot.adDoneToday && !busy,
-            onAction = {
-                runAction("CHALLENGE_AD_FAILED", "Ad bonus failed") {
-                    DailyChallengeStore.claimAdBonus(context)
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-        Text(
-            text = "Tip: finish all 3 for a perfect day. Long streaks unlock bigger Rewards tab milestones.",
-            color = InkMuted,
-            fontSize = 12.sp,
-            lineHeight = 17.sp
+            actionLabel = if (snapshot.adDoneToday) "Claimed" else "Unavailable",
+            actionEnabled = false,
+            onAction = { }
         )
         Spacer(modifier = Modifier.height(28.dp))
     }

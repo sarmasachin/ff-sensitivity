@@ -86,7 +86,7 @@ internal fun ShopTopBar(onBack: () -> Unit) {
                 letterSpacing = 1.5.sp
             )
             Text(
-                text = "Spend & Unlock",
+                text = "Boosts & styles",
                 color = InkPrimary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold
@@ -155,7 +155,7 @@ internal fun ShopWalletHero(coins: Int, goldStyle: Boolean) {
             )
             Text(
                 text = if (goldStyle) {
-                    "Gold chip active · earn & spend in-app"
+                    "Gold style on · earn & spend here"
                 } else {
                     "Earn from Daily Challenge · spend here"
                 },

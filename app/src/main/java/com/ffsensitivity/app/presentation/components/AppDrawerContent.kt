@@ -30,7 +30,6 @@ import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.StarRate
 import androidx.compose.material.icons.outlined.Style
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -82,31 +81,28 @@ fun AppDrawerContent(
     modifier: Modifier = Modifier,
     configTick: Int = 0
 ) {
-    // Material default max width is 360.dp (~87% phone) + near-black sheet = "full black screen".
-    // Also avoid Modifier.weight inside ModalDrawerSheet — some devices get bad height constraints
-    // and the menu list collapses to empty (black panel, no labels).
+    // Keep width stable; avoid ModalDrawerSheet + weight layout traps that intermittently
+    // collapse the menu list to an empty dark panel ("black screen").
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val drawerWidth = (screenWidthDp * 0.72f).roundToInt().coerceIn(260, 300).dp
     val drawerShape = RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)
 
-    ModalDrawerSheet(
+    // fillMaxSize on the panel (not on the scroll child) — avoids scroll+fillMaxHeight
+    // measure glitches that intermittently looked like an empty black drawer.
+    Column(
         modifier = modifier
             .width(drawerWidth)
             .fillMaxHeight()
             .clip(drawerShape)
-            .border(1.dp, Amber.copy(alpha = 0.28f), drawerShape),
-        drawerShape = drawerShape,
-        drawerContainerColor = SurfaceLift,
-        drawerContentColor = InkPrimary
+            .background(Brush.verticalGradient(listOf(SurfaceLift, SurfaceCard)))
+            .border(1.dp, Amber.copy(alpha = 0.28f), drawerShape)
+            .statusBarsPadding()
+            .navigationBarsPadding()
     ) {
-        // No weight(): scroll the whole sheet so items always lay out.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
-                .background(Brush.verticalGradient(listOf(SurfaceLift, SurfaceCard)))
-                .statusBarsPadding()
-                .navigationBarsPadding()
+                .weight(1f, fill = true)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
@@ -119,7 +115,7 @@ fun AppDrawerContent(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "FREE FIRE SENSITIVITY",
+                    text = "FF SENSITIVITY",
                     color = AmberHot,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Black,
