@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
     "Privacy Policy for the FF Sensitivity Settings Android app — how we collect, use, and protect your information.",
-  robots: { index: true, follow: true },
+  robots: { index: false, follow: false },
 };
 
 const SECTIONS: { title: string; body: string[] }[] = [
@@ -132,6 +131,16 @@ export default function AppPrivacyPolicyPage() {
           the App — not as a copy of the public website policy.
         </p>
 
+        <p className="mt-5 text-[15px] leading-7 text-slate-300">
+          Also read:{" "}
+          <a
+            href="https://app.sensitivitysettings.com/terms"
+            className="font-semibold text-amber-400 underline underline-offset-4"
+          >
+            Terms & Conditions
+          </a>
+        </p>
+
         <div className="mt-10 space-y-8">
           {SECTIONS.map((section) => (
             <section key={section.title} className="border-t border-white/10 pt-6">
@@ -147,19 +156,22 @@ export default function AppPrivacyPolicyPage() {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-wrap gap-4 border-t border-white/10 pt-6 text-sm">
-          <Link
-            href="/terms"
-            className="font-semibold text-amber-400 underline-offset-4 hover:underline"
+        <div className="mt-12 space-y-3 border-t border-white/10 pt-6 text-sm">
+          <p className="font-semibold tracking-wide text-slate-400 uppercase">
+            Related
+          </p>
+          <a
+            href="https://app.sensitivitysettings.com/terms"
+            className="block font-semibold text-amber-400 underline underline-offset-4"
           >
             Terms & Conditions
-          </Link>
-          <Link
+          </a>
+          <a
             href="https://sensitivitysettings.com"
-            className="font-semibold text-amber-400 underline-offset-4 hover:underline"
+            className="block font-semibold text-amber-400 underline underline-offset-4"
           >
             Website
-          </Link>
+          </a>
         </div>
       </div>
     </main>

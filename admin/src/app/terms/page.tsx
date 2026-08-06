@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Terms & Conditions",
   description:
     "Terms & Conditions for the FF Sensitivity Settings Android app — rules for using the app, rewards, and recommendations.",
-  robots: { index: true, follow: true },
+  robots: { index: false, follow: false },
 };
 
 const SECTIONS: { title: string; body: string[] }[] = [
@@ -59,9 +58,10 @@ const SECTIONS: { title: string; body: string[] }[] = [
     ],
   },
   {
-    title: "7. Acceptable use",
+    title: "7. Acceptable use (rules for users)",
     body: [
-      "You agree not to:",
+      "These rules apply to you as a user of the App. The App does not ask for, and does not need, your Free Fire / Garena password, OTP, or payment details.",
+      "You must not:",
       "• use the App for illegal, harmful, or abusive activity;",
       "• attempt to hack, overload, scrape, reverse engineer, or disrupt the App or its servers;",
       "• upload malware, spam, or misleading content;",
@@ -70,7 +70,7 @@ const SECTIONS: { title: string; body: string[] }[] = [
       "• collect other users’ personal data from the App without permission;",
       "• use bots or automation that harms App performance, fairness, or security;",
       "• share Free Fire / Garena passwords, OTPs, payment details, or other sensitive credentials in the App.",
-      "We may remove content, freeze rewards, block access, or take other action if we believe these Terms were violated.",
+      "If you break these rules, we may remove content, freeze rewards, block access, or take other action.",
     ],
   },
   {
@@ -169,6 +169,16 @@ export default function AppTermsPage() {
           are written for the App — not as a copy of the public website terms.
         </p>
 
+        <p className="mt-5 text-[15px] leading-7 text-slate-300">
+          Also read:{" "}
+          <a
+            href="https://app.sensitivitysettings.com/privacy"
+            className="font-semibold text-amber-400 underline underline-offset-4"
+          >
+            Privacy Policy
+          </a>
+        </p>
+
         <div className="mt-10 space-y-8">
           {SECTIONS.map((section) => (
             <section key={section.title} className="border-t border-white/10 pt-6">
@@ -187,19 +197,22 @@ export default function AppTermsPage() {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-wrap gap-4 border-t border-white/10 pt-6 text-sm">
-          <Link
-            href="/privacy"
-            className="font-semibold text-amber-400 underline-offset-4 hover:underline"
+        <div className="mt-12 space-y-3 border-t border-white/10 pt-6 text-sm">
+          <p className="font-semibold tracking-wide text-slate-400 uppercase">
+            Related
+          </p>
+          <a
+            href="https://app.sensitivitysettings.com/privacy"
+            className="block font-semibold text-amber-400 underline underline-offset-4"
           >
             Privacy Policy
-          </Link>
-          <Link
+          </a>
+          <a
             href="https://sensitivitysettings.com"
-            className="font-semibold text-amber-400 underline-offset-4 hover:underline"
+            className="block font-semibold text-amber-400 underline underline-offset-4"
           >
             Website
-          </Link>
+          </a>
         </div>
       </div>
     </main>
