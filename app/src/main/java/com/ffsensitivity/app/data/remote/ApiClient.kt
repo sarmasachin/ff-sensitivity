@@ -12,8 +12,17 @@ import java.util.concurrent.TimeUnit
 // --- Start: Redeem live wire (Sachin) ---
 class ApiException(
     val code: String,
-    override val message: String
-) : Exception(message)
+    override val message: String,
+    val detailsJson: String? = null
+) : Exception(message) {
+    fun detailLong(key: String): Long? {
+        if (detailsJson.isNullOrBlank()) return null
+        return runCatching {
+            val v = JSONObject(detailsJson).optLong(key, -1L)
+            if (v > 0L) v else null
+        }.getOrNull()
+    }
+}
 
 object ApiClient {
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
@@ -48,7 +57,8 @@ object ApiClient {
             val message = err?.optString("message").orEmpty().ifBlank {
                 "Something went wrong. Please try again."
             }
-            ApiException(code, message)
+            val details = err?.optJSONObject("details")?.toString()
+            ApiException(code, message, details)
         }.getOrElse {
             AppLog.e("API error parse failed", it)
             ApiException("HTTP_$httpCode", "Couldn't reach the server. Try again.")

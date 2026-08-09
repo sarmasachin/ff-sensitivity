@@ -22,10 +22,12 @@ const DEFAULT_RULES = {
     requireCheckIn: true,
     requireQuiz: true,
     adBonusOptional: true,
+    adBonusCooldownHours: 4,
     scratchCardsPerDay: 1,
     cardExpiresSameDay: true,
     firstMilestoneDays: 7,
     wrongAnswerLockHours: 4,
+    wrongAnswerLockMinutes: 20,
     quizOpenWindowHours: 2,
     quizCorrectCoins: 50,
     quizWrongCoins: -10,
@@ -76,10 +78,12 @@ let ChallengeService = class ChallengeService {
                     requireCheckIn: dto.rules.requireCheckIn,
                     requireQuiz: dto.rules.requireQuiz,
                     adBonusOptional: dto.rules.adBonusOptional,
+                    adBonusCooldownHours: dto.rules.adBonusCooldownHours,
                     scratchCardsPerDay: dto.rules.scratchCardsPerDay,
                     cardExpiresSameDay: dto.rules.cardExpiresSameDay,
                     firstMilestoneDays: dto.rules.firstMilestoneDays,
                     wrongAnswerLockHours: dto.rules.wrongAnswerLockHours,
+                    wrongAnswerLockMinutes: dto.rules.wrongAnswerLockMinutes ?? 20,
                     quizOpenWindowHours: dto.rules.quizOpenWindowHours,
                     quizCorrectCoins: dto.rules.quizCorrectCoins,
                     quizWrongCoins: dto.rules.quizWrongCoins,
@@ -151,27 +155,98 @@ let ChallengeService = class ChallengeService {
             }),
         ]);
         const dayOfYear = this.utcDayOfYear();
-        const todayQ = this.pickTodayQuestion(enabledQuiz, dayOfYear);
+        const todayQ = this.pickTodayQuestion(enabledQuiz, this.utcEpochDay());
         const day = (0, economy_catalog_1.utcDateKey)();
-        const alreadyCorrect = await this.prisma.walletLedger.findFirst({
-            where: {
-                userId,
-                idempotencyKey: `earn:quiz:ok:${userId}:${day}`,
-            },
-            select: { id: true },
+        const user = await this.prisma.user.findUniqueOrThrow({
+            where: { id: userId },
+            select: { streakDays: true },
         });
-        const wrongCount = await this.prisma.walletLedger.count({
-            where: {
-                userId,
-                reason: 'earn:quiz:wrong',
-                idempotencyKey: { startsWith: `earn:quiz:wrong:${userId}:${day}:` },
-            },
+        const [alreadyCorrect, wrongCount, lastWrong, checkinDone, lastAd, milestoneRows] = await Promise.all([
+            this.prisma.walletLedger.findFirst({
+                where: {
+                    userId,
+                    idempotencyKey: `earn:quiz:ok:${userId}:${day}`,
+                },
+                select: { id: true },
+            }),
+            this.prisma.walletLedger.count({
+                where: {
+                    userId,
+                    reason: 'earn:quiz:wrong',
+                    idempotencyKey: { startsWith: `earn:quiz:wrong:${userId}:${day}:` },
+                },
+            }),
+            this.prisma.walletLedger.findFirst({
+                where: {
+                    userId,
+                    reason: 'earn:quiz:wrong',
+                    idempotencyKey: { startsWith: `earn:quiz:wrong:${userId}:${day}:` },
+                },
+                orderBy: { createdAt: 'desc' },
+                select: { createdAt: true },
+            }),
+            this.prisma.walletLedger.findFirst({
+                where: { userId, idempotencyKey: `earn:checkin:${userId}:${day}` },
+                select: { id: true },
+            }),
+            this.prisma.walletLedger.findFirst({
+                where: { userId, reason: 'earn:ad' },
+                orderBy: { createdAt: 'desc' },
+                select: { createdAt: true },
+            }),
+            this.prisma.walletLedger.findMany({
+                where: { userId, reason: { startsWith: 'earn:milestone:' } },
+                select: { reason: true },
+            }),
+        ]);
+        const lockMs = Math.max(1, config.wrongAnswerLockMinutes ?? 20) *
+            60 *
+            1000;
+        let lockUntilMs = null;
+        let secondChanceReady = false;
+        let secondChanceUnlocked = false;
+        let secondChanceQuestion = null;
+        const secondRow = await this.prisma.walletLedger.findFirst({
+            where: { userId, idempotencyKey: `quiz:second:${userId}:${day}` },
+            select: { reason: true },
         });
-        return {
-            dayKey: day,
-            dayOfYear,
-            rules: this.mapRules(config),
-            question: todayQ
+        if (secondRow?.reason?.startsWith('quiz:second:')) {
+            secondChanceUnlocked = true;
+            const scId = secondRow.reason.slice('quiz:second:'.length);
+            const scQ = enabledQuiz.find((q) => q.id === scId);
+            if (scQ) {
+                secondChanceQuestion = {
+                    id: scQ.id,
+                    question: scQ.question,
+                    options: [scQ.option0, scQ.option1, scQ.option2, scQ.option3],
+                };
+            }
+        }
+        if (lastWrong && !alreadyCorrect) {
+            lockUntilMs = lastWrong.createdAt.getTime() + lockMs;
+            if (Date.now() >= lockUntilMs && !secondChanceUnlocked) {
+                secondChanceReady = true;
+            }
+        }
+        const adCooldownMs = Math.max(1, config.adBonusCooldownHours) * 60 * 60 * 1000;
+        let nextAdAvailableAtMs = null;
+        let adAvailable = !!config.adBonusOptional;
+        if (adAvailable && lastAd) {
+            const nextAt = lastAd.createdAt.getTime() + adCooldownMs;
+            if (Date.now() < nextAt) {
+                adAvailable = false;
+                nextAdAvailableAtMs = nextAt;
+            }
+        }
+        const claimedMilestoneDays = milestoneRows
+            .map((row) => {
+            const parts = row.reason.split(':');
+            return Number.parseInt(parts[2] ?? '', 10);
+        })
+            .filter((n) => Number.isFinite(n) && n > 0);
+        const activeQuestion = secondChanceQuestion
+            ? secondChanceQuestion
+            : todayQ
                 ? {
                     id: todayQ.id,
                     question: todayQ.question,
@@ -182,11 +257,26 @@ let ChallengeService = class ChallengeService {
                         todayQ.option3,
                     ],
                 }
-                : null,
+                : null;
+        return {
+            dayKey: day,
+            dayOfYear,
+            streakDays: user.streakDays,
+            checkinDone: !!checkinDone,
+            adDone: !adAvailable && !!config.adBonusOptional,
+            adAvailable,
+            nextAdAvailableAtMs,
+            claimedMilestoneDays,
+            rules: this.mapRules(config),
+            question: activeQuestion,
             quizState: {
                 alreadyCorrect: !!alreadyCorrect,
                 wrongAttempts: wrongCount,
                 maxWrongAttempts: 2,
+                lockUntilMs,
+                openUntilMs: null,
+                secondChanceReady,
+                secondChanceUnlocked,
             },
             milestones: milestones.map((m) => this.mapMilestone(m)),
         };
@@ -204,19 +294,17 @@ let ChallengeService = class ChallengeService {
             where: { enabled: true },
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         });
-        const todayQ = this.pickTodayQuestion(enabledQuiz, this.utcDayOfYear());
+        const todayQ = this.pickTodayQuestion(enabledQuiz, this.utcEpochDay());
         if (!todayQ) {
             throw new app_error_1.AppError('CHALLENGE_NO_QUIZ', 'No quiz available today.', 409);
-        }
-        if (todayQ.id !== qid) {
-            throw new app_error_1.AppError('CHALLENGE_WRONG_QUESTION', 'That is not today’s question.', 409);
         }
         const day = (0, economy_catalog_1.utcDateKey)();
         const config = await this.prisma.challengeConfig.findUniqueOrThrow({
             where: { id: CONFIG_ID },
         });
-        const lockMs = config.wrongAnswerLockHours * 60 * 60 * 1000;
-        const openMs = config.quizOpenWindowHours * 60 * 60 * 1000;
+        const lockMs = Math.max(1, config.wrongAnswerLockMinutes ?? 20) *
+            60 *
+            1000;
         const now = Date.now();
         const alreadyCorrect = await this.prisma.walletLedger.findFirst({
             where: {
@@ -228,6 +316,24 @@ let ChallengeService = class ChallengeService {
         if (alreadyCorrect) {
             throw new app_error_1.AppError('CHALLENGE_ALREADY_DONE', 'Quiz already answered correctly today.', 409);
         }
+        const secondRow = await this.prisma.walletLedger.findFirst({
+            where: { userId, idempotencyKey: `quiz:second:${userId}:${day}` },
+            select: { reason: true },
+        });
+        const secondQid = secondRow?.reason?.startsWith('quiz:second:')
+            ? secondRow.reason.slice('quiz:second:'.length)
+            : null;
+        const activeQ = secondQid
+            ? enabledQuiz.find((q) => q.id === secondQid)
+            : todayQ;
+        if (!activeQ) {
+            throw new app_error_1.AppError('CHALLENGE_NO_QUIZ', 'No quiz available today.', 409);
+        }
+        if (activeQ.id !== qid) {
+            throw new app_error_1.AppError('CHALLENGE_WRONG_QUESTION', secondQid
+                ? 'That is not your second-chance question.'
+                : 'That is not today’s question.', 409);
+        }
         const lastWrong = await this.prisma.walletLedger.findFirst({
             where: {
                 userId,
@@ -236,17 +342,14 @@ let ChallengeService = class ChallengeService {
             },
             orderBy: { createdAt: 'desc' },
         });
-        if (lastWrong) {
+        if (lastWrong && !secondQid) {
             const lockUntil = lastWrong.createdAt.getTime() + lockMs;
-            const openUntil = lockUntil + openMs;
             if (now < lockUntil) {
                 throw new app_error_1.AppError('CHALLENGE_QUIZ_LOCKED', 'Quiz locked — wait for the countdown.', 409);
             }
-            if (now > openUntil) {
-                throw new app_error_1.AppError('CHALLENGE_QUIZ_CLOSED', 'Quiz closed for today.', 409);
-            }
+            throw new app_error_1.AppError('CHALLENGE_NEED_SECOND_CHANCE', 'Watch a rewarded ad to unlock a new question.', 409);
         }
-        const correct = todayQ.correctIndex === selectedIndex;
+        const correct = activeQ.correctIndex === selectedIndex;
         const earn = await this.economy.earnQuizGraded(userId, correct, {
             correctCoins: config.quizCorrectCoins,
             wrongCoins: config.quizWrongCoins,
@@ -254,23 +357,121 @@ let ChallengeService = class ChallengeService {
         this.analytics.trackSafe({
             name: 'challenge_quiz_submit',
             userId,
-            props: { correct },
+            props: { correct, secondChance: !!secondQid },
         });
         return {
             ...earn,
             correct,
-            questionId: todayQ.id,
+            questionId: activeQ.id,
             selectedIndex,
-            lockUntilMs: correct ? null : now + lockMs,
-            openUntilMs: correct ? null : now + lockMs + openMs,
-            wrongAnswerLockHours: config.wrongAnswerLockHours,
-            quizOpenWindowHours: config.quizOpenWindowHours,
+            lockUntilMs: correct || secondQid ? null : now + lockMs,
+            openUntilMs: null,
+            secondChanceReady: false,
+            wrongAnswerLockMinutes: config.wrongAnswerLockMinutes ?? 20,
         };
     }
-    pickTodayQuestion(rows, dayOfYear) {
+    async userUnlockSecondChance(userId) {
+        await this.ensureDefaults();
+        await this.economy.requireUserPublic(userId);
+        const day = (0, economy_catalog_1.utcDateKey)();
+        const config = await this.prisma.challengeConfig.findUniqueOrThrow({
+            where: { id: CONFIG_ID },
+        });
+        const lockMs = Math.max(1, config.wrongAnswerLockMinutes ?? 20) *
+            60 *
+            1000;
+        const alreadyCorrect = await this.prisma.walletLedger.findFirst({
+            where: { userId, idempotencyKey: `earn:quiz:ok:${userId}:${day}` },
+            select: { id: true },
+        });
+        if (alreadyCorrect) {
+            throw new app_error_1.AppError('CHALLENGE_ALREADY_DONE', 'Quiz already answered correctly today.', 409);
+        }
+        const existing = await this.prisma.walletLedger.findFirst({
+            where: { userId, idempotencyKey: `quiz:second:${userId}:${day}` },
+            select: { reason: true },
+        });
+        const enabledQuiz = await this.prisma.challengeQuizQuestion.findMany({
+            where: { enabled: true },
+            orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        });
+        const todayQ = this.pickTodayQuestion(enabledQuiz, this.utcEpochDay());
+        if (!todayQ) {
+            throw new app_error_1.AppError('CHALLENGE_NO_QUIZ', 'No quiz available today.', 409);
+        }
+        if (existing?.reason?.startsWith('quiz:second:')) {
+            const scId = existing.reason.slice('quiz:second:'.length);
+            const scQ = enabledQuiz.find((q) => q.id === scId);
+            if (!scQ) {
+                throw new app_error_1.AppError('CHALLENGE_NO_QUIZ', 'Second-chance question missing.', 409);
+            }
+            return {
+                alreadyUnlocked: true,
+                question: {
+                    id: scQ.id,
+                    question: scQ.question,
+                    options: [scQ.option0, scQ.option1, scQ.option2, scQ.option3],
+                },
+            };
+        }
+        const lastWrong = await this.prisma.walletLedger.findFirst({
+            where: {
+                userId,
+                reason: 'earn:quiz:wrong',
+                idempotencyKey: { startsWith: `earn:quiz:wrong:${userId}:${day}:` },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        if (!lastWrong) {
+            throw new app_error_1.AppError('CHALLENGE_NO_WRONG', 'Second chance is only for wrong answers.', 409);
+        }
+        const lockUntil = lastWrong.createdAt.getTime() + lockMs;
+        if (Date.now() < lockUntil) {
+            throw new app_error_1.AppError('CHALLENGE_QUIZ_LOCKED', 'Wait for the lock countdown, then watch the ad.', 409, { lockUntilMs: lockUntil });
+        }
+        const nextQ = this.pickSecondChanceQuestion(enabledQuiz, todayQ.id, userId, day);
+        if (!nextQ) {
+            throw new app_error_1.AppError('CHALLENGE_NO_SECOND_Q', 'No alternate question available in the bank.', 409);
+        }
+        const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+        await this.prisma.walletLedger.create({
+            data: {
+                userId,
+                delta: 0,
+                balanceAfter: user.coins,
+                reason: `quiz:second:${nextQ.id}`,
+                idempotencyKey: `quiz:second:${userId}:${day}`,
+            },
+        });
+        this.analytics.trackSafe({
+            name: 'challenge_quiz_second_chance',
+            userId,
+            props: { questionId: nextQ.id },
+        });
+        return {
+            alreadyUnlocked: false,
+            question: {
+                id: nextQ.id,
+                question: nextQ.question,
+                options: [nextQ.option0, nextQ.option1, nextQ.option2, nextQ.option3],
+            },
+        };
+    }
+    pickSecondChanceQuestion(rows, todayId, userId, day) {
+        const pool = rows.filter((r) => r.id !== todayId);
+        if (!pool.length)
+            return null;
+        let hash = 0;
+        const seed = `${userId}:${day}`;
+        for (let i = 0; i < seed.length; i++) {
+            hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+        }
+        return pool[hash % pool.length] ?? null;
+    }
+    pickTodayQuestion(rows, dayIndex) {
         if (!rows.length)
             return null;
-        const index = ((dayOfYear - 1) % rows.length + rows.length) % rows.length;
+        const index = ((dayIndex % rows.length) + rows.length) % rows.length;
         return rows[index] ?? null;
     }
     utcDayOfYear(d = new Date()) {
@@ -278,16 +479,22 @@ let ChallengeService = class ChallengeService {
         const now = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
         return Math.floor((now - start) / 86_400_000);
     }
+    utcEpochDay(d = new Date()) {
+        return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) /
+            86_400_000);
+    }
     mapRules(c) {
         return {
             missDayResetsStreak: c.missDayResetsStreak,
             requireCheckIn: c.requireCheckIn,
             requireQuiz: c.requireQuiz,
             adBonusOptional: c.adBonusOptional,
+            adBonusCooldownHours: c.adBonusCooldownHours,
             scratchCardsPerDay: c.scratchCardsPerDay,
             cardExpiresSameDay: c.cardExpiresSameDay,
             firstMilestoneDays: c.firstMilestoneDays,
             wrongAnswerLockHours: c.wrongAnswerLockHours,
+            wrongAnswerLockMinutes: c.wrongAnswerLockMinutes ?? 20,
             quizOpenWindowHours: c.quizOpenWindowHours,
             quizCorrectCoins: c.quizCorrectCoins,
             quizWrongCoins: c.quizWrongCoins,
@@ -325,8 +532,8 @@ let ChallengeService = class ChallengeService {
         return id;
     }
     assertQuizList(quiz) {
-        if (quiz.length > 200) {
-            throw new app_error_1.AppError('CHALLENGE_QUIZ_LIMIT', 'Too many questions.', 400);
+        if (quiz.length > 1500) {
+            throw new app_error_1.AppError('CHALLENGE_QUIZ_LIMIT', 'Too many questions (max 1500).', 400);
         }
         const ids = new Set();
         for (const q of quiz) {

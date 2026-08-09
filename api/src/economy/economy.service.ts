@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/errors/app-error';
 import {
@@ -63,7 +64,7 @@ export class EconomyService {
           400,
         );
       case 'AD':
-        return this.earnAd(userId, day);
+        return this.earnAd(userId);
       case 'MILESTONE':
         return this.earnMilestone(userId, opts.milestoneDays);
       default:
@@ -279,12 +280,85 @@ export class EconomyService {
     }));
   }
 
-  private async earnAd(userId: string, day: string) {
-    const key = `earn:ad:${userId}:${day}`;
-    return this.applyEarn(userId, key, async () => ({
-      delta: ECONOMY_AMOUNTS.adBonus,
-      reason: 'earn:ad',
-    }));
+  private async earnAd(userId: string) {
+    const config = await this.prisma.challengeConfig.findUnique({
+      where: { id: 'default' },
+    });
+    if (config && !config.adBonusOptional) {
+      throw new AppError(
+        'ECONOMY_AD_DISABLED',
+        'Ad bonus is disabled.',
+        403,
+      );
+    }
+    const cooldownHours = Math.max(1, config?.adBonusCooldownHours ?? 4);
+    const coins = Math.max(0, config?.adBonusCoins ?? ECONOMY_AMOUNTS.adBonus);
+    const cooldownMs = cooldownHours * 60 * 60 * 1000;
+    const idempotencyKey = `earn:ad:${userId}:${randomUUID()}`;
+
+    // Cooldown check + credit in one transaction (blocks parallel double-claim).
+    return this.prisma.$transaction(async (tx) => {
+      const last = await tx.walletLedger.findFirst({
+        where: { userId, reason: 'earn:ad' },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      });
+      if (last) {
+        const nextAt = last.createdAt.getTime() + cooldownMs;
+        if (Date.now() < nextAt) {
+          throw new AppError(
+            'ECONOMY_AD_COOLDOWN',
+            'Ad bonus is on cooldown. Try again later.',
+            409,
+            { nextAdAvailableAtMs: nextAt },
+          );
+        }
+      }
+
+      const existing = await tx.walletLedger.findUnique({
+        where: { idempotencyKey },
+      });
+      if (existing) {
+        return {
+          coins: existing.balanceAfter,
+          delta: existing.delta,
+          alreadyApplied: true,
+          reason: existing.reason,
+          nextAdAvailableAtMs: existing.createdAt.getTime() + cooldownMs,
+        };
+      }
+
+      const current = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      if (current.walletFrozen) {
+        throw new AppError(
+          'WALLET_FROZEN',
+          'Wallet is frozen.',
+          403,
+        );
+      }
+      const nextCoins = Math.max(0, Math.min(9_999_999, current.coins + coins));
+      const delta = nextCoins - current.coins;
+      await tx.user.update({
+        where: { id: userId },
+        data: { coins: nextCoins },
+      });
+      const row = await tx.walletLedger.create({
+        data: {
+          userId,
+          delta,
+          balanceAfter: nextCoins,
+          reason: 'earn:ad',
+          idempotencyKey,
+        },
+      });
+      return {
+        coins: nextCoins,
+        delta,
+        alreadyApplied: false,
+        reason: 'earn:ad',
+        nextAdAvailableAtMs: row.createdAt.getTime() + cooldownMs,
+      };
+    });
   }
 
   private async earnMilestone(userId: string, days?: number) {

@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,7 +54,6 @@ import com.ffsensitivity.app.presentation.theme.InkPrimary
 import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.presentation.theme.SurfaceCard
 import com.ffsensitivity.app.presentation.theme.SurfaceLift
-import kotlin.math.roundToInt
 
 enum class AppDrawerAction {
     HOME,
@@ -81,170 +79,155 @@ fun AppDrawerContent(
     modifier: Modifier = Modifier,
     configTick: Int = 0
 ) {
-    // Keep width stable; avoid ModalDrawerSheet + weight layout traps that intermittently
-    // collapse the menu list to an empty dark panel ("black screen").
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val drawerWidth = (screenWidthDp * 0.72f).roundToInt().coerceIn(260, 300).dp
-    val drawerShape = RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)
-
-    // fillMaxSize on the panel (not on the scroll child) — avoids scroll+fillMaxHeight
-    // measure glitches that intermittently looked like an empty black drawer.
+    // Parent OverlayAppDrawer already sizes + paints the panel. Do NOT combine
+    // weight() with verticalScroll() — that measure path intermittently collapsed
+    // the list to an empty dark panel (looked like a black screen with bottom bar).
     Column(
         modifier = modifier
-            .width(drawerWidth)
-            .fillMaxHeight()
-            .clip(drawerShape)
-            .background(Brush.verticalGradient(listOf(SurfaceLift, SurfaceCard)))
-            .border(1.dp, Amber.copy(alpha = 0.28f), drawerShape)
+            .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f, fill = true)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Brush.horizontalGradient(listOf(SurfaceCard, SurfaceLift)))
+                .border(1.dp, Amber.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+                .padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Brush.horizontalGradient(listOf(SurfaceCard, SurfaceLift)))
-                    .border(1.dp, Amber.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "FF SENSITIVITY",
-                    color = AmberHot,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 0.6.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Tools · Rewards · Codes",
-                    color = InkSecondary,
-                    fontSize = 12.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
             Text(
-                text = "MENU",
-                color = Amber,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
+                text = "FF SENSITIVITY",
+                color = AmberHot,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.6.sp
             )
-            Spacer(modifier = Modifier.height(10.dp))
-
-            val cfg = remember(configTick) { AppConfigRepository.snapshot() }
-            val copy = remember(configTick) {
-                com.ffsensitivity.app.data.remote.CopyRepository.snapshot()
-            }
-            val showScratch =
-                cfg.features["scratch"] != false && cfg.navigation["homeScratch"] != false
-            val showShop =
-                cfg.features["shop"] != false && cfg.navigation["homeShop"] != false
-            val showShare = cfg.features["share"] != false
-            val showSupport =
-                cfg.features["support"] != false && cfg.navigation["navSupport"] != false
-            val showAbout = cfg.navigation["navAbout"] != false
-
-            DrawerItem(
-                label = "Home",
-                icon = Icons.Outlined.Home,
-                selected = selectedRoute == "home"
-            ) { onAction(AppDrawerAction.HOME) }
-            if (showScratch) {
-                DrawerItem(
-                    label = "Scratch Cards",
-                    icon = Icons.Outlined.Style,
-                    selected = selectedRoute == "scratch_cards"
-                ) { onAction(AppDrawerAction.SCRATCH_CARDS) }
-            }
-            if (showShop) {
-                DrawerItem(
-                    label = "Coin Shop",
-                    icon = Icons.Outlined.ShoppingBag,
-                    selected = selectedRoute == "coin_shop"
-                ) { onAction(AppDrawerAction.COIN_SHOP) }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
-            Spacer(modifier = Modifier.height(8.dp))
-            DrawerItem(
-                copy.legal.storeLabel.ifBlank { "Rate App" },
-                Icons.Outlined.StarRate,
-                selected = false
-            ) {
-                onAction(AppDrawerAction.RATE_APP)
-            }
-            if (showShare) {
-                DrawerItem(
-                    copy.share.sheetTitle.ifBlank { "Share App" },
-                    Icons.Outlined.Share,
-                    selected = false
-                ) {
-                    onAction(AppDrawerAction.SHARE_APP)
-                }
-            }
-            DrawerItem(
-                copy.about.websiteCta.ifBlank { "Our Website" },
-                Icons.Outlined.Language,
-                selected = false
-            ) {
-                onAction(AppDrawerAction.WEBSITE)
-            }
-            DrawerItem(
-                copy.legal.privacyLabel.ifBlank { "Privacy Policy" },
-                Icons.Outlined.Policy,
-                selected = false
-            ) {
-                onAction(AppDrawerAction.PRIVACY)
-            }
-            if (showSupport) {
-                DrawerItem(
-                    label = copy.legal.supportLabel.ifBlank { "Contact Us" },
-                    icon = Icons.Outlined.Mail,
-                    selected = selectedRoute == "contact"
-                ) { onAction(AppDrawerAction.CONTACT_US) }
-            }
-            if (showAbout) {
-                DrawerItem(
-                    label = "About",
-                    icon = Icons.Outlined.Info,
-                    selected = selectedRoute == "about"
-                ) { onAction(AppDrawerAction.ABOUT) }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
-            Spacer(modifier = Modifier.height(8.dp))
-            DrawerItem(
-                label = "Sign out",
-                icon = Icons.Outlined.Logout,
-                selected = false
-            ) { onAction(AppDrawerAction.SIGN_OUT) }
-
-            Spacer(modifier = Modifier.height(20.dp))
-            val versionNumber = if (appVersion.startsWith("v", ignoreCase = true)) {
-                appVersion.removePrefix("v").removePrefix("V")
-            } else {
-                appVersion
-            }
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "${copy.about.versionPrefix.ifBlank { "Version" }} $versionNumber",
-                color = InkMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
+                text = "Tools · Rewards · Codes",
+                color = InkSecondary,
+                fontSize = 12.sp
             )
         }
+
+        Spacer(modifier = Modifier.height(18.dp))
+        Text(
+            text = "MENU",
+            color = Amber,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.5.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        val cfg = remember(configTick) { AppConfigRepository.snapshot() }
+        val copy = remember(configTick) {
+            com.ffsensitivity.app.data.remote.CopyRepository.snapshot()
+        }
+        val showScratch =
+            cfg.features["scratch"] != false && cfg.navigation["homeScratch"] != false
+        val showShop =
+            cfg.features["shop"] != false && cfg.navigation["homeShop"] != false
+        val showShare = cfg.features["share"] != false
+        val showSupport =
+            cfg.features["support"] != false && cfg.navigation["navSupport"] != false
+        val showAbout = cfg.navigation["navAbout"] != false
+
+        DrawerItem(
+            label = "Home",
+            icon = Icons.Outlined.Home,
+            selected = selectedRoute == "home"
+        ) { onAction(AppDrawerAction.HOME) }
+        if (showScratch) {
+            DrawerItem(
+                label = "Scratch Cards",
+                icon = Icons.Outlined.Style,
+                selected = selectedRoute == "scratch_cards"
+            ) { onAction(AppDrawerAction.SCRATCH_CARDS) }
+        }
+        if (showShop) {
+            DrawerItem(
+                label = "Coin Shop",
+                icon = Icons.Outlined.ShoppingBag,
+                selected = selectedRoute == "coin_shop"
+            ) { onAction(AppDrawerAction.COIN_SHOP) }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
+        Spacer(modifier = Modifier.height(8.dp))
+        DrawerItem(
+            copy.legal.storeLabel.ifBlank { "Rate App" },
+            Icons.Outlined.StarRate,
+            selected = false
+        ) {
+            onAction(AppDrawerAction.RATE_APP)
+        }
+        if (showShare) {
+            DrawerItem(
+                copy.share.sheetTitle.ifBlank { "Share App" },
+                Icons.Outlined.Share,
+                selected = false
+            ) {
+                onAction(AppDrawerAction.SHARE_APP)
+            }
+        }
+        DrawerItem(
+            copy.about.websiteCta.ifBlank { "Our Website" },
+            Icons.Outlined.Language,
+            selected = false
+        ) {
+            onAction(AppDrawerAction.WEBSITE)
+        }
+        DrawerItem(
+            copy.legal.privacyLabel.ifBlank { "Privacy Policy" },
+            Icons.Outlined.Policy,
+            selected = false
+        ) {
+            onAction(AppDrawerAction.PRIVACY)
+        }
+        if (showSupport) {
+            DrawerItem(
+                label = copy.legal.supportLabel.ifBlank { "Contact Us" },
+                icon = Icons.Outlined.Mail,
+                selected = selectedRoute == "contact"
+            ) { onAction(AppDrawerAction.CONTACT_US) }
+        }
+        if (showAbout) {
+            DrawerItem(
+                label = "About",
+                icon = Icons.Outlined.Info,
+                selected = selectedRoute == "about"
+            ) { onAction(AppDrawerAction.ABOUT) }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
+        Spacer(modifier = Modifier.height(8.dp))
+        DrawerItem(
+            label = "Sign out",
+            icon = Icons.Outlined.Logout,
+            selected = false
+        ) { onAction(AppDrawerAction.SIGN_OUT) }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        val versionNumber = if (appVersion.startsWith("v", ignoreCase = true)) {
+            appVersion.removePrefix("v").removePrefix("V")
+        } else {
+            appVersion
+        }
+        Text(
+            text = "${copy.about.versionPrefix.ifBlank { "Version" }} $versionNumber",
+            color = InkMuted,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+        )
     }
 }
 

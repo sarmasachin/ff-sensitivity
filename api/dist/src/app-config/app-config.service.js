@@ -13,6 +13,7 @@ exports.AppConfigService = void 0;
 const common_1 = require("@nestjs/common");
 const app_error_1 = require("../common/errors/app-error");
 const prisma_service_1 = require("../prisma/prisma.service");
+const app_config_ads_1 = require("./app-config-ads");
 const app_config_security_1 = require("./app-config-security");
 const CONFIG_ID = 1;
 let AppConfigService = class AppConfigService {
@@ -32,6 +33,7 @@ let AppConfigService = class AppConfigService {
             },
             features: (0, app_config_security_1.normalizeBoolMap)(row.featuresJson, app_config_security_1.APP_FEATURE_KEYS),
             navigation: (0, app_config_security_1.normalizeBoolMap)(row.navigationJson, app_config_security_1.APP_NAV_KEYS),
+            ads: (0, app_config_ads_1.normalizeAdsConfig)(row.adsJson),
             links: {
                 playStoreUrl: row.playStoreUrl,
                 privacyUrl: row.privacyUrl,
@@ -58,6 +60,7 @@ let AppConfigService = class AppConfigService {
                 minVersionName: d.status.minVersionName,
                 featuresJson: d.features,
                 navigationJson: d.navigation,
+                adsJson: app_config_ads_1.DEFAULT_ADS_CONFIG,
                 playStoreUrl: d.links.playStoreUrl,
                 privacyUrl: d.links.privacyUrl,
                 websiteUrl: d.links.websiteUrl,
@@ -72,6 +75,27 @@ let AppConfigService = class AppConfigService {
     async publicLive() {
         const row = await this.ensureDefaults();
         return this.toBundle(row);
+    }
+    async adminGetAds() {
+        const row = await this.ensureDefaults();
+        return (0, app_config_ads_1.normalizeAdsConfig)(row.adsJson);
+    }
+    async adminSaveAds(adminId, dto) {
+        await this.ensureDefaults();
+        const ads = (0, app_config_ads_1.assertAdsConfigForSave)(dto);
+        const row = await this.prisma.appConfig.update({
+            where: { id: CONFIG_ID },
+            data: { adsJson: ads },
+        });
+        await this.prisma.auditLog.create({
+            data: {
+                actorAdminId: adminId,
+                action: 'app.ads_save',
+                entity: 'app_config',
+                afterJson: ads,
+            },
+        });
+        return (0, app_config_ads_1.normalizeAdsConfig)(row.adsJson);
     }
     async adminSave(adminId, dto) {
         await this.ensureDefaults();

@@ -17,10 +17,12 @@ class ChallengeRulesDto {
     requireCheckIn;
     requireQuiz;
     adBonusOptional;
+    adBonusCooldownHours;
     scratchCardsPerDay;
     cardExpiresSameDay;
     firstMilestoneDays;
     wrongAnswerLockHours;
+    wrongAnswerLockMinutes;
     quizOpenWindowHours;
     quizCorrectCoins;
     quizWrongCoins;
@@ -44,6 +46,12 @@ __decorate([
 ], ChallengeRulesDto.prototype, "adBonusOptional", void 0);
 __decorate([
     (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(168),
+    __metadata("design:type", Number)
+], ChallengeRulesDto.prototype, "adBonusCooldownHours", void 0);
+__decorate([
+    (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
     (0, class_validator_1.Max)(20),
     __metadata("design:type", Number)
@@ -64,6 +72,13 @@ __decorate([
     (0, class_validator_1.Max)(72),
     __metadata("design:type", Number)
 ], ChallengeRulesDto.prototype, "wrongAnswerLockHours", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(24 * 60),
+    __metadata("design:type", Number)
+], ChallengeRulesDto.prototype, "wrongAnswerLockMinutes", void 0);
 __decorate([
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),
@@ -182,6 +197,7 @@ __decorate([
 ], SaveChallengeDto.prototype, "rules", void 0);
 __decorate([
     (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ArrayMaxSize)(1500),
     (0, class_validator_1.ValidateNested)({ each: true }),
     (0, class_transformer_1.Type)(() => QuizQuestionDto),
     __metadata("design:type", Array)

@@ -34,6 +34,36 @@ android {
             "GOOGLE_SERVER_CLIENT_ID",
             "\"$googleServerClientId\""
         )
+        // Google sample IDs until real AdMob units are set in local.properties.
+        val admobAppId = localProps.getProperty(
+            "ADMOB_APP_ID",
+            "ca-app-pub-3940256099942544~3347511713"
+        )
+        val rewardedCalculate = localProps.getProperty(
+            "ADMOB_REWARDED_CALCULATE",
+            "ca-app-pub-3940256099942544/5227853062"
+        )
+        val interstitialCheckIn = localProps.getProperty(
+            "ADMOB_INTERSTITIAL_CHECKIN",
+            "ca-app-pub-3940256099942544/1033173712"
+        )
+        val interstitialQuiz = localProps.getProperty(
+            "ADMOB_INTERSTITIAL_QUIZ",
+            "ca-app-pub-3940256099942544/1033173712"
+        )
+        val interstitialRedeemDaily = localProps.getProperty(
+            "ADMOB_INTERSTITIAL_REDEEM_DAILY",
+            "ca-app-pub-3940256099942544/1033173712"
+        )
+        buildConfigField("String", "ADMOB_REWARDED_CALCULATE", "\"$rewardedCalculate\"")
+        buildConfigField("String", "ADMOB_INTERSTITIAL_CHECKIN", "\"$interstitialCheckIn\"")
+        buildConfigField("String", "ADMOB_INTERSTITIAL_QUIZ", "\"$interstitialQuiz\"")
+        buildConfigField(
+            "String",
+            "ADMOB_INTERSTITIAL_REDEEM_DAILY",
+            "\"$interstitialRedeemDaily\""
+        )
+        manifestPlaceholders["admobAppId"] = admobAppId
     }
 
     buildTypes {
@@ -45,8 +75,13 @@ android {
             buildConfigField("String", "API_BASE_URL", "\"$debugApi\"")
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Full-size installable release (no R8 strip). Re-enable minify
+            // before Play Store upload if you want a smaller AAB/APK.
+            isMinifyEnabled = false
+            isShrinkResources = false
+            // Signed so the APK installs on device. Replace with a Play upload
+            // keystore before Play Console / production distribution.
+            signingConfig = signingConfigs.getByName("debug")
             // Release must be HTTPS (Play / production).
             val releaseApi = localProps.getProperty(
                 "API_BASE_URL_RELEASE",
@@ -56,10 +91,6 @@ android {
                 "API_BASE_URL_RELEASE must be https:// (got: $releaseApi)"
             }
             buildConfigField("String", "API_BASE_URL", "\"$releaseApi\"")
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
 
@@ -115,6 +146,10 @@ dependencies {
     // --- Start: App quality P3 Crashlytics (Sachin) ---
     implementation("com.google.firebase:firebase-crashlytics")
     // --- End: App quality P3 Crashlytics (Sachin) ---
+
+    // --- Start: AdMob Calculate rewarded (Sachin) ---
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
+    // --- End: AdMob Calculate rewarded (Sachin) ---
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

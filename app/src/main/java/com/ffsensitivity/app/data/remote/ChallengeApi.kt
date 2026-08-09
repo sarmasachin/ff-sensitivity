@@ -17,9 +17,13 @@ data class ChallengeTodayPayload(
     val streakDays: Int?,
     val checkinDone: Boolean?,
     val adDone: Boolean?,
+    val adAvailable: Boolean?,
+    val nextAdAvailableAtMs: Long?,
     val claimedMilestoneDays: Set<Int>?,
     val quizLockUntilMs: Long?,
-    val quizOpenUntilMs: Long?
+    val quizOpenUntilMs: Long?,
+    val secondChanceReady: Boolean? = null,
+    val secondChanceUnlocked: Boolean? = null
 )
 
 data class ChallengeQuizSubmitResult(
@@ -42,6 +46,8 @@ object ChallengeApi {
                 val root = JSONObject(raw)
                 val rules = root.optJSONObject("rules")
                 if (rules != null) {
+                    ChallengeQuizTimingConfig.wrongAnswerLockMinutes =
+                        rules.optInt("wrongAnswerLockMinutes", 20)
                     ChallengeQuizTimingConfig.wrongAnswerLockHours =
                         rules.optInt("wrongAnswerLockHours", 4)
                     ChallengeQuizTimingConfig.quizOpenWindowHours =
@@ -50,6 +56,10 @@ object ChallengeApi {
                         rules.optInt("quizCorrectCoins", 50)
                     ChallengeQuizTimingConfig.quizWrongCoins =
                         rules.optInt("quizWrongCoins", -10)
+                    ChallengeQuizTimingConfig.adBonusOptional =
+                        rules.optBoolean("adBonusOptional", true)
+                    ChallengeQuizTimingConfig.adBonusCooldownHours =
+                        rules.optInt("adBonusCooldownHours", 4)
                 }
                 val qObj = root.optJSONObject("question")
                 val question = if (qObj != null) {
@@ -103,12 +113,24 @@ object ChallengeApi {
                     streakDays = if (root.has("streakDays")) root.optInt("streakDays") else null,
                     checkinDone = if (root.has("checkinDone")) root.optBoolean("checkinDone") else null,
                     adDone = if (root.has("adDone")) root.optBoolean("adDone") else null,
+                    adAvailable = if (root.has("adAvailable")) root.optBoolean("adAvailable") else null,
+                    nextAdAvailableAtMs = if (root.has("nextAdAvailableAtMs") && !root.isNull("nextAdAvailableAtMs")) {
+                        root.optLong("nextAdAvailableAtMs")
+                    } else {
+                        null
+                    },
                     claimedMilestoneDays = claimed,
                     quizLockUntilMs = state?.let {
                         if (it.isNull("lockUntilMs")) null else it.optLong("lockUntilMs")
                     },
                     quizOpenUntilMs = state?.let {
                         if (it.isNull("openUntilMs")) null else it.optLong("openUntilMs")
+                    },
+                    secondChanceReady = state?.let {
+                        if (it.has("secondChanceReady")) it.optBoolean("secondChanceReady") else null
+                    },
+                    secondChanceUnlocked = state?.let {
+                        if (it.has("secondChanceUnlocked")) it.optBoolean("secondChanceUnlocked") else null
                     }
                 )
             }
@@ -140,6 +162,36 @@ object ChallengeApi {
                 )
             }
         }.onFailure { AppLog.e("ChallengeApi.submitQuiz failed", it) }
+    }
+
+    fun unlockSecondChance(accessToken: String): Result<DailyQuizQuestion> {
+        return runCatching {
+            val req = ApiClient.post(
+                "/api/v1/challenge/quiz/second-chance",
+                JSONObject(),
+                accessToken
+            )
+            ApiClient.http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) throw ApiClient.parseError(raw, resp.code)
+                val root = JSONObject(raw)
+                val qObj = root.optJSONObject("question")
+                    ?: throw ApiException("CHALLENGE_NO_QUIZ", "No second-chance question.")
+                val opts = qObj.optJSONArray("options")
+                val list = mutableListOf<String>()
+                if (opts != null) {
+                    for (i in 0 until opts.length()) {
+                        list += opts.optString(i)
+                    }
+                }
+                DailyQuizQuestion(
+                    id = qObj.optString("id"),
+                    question = qObj.optString("question"),
+                    options = list,
+                    correctIndex = -1
+                )
+            }
+        }.onFailure { AppLog.e("ChallengeApi.unlockSecondChance failed", it) }
     }
 }
 // --- End: Challenge live wire (Sachin) ---

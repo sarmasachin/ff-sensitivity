@@ -16,15 +16,14 @@ export function ChallengeQuizTimingCard({ rules, onChange }: Props) {
   return (
     <section className="rounded-2xl border border-orange-200/70 bg-gradient-to-br from-orange-50/90 via-white to-rose-50/50 p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <p className="text-[11px] font-semibold tracking-[0.12em] text-orange-700 uppercase">
-        Quiz retry
+        Quiz second chance
       </p>
       <h2 className="mt-1 text-[16px] font-bold tracking-[-0.02em] text-slate-900">
-        Wrong answer · lock & open window
+        Wrong answer · lock then rewarded ad
       </h2>
       <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-600">
-        Galat answer ke baad quiz button pe countdown chalta hai. Time khatam
-        hone pe question open hota hai — phir sirf open-window ke andar answer
-        de sakte hain; window ke baad question off.
+        Galat answer ke baad lock countdown. Time ke baad user rewarded ad
+        dekhega — phir naya question unlock hoga (same question dubara nahi).
       </p>
 
       <ol className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -33,12 +32,12 @@ export function ChallengeQuizTimingCard({ rules, onChange }: Props) {
           {
             step: "2",
             title: "Lock countdown",
-            body: `${rules.wrongAnswerLockHours}h — button pe timer`,
+            body: `${rules.wrongAnswerLockMinutes} min — button pe timer`,
           },
           {
             step: "3",
-            title: "Open then off",
-            body: `${rules.quizOpenWindowHours}h answer window, phir off`,
+            title: "Watch Ad → new Q",
+            body: "Rewarded ad unlocks a different question",
           },
         ].map((item) => (
           <li
@@ -60,45 +59,24 @@ export function ChallengeQuizTimingCard({ rules, onChange }: Props) {
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <label className="block text-[11px] font-semibold text-slate-600">
-          Lock after wrong (hours)
+          Lock after wrong (minutes)
           <input
             type="number"
             min={1}
-            max={72}
+            max={1440}
             className={fieldClass}
-            value={rules.wrongAnswerLockHours}
+            value={rules.wrongAnswerLockMinutes}
             onChange={(e) =>
               patch({
-                wrongAnswerLockHours: Math.max(
+                wrongAnswerLockMinutes: Math.max(
                   1,
-                  Math.min(72, Number(e.target.value) || 1),
+                  Math.min(1440, Number(e.target.value) || 1),
                 ),
               })
             }
           />
           <span className="mt-1 block text-[11px] font-normal text-slate-400">
-            Kitne hours baad question dubara open hoga (default 4)
-          </span>
-        </label>
-        <label className="block text-[11px] font-semibold text-slate-600">
-          Open window (hours)
-          <input
-            type="number"
-            min={1}
-            max={48}
-            className={fieldClass}
-            value={rules.quizOpenWindowHours}
-            onChange={(e) =>
-              patch({
-                quizOpenWindowHours: Math.max(
-                  1,
-                  Math.min(48, Number(e.target.value) || 1),
-                ),
-              })
-            }
-          />
-          <span className="mt-1 block text-[11px] font-normal text-slate-400">
-            Open hone ke baad kitni der tak answer allowed — phir off (default 2)
+            Default 20 — then Watch Ad for a new question
           </span>
         </label>
       </div>

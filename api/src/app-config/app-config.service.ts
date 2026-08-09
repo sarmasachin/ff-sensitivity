@@ -3,6 +3,12 @@ import { Prisma } from '@prisma/client';
 import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../prisma/prisma.service';
 import type { SaveAppConfigDto } from './dto/app-config.dto';
+import type { SaveAdsConfigDto } from './dto/ads-config.dto';
+import {
+  assertAdsConfigForSave,
+  DEFAULT_ADS_CONFIG,
+  normalizeAdsConfig,
+} from './app-config-ads';
 import {
   APP_FEATURE_KEYS,
   APP_NAV_KEYS,
@@ -13,27 +19,29 @@ import {
   sanitizeText,
 } from './app-config-security';
 
-// --- Start: App remote config live wire (Sachin) ---
 const CONFIG_ID = 1;
+
+type AppConfigRow = {
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
+  forceUpdate: boolean;
+  softUpdatePrompt: boolean;
+  minVersionCode: number;
+  minVersionName: string;
+  featuresJson: Prisma.JsonValue;
+  navigationJson: Prisma.JsonValue;
+  adsJson: Prisma.JsonValue;
+  playStoreUrl: string;
+  privacyUrl: string;
+  websiteUrl: string;
+  supportEmail: string;
+};
 
 @Injectable()
 export class AppConfigService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private toBundle(row: {
-    maintenanceMode: boolean;
-    maintenanceMessage: string;
-    forceUpdate: boolean;
-    softUpdatePrompt: boolean;
-    minVersionCode: number;
-    minVersionName: string;
-    featuresJson: Prisma.JsonValue;
-    navigationJson: Prisma.JsonValue;
-    playStoreUrl: string;
-    privacyUrl: string;
-    websiteUrl: string;
-    supportEmail: string;
-  }) {
+  private toBundle(row: AppConfigRow) {
     return {
       status: {
         maintenanceMode: row.maintenanceMode,
@@ -51,6 +59,7 @@ export class AppConfigService {
         row.navigationJson as Record<string, unknown>,
         APP_NAV_KEYS,
       ),
+      ads: normalizeAdsConfig(row.adsJson),
       links: {
         playStoreUrl: row.playStoreUrl,
         privacyUrl: row.privacyUrl,
@@ -77,6 +86,7 @@ export class AppConfigService {
         minVersionName: d.status.minVersionName,
         featuresJson: d.features,
         navigationJson: d.navigation,
+        adsJson: DEFAULT_ADS_CONFIG,
         playStoreUrl: d.links.playStoreUrl,
         privacyUrl: d.links.privacyUrl,
         websiteUrl: d.links.websiteUrl,
@@ -94,6 +104,29 @@ export class AppConfigService {
   async publicLive() {
     const row = await this.ensureDefaults();
     return this.toBundle(row);
+  }
+
+  async adminGetAds() {
+    const row = await this.ensureDefaults();
+    return normalizeAdsConfig(row.adsJson);
+  }
+
+  async adminSaveAds(adminId: string, dto: SaveAdsConfigDto) {
+    await this.ensureDefaults();
+    const ads = assertAdsConfigForSave(dto);
+    const row = await this.prisma.appConfig.update({
+      where: { id: CONFIG_ID },
+      data: { adsJson: ads },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorAdminId: adminId,
+        action: 'app.ads_save',
+        entity: 'app_config',
+        afterJson: ads as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return normalizeAdsConfig(row.adsJson);
   }
 
   async adminSave(adminId: string, dto: SaveAppConfigDto) {
@@ -125,6 +158,7 @@ export class AppConfigService {
       throw new AppError('APP_BAD_EMAIL', 'Support email looks invalid.', 400);
     }
 
+    // Intentionally does not write adsJson — Ads desk owns that field.
     const row = await this.prisma.appConfig.update({
       where: { id: CONFIG_ID },
       data: {
@@ -159,4 +193,3 @@ export class AppConfigService {
     return this.toBundle(row);
   }
 }
-// --- End: App remote config live wire (Sachin) ---

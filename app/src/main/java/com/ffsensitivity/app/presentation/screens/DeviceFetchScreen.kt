@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,8 +41,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ffsensitivity.app.ads.CalculateRewardedAds
+import com.ffsensitivity.app.ads.findActivity
 import com.ffsensitivity.app.data.DeviceInfo
 import com.ffsensitivity.app.data.DeviceInfoFetcher
+import com.ffsensitivity.app.data.DpiAdConfig
+import com.ffsensitivity.app.data.DpiAdStore
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.HardwareSectionCard
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
@@ -85,11 +90,15 @@ fun DeviceFetchScreen(
     var actionError by remember { mutableStateOf<DeviceScanUiError?>(null) }
     var refreshTick by remember { mutableStateOf(0) }
     var confirming by remember { mutableStateOf(false) }
+    var dpiAdPassTick by remember { mutableIntStateOf(0) }
 
     val safeFeatureId = remember(featureId) {
         featureId.trim().lowercase().takeIf { it in AllowedDeviceFeatureIds } ?: ""
     }
     val featureInvalid = safeFeatureId.isEmpty()
+    val isDpiFeature = safeFeatureId == "dpi"
+    // Read tick so reward recomposes CTA; always re-check live store + remote config.
+    val needsDpiAd = dpiAdPassTick.let { isDpiFeature && DpiAdStore.needsAd(context) }
 
     val title = when (safeFeatureId) {
         "sensi" -> "Best Sensitivity"
@@ -149,6 +158,22 @@ fun DeviceFetchScreen(
         refreshTick++
     }
 
+    fun openNext(device: DeviceInfo) {
+        val ok = runCatching { onConfirm(device) }.getOrElse {
+            AppLog.e("Device confirm crashed", it)
+            false
+        }
+        confirming = false
+        if (!ok) {
+            showActionError(
+                code = "DEVICE_SCAN_CONFIRM_FAILED",
+                titleText = "Couldn’t continue",
+                message = "Navigation to the next step failed. Try again.",
+                retryKind = DeviceScanRetryKind.CONFIRM
+            )
+        }
+    }
+
     fun confirmSafe(device: DeviceInfo) {
         if (loading || confirming) {
             showBusy()
@@ -172,20 +197,40 @@ fun DeviceFetchScreen(
             )
             return
         }
-        confirming = true
-        val ok = runCatching { onConfirm(device) }.getOrElse {
-            AppLog.e("Device confirm crashed", it)
-            false
+        if (!isDpiFeature || !DpiAdStore.needsAd(context)) {
+            confirming = true
+            openNext(device)
+            return
         }
-        confirming = false
-        if (!ok) {
+        val activity = context.findActivity()
+        if (activity == null) {
             showActionError(
-                code = "DEVICE_SCAN_CONFIRM_FAILED",
-                titleText = "Couldn’t continue",
-                message = "Navigation to the next step failed. Try again.",
+                code = "DEVICE_SCAN_AD_NO_ACTIVITY",
+                titleText = "Couldn’t show ad",
+                message = "Restart the app and try again.",
                 retryKind = DeviceScanRetryKind.CONFIRM
             )
+            return
         }
+        confirming = true
+        CalculateRewardedAds.show(
+            activity = activity,
+            onRewarded = {
+                DpiAdStore.markRewarded(context)
+                dpiAdPassTick += 1
+                openNext(device)
+            },
+            onNotCompleted = { message ->
+                confirming = false
+                showActionError(
+                    code = "DEVICE_SCAN_AD_REQUIRED",
+                    titleText = "Ad required",
+                    message = message,
+                    retryKind = DeviceScanRetryKind.CONFIRM
+                )
+            },
+            incompleteMessage = DpiAdConfig.incompleteMessage
+        )
     }
 
     fun runRetry(error: DeviceScanUiError) {
@@ -239,6 +284,12 @@ fun DeviceFetchScreen(
             )
             loading = false
             info = null
+        }
+    }
+
+    LaunchedEffect(info, needsDpiAd) {
+        if (info != null && needsDpiAd) {
+            CalculateRewardedAds.preload(context)
         }
     }
 
@@ -421,13 +472,25 @@ fun DeviceFetchScreen(
                         item {
                             Spacer(modifier = Modifier.height(4.dp))
                             PrimaryButton(
-                                text = if (confirming) "Continuing…" else "Confirm and Continue"
+                                text = when {
+                                    confirming && needsDpiAd -> "Watch ad…"
+                                    confirming -> "Continuing…"
+                                    needsDpiAd -> DpiAdConfig.buttonLabel
+                                    isDpiFeature -> "DPI & Resolution Result"
+                                    else -> "Confirm and Continue"
+                                }
                             ) {
                                 confirmSafe(device)
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                "Next: answer 4 quick playstyle questions, then get your settings.",
+                                when {
+                                    needsDpiAd -> DpiAdConfig.incompleteMessage
+                                    isDpiFeature ->
+                                        "Next: safe gaming DPI limits for this phone."
+                                    else ->
+                                        "Next: answer 4 quick playstyle questions, then get your settings."
+                                },
                                 color = InkMuted,
                                 fontSize = 12.sp,
                                 lineHeight = 16.sp

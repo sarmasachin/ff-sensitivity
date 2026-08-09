@@ -201,6 +201,10 @@ export default function DailyChallengePage() {
   }
 
   function openAddQuiz() {
+    if (quiz.length >= 1500) {
+      setError("Quiz bank is full (max 1500 questions).");
+      return;
+    }
     setTab("quiz");
     setQuizMode("add");
     setQuizEditingId(null);
@@ -219,6 +223,7 @@ export default function DailyChallengePage() {
 
   function saveQuiz(values: QuizFormValues): string | null {
     if (quizMode === "add") {
+      if (quiz.length >= 1500) return "Quiz bank is full (max 1500 questions).";
       const id = values.id.trim() || `q_${Date.now()}`;
       if (quiz.some((r) => r.id === id)) return "Question ID already exists.";
       const result = formToQuiz(values, id);

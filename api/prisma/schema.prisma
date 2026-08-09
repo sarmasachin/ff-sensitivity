@@ -322,10 +322,14 @@ model ChallengeConfig {
   requireCheckIn       Boolean  @default(true) @map("require_check_in")
   requireQuiz          Boolean  @default(true) @map("require_quiz")
   adBonusOptional      Boolean  @default(true) @map("ad_bonus_optional")
+  /// Hours before another Watch Ad Bonus claim (admin-controlled; not once/day).
+  adBonusCooldownHours Int      @default(4) @map("ad_bonus_cooldown_hours")
   scratchCardsPerDay   Int      @default(1) @map("scratch_cards_per_day")
   cardExpiresSameDay   Boolean  @default(true) @map("card_expires_same_day")
   firstMilestoneDays   Int      @default(7) @map("first_milestone_days")
   wrongAnswerLockHours Int      @default(4) @map("wrong_answer_lock_hours")
+  /// Minutes after a wrong answer before rewarded-ad second chance unlock (replaces hour lock + same-Q reopen).
+  wrongAnswerLockMinutes Int     @default(20) @map("wrong_answer_lock_minutes")
   quizOpenWindowHours  Int      @default(2) @map("quiz_open_window_hours")
   quizCorrectCoins     Int      @default(50) @map("quiz_correct_coins")
   quizWrongCoins       Int      @default(-10) @map("quiz_wrong_coins")
@@ -685,6 +689,7 @@ model AppConfig {
   minVersionName     String   @default("1.0.0") @map("min_version_name")
   featuresJson       Json     @map("features_json")
   navigationJson     Json     @map("navigation_json")
+  adsJson            Json     @map("ads_json")
   playStoreUrl       String   @map("play_store_url")
   privacyUrl         String   @map("privacy_url")
   websiteUrl         String   @map("website_url")

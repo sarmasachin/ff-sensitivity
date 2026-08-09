@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,10 +59,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ffsensitivity.app.ads.CalculateRewardedAds
+import com.ffsensitivity.app.ads.findActivity
 import com.ffsensitivity.app.data.AppSession
+import com.ffsensitivity.app.data.CalculateAdConfig
+import com.ffsensitivity.app.data.CalculateAdStore
 import com.ffsensitivity.app.data.DpiPreference
 import com.ffsensitivity.app.data.FingerCount
 import com.ffsensitivity.app.data.PlayerRole
@@ -138,6 +144,10 @@ fun WizardScreen(
     var guard by remember { mutableStateOf<ScreenGuard?>(null) }
     var actionError by remember { mutableStateOf<WizardUiError?>(null) }
     var submitting by remember { mutableStateOf(false) }
+    var adPassTick by remember { mutableIntStateOf(0) }
+    val context = LocalContext.current
+    // Read tick so reward/markRewarded recomposes CTA; always re-check live store + remote config.
+    val needsCalculateAd = adPassTick.let { CalculateAdStore.needsAd(context) }
 
     val safeStep = step.coerceIn(0, wizardSteps.lastIndex)
     val current = wizardSteps[safeStep]
@@ -147,6 +157,12 @@ fun WizardScreen(
         2 -> dpiPref != null
         3 -> guard != null
         else -> false
+    }
+
+    LaunchedEffect(safeStep, needsCalculateAd) {
+        if (safeStep == 3 && needsCalculateAd) {
+            CalculateRewardedAds.preload(context)
+        }
     }
 
     fun clearError() {
@@ -184,6 +200,22 @@ fun WizardScreen(
         )
     }
 
+    fun openResults(answers: WizardAnswers) {
+        val ok = runCatching { onCalculate(answers) }.getOrElse {
+            AppLog.e("Wizard calculate navigate crashed", it)
+            false
+        }
+        submitting = false
+        if (!ok) {
+            showError(
+                code = "WIZARD_CALCULATE_FAILED",
+                title = "Couldn’t open results",
+                message = "Navigation failed. Try Calculate again.",
+                retryKind = WizardRetryKind.CALCULATE
+            )
+        }
+    }
+
     fun submitCalculate() {
         if (submitting) {
             showBusy()
@@ -207,20 +239,40 @@ fun WizardScreen(
             )
             return
         }
-        submitting = true
-        val ok = runCatching { onCalculate(answers) }.getOrElse {
-            AppLog.e("Wizard calculate navigate crashed", it)
-            false
+        if (!CalculateAdStore.needsAd(context)) {
+            submitting = true
+            openResults(answers)
+            return
         }
-        submitting = false
-        if (!ok) {
+        val activity = context.findActivity()
+        if (activity == null) {
             showError(
-                code = "WIZARD_CALCULATE_FAILED",
-                title = "Couldn’t open results",
-                message = "Navigation failed. Try Calculate again.",
+                code = "WIZARD_AD_NO_ACTIVITY",
+                title = "Couldn’t show ad",
+                message = "Restart the app and try Calculate again.",
                 retryKind = WizardRetryKind.CALCULATE
             )
+            return
         }
+        submitting = true
+        CalculateRewardedAds.show(
+            activity = activity,
+            onRewarded = {
+                CalculateAdStore.markRewarded(context)
+                adPassTick += 1
+                openResults(answers)
+            },
+            onNotCompleted = { message ->
+                submitting = false
+                showError(
+                    code = "WIZARD_AD_REQUIRED",
+                    title = "Ad required",
+                    message = message,
+                    retryKind = WizardRetryKind.CALCULATE
+                )
+            },
+            incompleteMessage = CalculateAdConfig.incompleteMessage
+        )
     }
 
     fun goBackSafe() {
@@ -419,9 +471,11 @@ fun WizardScreen(
             WizardBottomCta(
                 enabled = canContinue && !submitting,
                 label = when {
+                    submitting && needsCalculateAd -> "Watch ad…"
                     submitting -> "Calculating…"
                     safeStep < 3 -> "Continue"
-                    else -> "Calculate Best Settings"
+                    needsCalculateAd -> CalculateAdConfig.buttonLabel
+                    else -> "Calculate Best Pro Settings"
                 },
                 onClick = { continueOrCalculate() }
             )

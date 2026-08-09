@@ -222,7 +222,8 @@ internal fun RedeemCodeCard(
     onCopy: () -> Unit,
     onRedeem: () -> Unit,
     onVote: (Boolean) -> Unit,
-    onOpenComment: () -> Unit
+    onOpenComment: () -> Unit,
+    redeemActionLabel: String? = null
 ) {
     val active = item.status == RedeemStatus.ACTIVE
     val displayCode = when {
@@ -337,7 +338,11 @@ internal fun RedeemCodeCard(
             )
             ActionPill(
                 pillModifier = Modifier.weight(1f),
-                label = if (unlocked) "UNLOCKED" else "REDEEM NOW",
+                label = when {
+                    unlocked -> "UNLOCKED"
+                    !redeemActionLabel.isNullOrBlank() -> redeemActionLabel
+                    else -> "REDEEM NOW"
+                },
                 icon = Icons.Outlined.RocketLaunch,
                 enabled = active && !unlocked,
                 filled = true,

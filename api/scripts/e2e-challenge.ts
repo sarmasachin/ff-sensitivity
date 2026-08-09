@@ -85,6 +85,7 @@ async function main() {
       OR: [
         { idempotencyKey: { startsWith: `earn:quiz:ok:${user.id}:${day}` } },
         { idempotencyKey: { startsWith: `earn:quiz:wrong:${user.id}:${day}` } },
+        { idempotencyKey: { startsWith: `quiz:second:${user.id}:${day}` } },
       ],
     },
   });
@@ -128,12 +129,26 @@ async function main() {
         );
   }
 
-  const login = await req('POST', '/api/v1/auth/login', {
-    body: { email: adminEmail, password: adminPassword },
+  // Admin API auth: mint JWT with the same claims as AuthService sessions.
+  // Password login now sets httpOnly cookies and may require OTP — neither
+  // fits headless e2e, so we sign locally against JWT_ACCESS_SECRET.
+  const adminRow = await prisma.admin.findFirst({
+    where: {
+      email: adminEmail.trim().toLowerCase(),
+      isActive: true,
+    },
   });
-  const adminToken = login.json?.accessToken as string | undefined;
-  adminToken ? pass('admin login') : fail('admin login', `HTTP ${login.status}`);
-  if (!adminToken) throw new Error('no admin token');
+  const adminToken = adminRow
+    ? jwt.sign(
+        { sub: adminRow.id, email: adminRow.email, role: adminRow.role },
+        process.env.JWT_ACCESS_SECRET!,
+        { expiresIn: '1h' },
+      )
+    : undefined;
+  adminToken
+    ? pass('admin login', 'minted jwt')
+    : fail('admin login', 'active admin not found');
+  if (!adminToken || !adminRow) throw new Error('no admin token');
 
   const get = await req('GET', '/api/v1/admin/challenge', { token: adminToken });
   get.status < 300 && get.json?.rules && Array.isArray(get.json?.quiz)
@@ -146,11 +161,13 @@ async function main() {
       quizCorrectCoins: 50,
       quizWrongCoins: -10,
       wrongAnswerLockHours: 4,
+      wrongAnswerLockMinutes: 20,
       quizOpenWindowHours: 2,
       missDayResetsStreak: true,
       requireCheckIn: true,
       requireQuiz: true,
       adBonusOptional: true,
+      adBonusCooldownHours: 4,
       scratchCardsPerDay: 1,
       cardExpiresSameDay: true,
       firstMilestoneDays: 7,
@@ -160,6 +177,13 @@ async function main() {
         id: 'e2e_q1',
         question: 'E2E what is 2+2?',
         options: ['3', '4', '5', '6'],
+        correctIndex: 1,
+        enabled: true,
+      },
+      {
+        id: 'e2e_q2',
+        question: 'E2E what is 3+3?',
+        options: ['5', '6', '7', '8'],
         correctIndex: 1,
         enabled: true,
       },
@@ -187,20 +211,24 @@ async function main() {
   // Admin response includes correctIndex; user today must NOT
   const today = await req('GET', '/api/v1/challenge/today', { token: userToken });
   const q = today.json?.question;
+  const todayQid = q?.id as string | undefined;
   today.status < 300 &&
-  q?.id === 'e2e_q1' &&
+  (todayQid === 'e2e_q1' || todayQid === 'e2e_q2') &&
   q.correctIndex === undefined &&
   !JSON.stringify(q).includes('correctIndex')
-    ? pass('user today hides correctIndex')
+    ? pass('user today hides correctIndex', `qid=${todayQid}`)
     : fail(
         'user today hides correctIndex',
         JSON.stringify(q)?.slice(0, 200),
       );
+  if (!todayQid) throw new Error('no today question id');
+  const todayCorrect = todayQid === 'e2e_q1' ? 1 : 1; // both e2e qs use index 1
+  const todayWrong = 0;
 
   // Correct answer first (no prior wrong → not locked)
   const ok = await req('POST', '/api/v1/challenge/quiz/submit', {
     token: userToken,
-    body: { questionId: 'e2e_q1', selectedIndex: 1 },
+    body: { questionId: todayQid, selectedIndex: todayCorrect },
   });
   ok.status < 300 && ok.json?.correct === true
     ? pass('quiz correct graded server-side', `delta=${ok.json?.delta}`)
@@ -210,7 +238,7 @@ async function main() {
   {
     const r = await req('POST', '/api/v1/challenge/quiz/submit', {
       token: userToken,
-      body: { questionId: 'e2e_q1', selectedIndex: 0 },
+      body: { questionId: todayQid, selectedIndex: todayWrong },
     });
     r.status === 409 && r.json?.error?.code === 'CHALLENGE_ALREADY_DONE'
       ? pass('after correct, re-submit blocked')
@@ -237,6 +265,7 @@ async function main() {
       OR: [
         { idempotencyKey: { startsWith: `earn:quiz:ok:${other.id}:${day}` } },
         { idempotencyKey: { startsWith: `earn:quiz:wrong:${other.id}:${day}` } },
+        { idempotencyKey: { startsWith: `quiz:second:${other.id}:${day}` } },
       ],
     },
   });
@@ -268,19 +297,20 @@ async function main() {
           {
             idempotencyKey: { startsWith: `earn:quiz:wrong:${other.id}:${day}` },
           },
+          { idempotencyKey: { startsWith: `quiz:second:${other.id}:${day}` } },
         ],
       },
     });
     const w1 = await req('POST', '/api/v1/challenge/quiz/submit', {
       token: otherToken,
-      body: { questionId: 'e2e_q1', selectedIndex: 0 },
+      body: { questionId: todayQid, selectedIndex: todayWrong },
     });
     w1.status < 300 && w1.json?.correct === false
       ? pass('quiz wrong graded server-side', `delta=${w1.json?.delta}`)
       : fail('quiz wrong graded server-side', JSON.stringify(w1.json));
     const w2 = await req('POST', '/api/v1/challenge/quiz/submit', {
       token: otherToken,
-      body: { questionId: 'e2e_q1', selectedIndex: 0 },
+      body: { questionId: todayQid, selectedIndex: todayWrong },
     });
     w2.status === 409 && w2.json?.error?.code === 'CHALLENGE_QUIZ_LOCKED'
       ? pass('server enforces wrong-answer lock')
@@ -288,6 +318,232 @@ async function main() {
           'server enforces wrong-answer lock',
           `w2=${w2.status} ${w2.json?.error?.code}`,
         );
+
+    // Second-chance before lock ends → still locked
+    {
+      const early = await req('POST', '/api/v1/challenge/quiz/second-chance', {
+        token: otherToken,
+      });
+      early.status === 409 && early.json?.error?.code === 'CHALLENGE_QUIZ_LOCKED'
+        ? pass('second-chance blocked during lock')
+        : fail(
+            'second-chance blocked during lock',
+            `HTTP ${early.status} ${early.json?.error?.code}`,
+          );
+    }
+
+    // Backdate wrong ledger past lock minutes → NEED_SECOND_CHANCE on submit
+    const wrongRow = await prisma.walletLedger.findFirst({
+      where: {
+        userId: other.id,
+        idempotencyKey: { startsWith: `earn:quiz:wrong:${other.id}:${day}:` },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (wrongRow) {
+      await prisma.walletLedger.update({
+        where: { id: wrongRow.id },
+        data: { createdAt: new Date(Date.now() - 25 * 60 * 1000) },
+      });
+    }
+    {
+      const afterLock = await req('POST', '/api/v1/challenge/quiz/submit', {
+        token: otherToken,
+        body: { questionId: todayQid, selectedIndex: todayWrong },
+      });
+      afterLock.status === 409 &&
+      afterLock.json?.error?.code === 'CHALLENGE_NEED_SECOND_CHANCE'
+        ? pass('after lock, submit requires second-chance')
+        : fail(
+            'after lock, submit requires second-chance',
+            `HTTP ${afterLock.status} ${afterLock.json?.error?.code}`,
+          );
+    }
+
+    const unlocked = await req('POST', '/api/v1/challenge/quiz/second-chance', {
+      token: otherToken,
+    });
+    const scQ = unlocked.json?.question;
+    const scOk =
+      unlocked.status < 300 &&
+      scQ?.id &&
+      scQ.id !== todayQid &&
+      (scQ.id === 'e2e_q1' || scQ.id === 'e2e_q2');
+    scOk
+      ? pass('second-chance unlocks different question', `from=${todayQid} to=${scQ.id}`)
+      : fail(
+          'second-chance unlocks different question',
+          `HTTP ${unlocked.status} ${JSON.stringify(unlocked.json)?.slice(0, 200)}`,
+        );
+
+    // Idempotent unlock
+    {
+      const again = await req('POST', '/api/v1/challenge/quiz/second-chance', {
+        token: otherToken,
+      });
+      again.status < 300 &&
+      again.json?.alreadyUnlocked === true &&
+      again.json?.question?.id === scQ?.id
+        ? pass('second-chance unlock is idempotent')
+        : fail(
+            'second-chance unlock is idempotent',
+            `HTTP ${again.status} ${JSON.stringify(again.json)?.slice(0, 160)}`,
+          );
+    }
+
+    // Today payload shows second-chance question
+    {
+      const t2 = await req('GET', '/api/v1/challenge/today', { token: otherToken });
+      t2.status < 300 &&
+      t2.json?.question?.id === scQ?.id &&
+      t2.json?.quizState?.secondChanceUnlocked === true
+        ? pass('today returns second-chance question')
+        : fail(
+            'today returns second-chance question',
+            JSON.stringify({
+              q: t2.json?.question?.id,
+              state: t2.json?.quizState,
+            })?.slice(0, 200),
+          );
+    }
+
+    // Old today Q rejected; new Q correct earns coins
+    {
+      const bad = await req('POST', '/api/v1/challenge/quiz/submit', {
+        token: otherToken,
+        body: { questionId: todayQid, selectedIndex: todayCorrect },
+      });
+      bad.status === 409 && bad.json?.error?.code === 'CHALLENGE_WRONG_QUESTION'
+        ? pass('after unlock, old question rejected')
+        : fail(
+            'after unlock, old question rejected',
+            `HTTP ${bad.status} ${bad.json?.error?.code}`,
+          );
+    }
+    if (scQ?.id) {
+      const scCorrect = 1;
+      const win = await req('POST', '/api/v1/challenge/quiz/submit', {
+        token: otherToken,
+        body: { questionId: scQ.id, selectedIndex: scCorrect },
+      });
+      win.status < 300 && win.json?.correct === true
+        ? pass('second-chance correct earns coins', `delta=${win.json?.delta}`)
+        : fail('second-chance correct earns coins', JSON.stringify(win.json));
+    }
+  }
+
+  // Second-chance only for wrong answers (fresh user, no wrong)
+  {
+    const clean = await prisma.user.upsert({
+      where: { email: 'e2e.challenge.clean@example.com' },
+      update: { isActive: true, coins: 40 },
+      create: {
+        googleSub: 'e2e-challenge-clean',
+        email: 'e2e.challenge.clean@example.com',
+        displayName: 'E2E Clean',
+        isActive: true,
+        coins: 40,
+      },
+    });
+    await prisma.walletLedger.deleteMany({
+      where: {
+        userId: clean.id,
+        OR: [
+          { idempotencyKey: { startsWith: `earn:quiz:` } },
+          { idempotencyKey: { startsWith: `quiz:second:` } },
+        ],
+      },
+    });
+    const cleanToken = jwt.sign(
+      { sub: clean.id, email: clean.email, aud: 'user' },
+      userSecret,
+      { expiresIn: '1h' },
+    );
+    const r = await req('POST', '/api/v1/challenge/quiz/second-chance', {
+      token: cleanToken,
+    });
+    r.status === 409 && r.json?.error?.code === 'CHALLENGE_NO_WRONG'
+      ? pass('second-chance requires prior wrong')
+      : fail(
+          'second-chance requires prior wrong',
+          `HTTP ${r.status} ${r.json?.error?.code}`,
+        );
+  }
+
+  // Single-question bank → no alternate second chance
+  {
+    const solo = await prisma.user.upsert({
+      where: { email: 'e2e.challenge.solo@example.com' },
+      update: { isActive: true, coins: 40 },
+      create: {
+        googleSub: 'e2e-challenge-solo',
+        email: 'e2e.challenge.solo@example.com',
+        displayName: 'E2E Solo',
+        isActive: true,
+        coins: 40,
+      },
+    });
+    await prisma.walletLedger.deleteMany({
+      where: {
+        userId: solo.id,
+        OR: [
+          { idempotencyKey: { startsWith: `earn:quiz:` } },
+          { idempotencyKey: { startsWith: `quiz:second:` } },
+        ],
+      },
+    });
+    const soloSave = await req('PUT', '/api/v1/admin/challenge', {
+      token: adminToken,
+      body: {
+        rules: { ...saveBody.rules, wrongAnswerLockMinutes: 20 },
+        quiz: [saveBody.quiz[0]],
+        milestones: saveBody.milestones,
+      },
+    });
+    if (soloSave.status >= 300) {
+      fail('solo bank save', JSON.stringify(soloSave.json)?.slice(0, 120));
+    } else {
+      const soloToken = jwt.sign(
+        { sub: solo.id, email: solo.email, aud: 'user' },
+        userSecret,
+        { expiresIn: '1h' },
+      );
+      const soloToday = await req('GET', '/api/v1/challenge/today', {
+        token: soloToken,
+      });
+      const soloQid = soloToday.json?.question?.id;
+      const w = await req('POST', '/api/v1/challenge/quiz/submit', {
+        token: soloToken,
+        body: { questionId: soloQid, selectedIndex: 0 },
+      });
+      if (w.status < 300 && w.json?.correct === false) {
+        const row = await prisma.walletLedger.findFirst({
+          where: {
+            userId: solo.id,
+            idempotencyKey: {
+              startsWith: `earn:quiz:wrong:${solo.id}:${day}:`,
+            },
+          },
+        });
+        if (row) {
+          await prisma.walletLedger.update({
+            where: { id: row.id },
+            data: { createdAt: new Date(Date.now() - 25 * 60 * 1000) },
+          });
+        }
+        const sc = await req('POST', '/api/v1/challenge/quiz/second-chance', {
+          token: soloToken,
+        });
+        sc.status === 409 && sc.json?.error?.code === 'CHALLENGE_NO_SECOND_Q'
+          ? pass('single-question bank blocks second-chance')
+          : fail(
+              'single-question bank blocks second-chance',
+              `HTTP ${sc.status} ${sc.json?.error?.code}`,
+            );
+      } else {
+        fail('solo wrong for bank test', JSON.stringify(w.json));
+      }
+    }
   }
 
   // Module guard

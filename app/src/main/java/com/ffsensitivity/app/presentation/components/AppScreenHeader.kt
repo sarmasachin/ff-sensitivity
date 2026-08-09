@@ -1,24 +1,28 @@
 package com.ffsensitivity.app.presentation.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.Composable
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.presentation.theme.Amber
+import com.ffsensitivity.app.presentation.theme.AmberHot
 import com.ffsensitivity.app.presentation.theme.Hairline
 import com.ffsensitivity.app.presentation.theme.InkPrimary
 import com.ffsensitivity.app.presentation.theme.InkSecondary
@@ -26,6 +30,7 @@ import com.ffsensitivity.app.presentation.theme.InkSecondary
 /**
  * Shared premium top header for main tabs (Home / Redeem / Stylish).
  * Title is required; eyebrow/subtitle render only when non-blank.
+ * When [brandAiTitle] is true, shows “FF Sensitivity Settings” with Ai above the S.
  */
 @Composable
 fun AppScreenHeader(
@@ -34,7 +39,8 @@ fun AppScreenHeader(
     modifier: Modifier = Modifier,
     eyebrow: String = "",
     subtitle: String = "",
-    centerTitle: Boolean = false
+    centerTitle: Boolean = false,
+    brandAiTitle: Boolean = false
 ) {
     Column(
         modifier = modifier
@@ -50,19 +56,28 @@ fun AppScreenHeader(
                     onClick = onOpenMenu,
                     modifier = Modifier.align(Alignment.CenterStart)
                 )
-                Text(
-                    text = title,
-                    color = InkPrimary,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = (-0.3).sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 56.dp)
-                )
+                if (brandAiTitle) {
+                    FfSensitivityBrandTitle(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 56.dp),
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    Text(
+                        text = title,
+                        color = InkPrimary,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = (-0.3).sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 56.dp)
+                    )
+                }
             }
         } else {
             Row(
@@ -86,15 +101,19 @@ fun AppScreenHeader(
                         )
                         Spacer(modifier = Modifier.height(5.dp))
                     }
-                    Text(
-                        text = title,
-                        color = InkPrimary,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = (-0.3).sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (brandAiTitle) {
+                        FfSensitivityBrandTitle()
+                    } else {
+                        Text(
+                            text = title,
+                            color = InkPrimary,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = (-0.3).sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     if (subtitle.isNotBlank()) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
@@ -117,5 +136,50 @@ fun AppScreenHeader(
                 .height(1.dp)
                 .background(Hairline)
         )
+    }
+}
+
+/** “FF Sensitivity Settings” with Ai badge above the S of Settings. */
+@Composable
+fun FfSensitivityBrandTitle(
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit = 22.sp,
+    textAlign: TextAlign = TextAlign.Start
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = if (textAlign == TextAlign.Center) {
+            Arrangement.Center
+        } else {
+            Arrangement.Start
+        }
+    ) {
+        Text(
+            text = "FF Sensitivity ",
+            color = InkPrimary,
+            fontSize = fontSize,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.3).sp
+        )
+        Box {
+            Text(
+                text = "Settings",
+                color = InkPrimary,
+                fontSize = fontSize,
+                fontWeight = FontWeight.Black,
+                letterSpacing = (-0.3).sp
+            )
+            Text(
+                text = "Ai",
+                color = AmberHot,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.4.sp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 12.dp, y = (-7).dp)
+            )
+        }
     }
 }

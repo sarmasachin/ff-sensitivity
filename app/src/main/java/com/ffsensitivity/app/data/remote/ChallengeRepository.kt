@@ -66,5 +66,19 @@ object ChallengeRepository {
             result
         }
     }
+
+    fun unlockSecondChance(context: Context): Result<DailyQuizQuestion> {
+        val token = UserSessionStore(context).accessToken()
+        if (token.isBlank()) {
+            return Result.failure(
+                ApiException("AUTH_REQUIRED", "Please sign in again.")
+            )
+        }
+        return ChallengeApi.unlockSecondChance(token).map { q ->
+            ChallengeRemoteCache.setToday(q, ChallengeRemoteCache.milestones.orEmpty())
+            DailyChallengeStore.markSecondChanceUnlocked(context)
+            q
+        }
+    }
 }
 // --- End: Challenge live wire (Sachin) ---

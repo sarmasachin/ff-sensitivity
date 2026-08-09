@@ -4,6 +4,7 @@ import type {
   MilestoneRow,
   QuizQuestionRow,
 } from "./challenge-data";
+import { CHALLENGE_DEFAULT_RULES } from "./challenge-data";
 
 // --- Start: Challenge live wire (Sachin) ---
 export type ChallengeBundle = {
@@ -12,10 +13,16 @@ export type ChallengeBundle = {
   milestones: MilestoneRow[];
 };
 
+function normalizeRules(
+  rules: Partial<ChallengeRules> | null | undefined,
+): ChallengeRules {
+  return { ...CHALLENGE_DEFAULT_RULES, ...(rules ?? {}) };
+}
+
 export async function fetchChallengeBundle(): Promise<ChallengeBundle> {
   const data = await apiFetch<ChallengeBundle>("/api/v1/admin/challenge");
   return {
-    rules: data.rules,
+    rules: normalizeRules(data.rules),
     quiz: (data.quiz ?? []).map((q) => ({
       ...q,
       options: [
@@ -34,10 +41,13 @@ export async function saveChallengeBundle(
 ): Promise<ChallengeBundle> {
   const data = await apiFetch<ChallengeBundle>("/api/v1/admin/challenge", {
     method: "PUT",
-    body: JSON.stringify(bundle),
+    body: JSON.stringify({
+      ...bundle,
+      rules: normalizeRules(bundle.rules),
+    }),
   });
   return {
-    rules: data.rules,
+    rules: normalizeRules(data.rules),
     quiz: (data.quiz ?? []).map((q) => ({
       ...q,
       options: [

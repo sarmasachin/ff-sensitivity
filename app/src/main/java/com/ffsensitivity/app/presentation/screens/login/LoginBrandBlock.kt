@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -65,13 +66,13 @@ fun LoginBrandBlock(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(18.dp))
 
         Image(
-            painter = painterResource(id = R.mipmap.ic_launcher),
+            painter = painterResource(id = R.drawable.ic_login_app_icon),
             contentDescription = "FF Sensitivity Settings",
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(88.dp)
                 .clip(RoundedCornerShape(22.dp))
-                .border(1.dp, Amber.copy(alpha = 0.55f), RoundedCornerShape(22.dp))
+                .border(1.dp, Color(0xFF3D7EFF).copy(alpha = 0.65f), RoundedCornerShape(22.dp))
         )
 
         Spacer(modifier = Modifier.height(22.dp))

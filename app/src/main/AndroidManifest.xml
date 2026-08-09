@@ -76,5 +76,11 @@
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="ff_ops_push" />
         <!-- End: Push FCM live wire (Sachin) -->
+
+        <!-- Start: AdMob Calculate rewarded (Sachin) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
+        <!-- End: AdMob Calculate rewarded (Sachin) -->
     </application>
 </manifest>

@@ -117,7 +117,7 @@ exports.DEFAULT_APP_CONFIG = {
     navigation: Object.fromEntries(exports.APP_NAV_KEYS.map((k) => [k, true])),
     links: {
         playStoreUrl: 'https://play.google.com/store/apps/details?id=com.ffsensitivity.app',
-        privacyUrl: 'https://sensitivitysettings.com/privacy-policy',
+        privacyUrl: 'https://app.sensitivitysettings.com/privacy',
         websiteUrl: 'https://sensitivitysettings.com',
         supportEmail: 'support@sensitivitysettings.com',
     },

@@ -29,6 +29,7 @@
     "e2e:profile": "ts-node --transpile-only scripts/e2e-profile.ts",
     "e2e:push": "ts-node --transpile-only scripts/e2e-push.ts",
     "e2e:app": "ts-node --transpile-only scripts/e2e-app.ts",
+    "e2e:ads": "ts-node --transpile-only scripts/e2e-ads.ts",
     "e2e:app:extra": "ts-node --transpile-only scripts/e2e-app-extra.ts",
     "e2e:devices": "ts-node --transpile-only scripts/e2e-devices.ts",
     "e2e:devices:extra": "ts-node --transpile-only scripts/e2e-devices-extra.ts",

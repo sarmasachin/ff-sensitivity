@@ -30,6 +30,9 @@ let ChallengeController = class ChallengeController {
     submitQuiz(user, dto) {
         return this.challenge.userSubmitQuiz(user.id, dto.questionId, dto.selectedIndex);
     }
+    unlockSecondChance(user) {
+        return this.challenge.userUnlockSecondChance(user.id);
+    }
 };
 exports.ChallengeController = ChallengeController;
 __decorate([
@@ -49,6 +52,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, challenge_dto_1.SubmitQuizDto]),
     __metadata("design:returntype", void 0)
 ], ChallengeController.prototype, "submitQuiz", null);
+__decorate([
+    (0, common_1.Post)('quiz/second-chance'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], ChallengeController.prototype, "unlockSecondChance", null);
 exports.ChallengeController = ChallengeController = __decorate([
     (0, common_1.Controller)('api/v1/challenge'),
     (0, common_1.UseGuards)(user_jwt_auth_guard_1.UserJwtAuthGuard),

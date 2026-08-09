@@ -13,6 +13,7 @@ export declare class AppConfigController {
         };
         features: Record<string, boolean>;
         navigation: Record<string, boolean>;
+        ads: import("./app-config-ads").AdsConfigBundle;
         links: {
             playStoreUrl: string;
             privacyUrl: string;

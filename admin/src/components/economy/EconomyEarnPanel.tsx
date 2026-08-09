@@ -53,7 +53,7 @@ const SOURCES: SourceCard[] = [
     enabledKey: "adBonusEnabled",
     valueKey: "adBonusCoins",
     title: "Ad bonus",
-    subtitle: "Optional rewarded / claim once per day",
+    subtitle: "Optional rewarded — cooldown hours set in Challenge rules",
     accent: "from-cyan-50 to-white border-cyan-200/80",
     bar: "bg-cyan-500",
   },

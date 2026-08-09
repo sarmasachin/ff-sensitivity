@@ -10,6 +10,8 @@ export declare class EconomyController {
         boosts: {
             [k: string]: number;
         };
+        ownedShopIds: string[];
+        shopBuyCounts: Record<string, number>;
     }>;
     earn(user: AuthUser, dto: ChallengeEarnDto): Promise<{
         coins: number;

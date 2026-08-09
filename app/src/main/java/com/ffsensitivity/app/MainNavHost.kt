@@ -33,7 +33,9 @@ import com.ffsensitivity.app.presentation.screens.login.LoginScreen
 import com.ffsensitivity.app.push.PushDeepLinkBus
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun MainNavHost(
@@ -93,18 +95,22 @@ internal fun MainNavHost(
                             // --- End: Users admin live wire (Sachin) ---
                         )
                         // --- Start: Economy live wire (Sachin) ---
-                        com.ffsensitivity.app.data.remote.EconomyRepository.refreshWallet(context)
+                        // Must not block Main — was freezing login spinner while
+                        // signedIn flip could flash the bottom bar early.
+                        withContext(Dispatchers.IO) {
+                            com.ffsensitivity.app.data.remote.EconomyRepository.refreshWallet(context)
+                        }
                         // --- End: Economy live wire (Sachin) ---
                         // --- Start: Push live wire (Sachin) ---
                         Thread {
                             com.ffsensitivity.app.data.remote.PushRepository.registerAndSync(context)
                         }.start()
                         // --- End: Push live wire (Sachin) ---
-                        onSignedIn()
                         navController.navigate("home") {
                             popUpTo("login") { inclusive = true }
                             launchSingleTop = true
                         }
+                        onSignedIn()
                     }.onFailure {
                         AppLog.e("Local sign-in failed", it)
                         SafeOps.toast(context, "Could not sign in")
@@ -485,6 +491,15 @@ internal fun MainNavHost(
                                     true
                                 }.getOrElse {
                                     AppLog.e("Open compare failed", it)
+                                    false
+                                }
+                            },
+                            onGoHome = {
+                                runCatching {
+                                    goHome()
+                                    true
+                                }.getOrElse {
+                                    AppLog.e("Results goHome failed", it)
                                     false
                                 }
                             }

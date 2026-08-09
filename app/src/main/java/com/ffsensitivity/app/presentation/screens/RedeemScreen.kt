@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,11 +26,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.RedeemCadence
-import com.ffsensitivity.app.data.RedeemCatalogCache
 import com.ffsensitivity.app.data.RedeemCodeItem
-import com.ffsensitivity.app.data.RedeemStatus
-import com.ffsensitivity.app.data.ScratchHistoryStore
-import com.ffsensitivity.app.data.remote.ApiException
+import com.ffsensitivity.app.data.RedeemDailyAdConfig
+import com.ffsensitivity.app.data.RedeemDailyAdStore
 import com.ffsensitivity.app.data.remote.RedeemRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.AppScreenHeader
@@ -39,7 +38,6 @@ import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -57,8 +55,8 @@ fun RedeemScreen(
     var actionError by remember { mutableStateOf<RedeemUiError?>(null) }
     var isBusy by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(RedeemTab.DAILY) }
+    var redeemDailyAdPassTick by remember { mutableIntStateOf(0) }
 
-    // --- Start: Redeem live wire (Sachin) ---
     var codes by remember { mutableStateOf<List<RedeemCodeItem>>(emptyList()) }
     var catalogLoading by remember { mutableStateOf(true) }
     var catalogLoadFailed by remember { mutableStateOf(false) }
@@ -87,11 +85,16 @@ fun RedeemScreen(
         )
         catalogLoading = false
     }
-    // --- End: Redeem live wire (Sachin) ---
 
     val cadence = if (selectedTab == RedeemTab.DAILY) RedeemCadence.DAILY else RedeemCadence.WEEKLY
     val tabCodes = remember(codes, selectedTab) {
         codes.filter { it.cadence == cadence }
+    }
+    val needsRedeemDailyAd = remember(selectedTab, isBusy, redeemDailyAdPassTick) {
+        selectedTab == RedeemTab.DAILY && RedeemDailyAdStore.needsAd(context)
+    }
+    LaunchedEffect(selectedTab, redeemDailyAdPassTick) {
+        RedeemScreenScratch.preloadIfNeeded(context, selectedTab == RedeemTab.DAILY)
     }
     val catalogError = when {
         catalogLoading -> null
@@ -122,13 +125,11 @@ fun RedeemScreen(
         actionError = RedeemUiError(code, title, message, retryKind, retryItemId)
     }
 
-    fun showBusy() {
-        showError(
-            code = "REDEEM_BUSY",
-            title = "Please wait",
-            message = "Another action is already in progress. Try again in a moment."
-        )
-    }
+    fun showBusy() = showError(
+        "REDEEM_BUSY",
+        "Please wait",
+        "Another action is already in progress. Try again in a moment."
+    )
 
     fun findCode(id: String?): RedeemCodeItem? =
         id?.let { codes.firstOrNull { c -> c.id == it } }
@@ -184,40 +185,24 @@ fun RedeemScreen(
         }
     }
 
-    fun startScratch(item: RedeemCodeItem) {
-        if (isBusy) {
-            showBusy()
-            return
-        }
-        clearError()
-        isBusy = true
-        scope.launch {
-            val check = withContext(Dispatchers.IO) {
-                RedeemRepository.precheckScratch(
-                    context = context,
-                    item = item,
-                    alreadyUnlockedLocally = unlocked[item.id] == true
-                )
-            }
-            isBusy = false
-            check.fold(
-                onSuccess = { scratchTarget = item },
-                onFailure = { err ->
-                    AppLog.e("Redeem scratch precheck failed", err)
-                    val message = when (err) {
-                        is ApiException -> err.message
-                        else -> "Couldn't open scratch card. Try again."
-                    }
-                    showError(
-                        code = (err as? ApiException)?.code ?: "REDEEM_SCRATCH_OPEN_FAILED",
-                        title = "Couldn’t open scratch card",
-                        message = message,
-                        retryKind = RedeemRetryKind.SCRATCH,
-                        retryItemId = item.id
-                    )
-                }
-            )
-        }
+    fun requestScratch(item: RedeemCodeItem) {
+        RedeemScreenScratch.request(
+            context = context,
+            scope = scope,
+            item = item,
+            dailyTab = selectedTab == RedeemTab.DAILY,
+            alreadyUnlocked = unlocked[item.id] == true,
+            isBusy = isBusy,
+            setBusy = { isBusy = it },
+            showBusy = { showBusy() },
+            clearError = { clearError() },
+            setActionError = { actionError = it },
+            showError = { code, title, message, retryKind, retryItemId ->
+                showError(code, title, message, retryKind, retryItemId)
+            },
+            onPassTick = { redeemDailyAdPassTick += 1 },
+            onReady = { scratchTarget = it }
+        )
     }
 
     fun toggleReveal(item: RedeemCodeItem) {
@@ -296,7 +281,7 @@ fun RedeemScreen(
         val item = findCode(error.retryItemId) ?: return
         when (error.retryKind) {
             RedeemRetryKind.COMMENTS -> openCommentsSafe(item)
-            RedeemRetryKind.SCRATCH -> startScratch(item)
+            RedeemRetryKind.SCRATCH -> requestScratch(item)
             RedeemRetryKind.COPY -> copyUnlocked(item)
             null -> Unit
         }
@@ -309,46 +294,14 @@ fun RedeemScreen(
             onClaim = {
                 isBusy = true
                 try {
-                    val result = withContext(Dispatchers.IO) {
-                        RedeemRepository.claimCode(context, target)
-                    }
-                    result.fold(
-                        onSuccess = { claim ->
-                            val updated = target.copy(
-                                code = claim.code,
-                                serverUnlocked = true,
-                                status = RedeemStatus.ACTIVE,
-                                stockLeft = target.stockLeft?.let { left ->
-                                    if (claim.alreadyClaimed) left else (left - 1).coerceAtLeast(0)
-                                }
-                            )
-                            codes = codes.map { if (it.id == target.id) updated else it }
-                            RedeemCatalogCache.put(updated)
-                            unlocked[target.id] = true
-                            revealed[target.id] = true
-                            runCatching {
-                                ScratchHistoryStore.addRedeem(context, updated)
-                            }.onFailure {
-                                AppLog.e("Redeem unlock / history failed", it)
-                            }
-                            clearError()
-                            SafeOps.toast(context, "Code unlocked · you can copy now")
-                            // Keep dialog open so user can copy the real code.
-                            ScratchClaimUiResult(
-                                ok = true,
-                                message = "Code unlocked",
-                                revealedCode = claim.code
-                            )
-                        },
-                        onFailure = { err ->
-                            AppLog.e("Redeem claim failed", err)
-                            val message = when (err) {
-                                is ApiException -> err.message
-                                else -> "Couldn't unlock this code. Please try again."
-                            }
-                            // Error stays in-card with Retry — do not reset foil.
-                            ScratchClaimUiResult(ok = false, message = message)
-                        }
+                    RedeemScreenClaim.run(
+                        context = context,
+                        target = target,
+                        onCodes = { codes = it },
+                        codes = codes,
+                        unlocked = unlocked,
+                        revealed = revealed,
+                        clearError = { clearError() }
                     )
                 } finally {
                     isBusy = false
@@ -446,9 +399,14 @@ fun RedeemScreen(
                                 vote = votes[item.id],
                                 onToggleReveal = { toggleReveal(item) },
                                 onCopy = { copyUnlocked(item) },
-                                onRedeem = { startScratch(item) },
+                                onRedeem = { requestScratch(item) },
                                 onVote = { yes -> onVoteSafe(item.id, yes) },
-                                onOpenComment = { openCommentsSafe(item) }
+                                onOpenComment = { openCommentsSafe(item) },
+                                redeemActionLabel = when {
+                                    isUnlocked -> null
+                                    needsRedeemDailyAd -> RedeemDailyAdConfig.buttonLabel
+                                    else -> null
+                                }
                             )
                         }
                     }

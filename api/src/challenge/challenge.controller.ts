@@ -27,5 +27,11 @@ export class ChallengeController {
       dto.selectedIndex,
     );
   }
+
+  @Post('quiz/second-chance')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  unlockSecondChance(@CurrentUser() user: AuthUser) {
+    return this.challenge.userUnlockSecondChance(user.id);
+  }
 }
 // --- End: Challenge live wire (Sachin) ---

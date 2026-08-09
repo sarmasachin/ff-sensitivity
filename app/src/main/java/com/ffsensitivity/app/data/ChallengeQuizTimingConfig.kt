@@ -1,10 +1,18 @@
 package com.ffsensitivity.app.data
 
 /**
- * Local defaults until Challenge API pushes admin quiz timing + coins.
+ * Local defaults until Challenge API pushes admin quiz timing + coins + ad bonus.
  * Matches admin ChallengeRules.
  */
 object ChallengeQuizTimingConfig {
+    /** Minutes after wrong before rewarded-ad second chance (default 20). */
+    @Volatile
+    var wrongAnswerLockMinutes: Int = 20
+        set(value) {
+            field = value.coerceIn(1, 24 * 60)
+        }
+
+    @Deprecated("Use wrongAnswerLockMinutes")
     @Volatile
     var wrongAnswerLockHours: Int = 4
         set(value) {
@@ -34,9 +42,22 @@ object ChallengeQuizTimingConfig {
             field = value.coerceIn(-9999, 9999)
         }
 
-    fun lockDurationMs(): Long = wrongAnswerLockHours * 60L * 60L * 1000L
+    /** When false, Watch Ad Bonus is hidden/disabled. */
+    @Volatile
+    var adBonusOptional: Boolean = true
+
+    /** Hours before another Watch Ad Bonus claim. */
+    @Volatile
+    var adBonusCooldownHours: Int = 4
+        set(value) {
+            field = value.coerceIn(1, 168)
+        }
+
+    fun lockDurationMs(): Long = wrongAnswerLockMinutes * 60L * 1000L
 
     fun openWindowMs(): Long = quizOpenWindowHours * 60L * 60L * 1000L
+
+    fun adCooldownDurationMs(): Long = adBonusCooldownHours * 60L * 60L * 1000L
 
     fun signedCoins(delta: Int): String = if (delta > 0) "+$delta" else "$delta"
 }
@@ -46,10 +67,12 @@ enum class QuizUiPhase {
     AVAILABLE,
     /** Wrong answer — waiting for lock to end. */
     LOCKED,
-    /** Lock ended — question open until window closes. */
+    /** Lock ended — watch rewarded ad to unlock a new question. */
+    AWAITING_AD,
+    /** Legacy alias: treated like AWAITING_AD / second-chance available. */
     OPEN,
-    /** Open window ended without a correct answer. */
+    /** Open window ended / second chance used up. */
     CLOSED,
-    /** Correct answer claimed today. */
+    /** Correct answer already earned today. */
     DONE_CORRECT
 }

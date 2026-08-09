@@ -58,7 +58,7 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun LoginScreen(
-    onContinueWithGoogle: (GoogleSignInResult, NestUserSession) -> Unit,
+    onContinueWithGoogle: suspend (GoogleSignInResult, NestUserSession) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var loading by remember { mutableStateOf(false) }

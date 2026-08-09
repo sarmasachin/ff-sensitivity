@@ -18,7 +18,8 @@ data class EconomyEarnResult(
     val coins: Int,
     val delta: Int,
     val alreadyApplied: Boolean,
-    val reason: String
+    val reason: String,
+    val nextAdAvailableAtMs: Long? = null
 )
 
 data class EconomyPurchaseResult(
@@ -93,7 +94,14 @@ object EconomyApi {
                     coins = root.optInt("coins", 0),
                     delta = root.optInt("delta", 0),
                     alreadyApplied = root.optBoolean("alreadyApplied", false),
-                    reason = root.optString("reason")
+                    reason = root.optString("reason"),
+                    nextAdAvailableAtMs = if (
+                        root.has("nextAdAvailableAtMs") && !root.isNull("nextAdAvailableAtMs")
+                    ) {
+                        root.optLong("nextAdAvailableAtMs")
+                    } else {
+                        null
+                    }
                 )
             }
         }.onFailure { AppLog.e("EconomyApi.earnChallenge failed", it) }

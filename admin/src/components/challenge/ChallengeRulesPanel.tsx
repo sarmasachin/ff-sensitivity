@@ -68,13 +68,13 @@ export function ChallengeRulesPanel({ rules, onChange }: Props) {
           checked={rules.requireQuiz}
           onChange={(v) => patch({ requireQuiz: v })}
           title="Require quiz"
-          body="One question / day from the quiz bank."
+          body="One question / day from the quiz bank (max 1500)."
         />
         <ToggleRow
           checked={rules.adBonusOptional}
           onChange={(v) => patch({ adBonusOptional: v })}
           title="Optional ad bonus"
-          body="Third task — claimable once per day."
+          body="Watch Ad for Bonus Coins — cooldown hours below (not once/day)."
         />
         <ToggleRow
           checked={rules.missDayResetsStreak}
@@ -91,6 +91,27 @@ export function ChallengeRulesPanel({ rules, onChange }: Props) {
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <label className="block text-[11px] font-semibold text-slate-600">
+          Ad bonus cooldown (hours)
+          <input
+            type="number"
+            min={1}
+            max={168}
+            className={fieldClass}
+            value={rules.adBonusCooldownHours}
+            onChange={(e) =>
+              patch({
+                adBonusCooldownHours: Math.max(
+                  1,
+                  Math.min(168, Number(e.target.value) || 1),
+                ),
+              })
+            }
+          />
+          <span className="mt-1 block text-[11px] font-normal text-slate-400">
+            After claim: “Next Ad Available in …” (default 4)
+          </span>
+        </label>
         <label className="block text-[11px] font-semibold text-slate-600">
           Scratch cards / day
           <input

@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.AppLinks
@@ -90,6 +91,18 @@ fun AboutScreen(
         }.getOrElse {
             AppLog.e("About website label failed", it)
             "Website"
+        }
+    }
+
+    val privacyHost = remember {
+        runCatching {
+            AppLinks.PRIVACY_POLICY
+                .removePrefix("https://")
+                .removePrefix("http://")
+                .ifBlank { AppLinks.PRIVACY_POLICY }
+        }.getOrElse {
+            AppLog.e("About privacy label failed", it)
+            "app.sensitivitysettings.com/privacy"
         }
     }
 
@@ -294,7 +307,7 @@ fun AboutScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = appAbout.privacyCta,
+                    text = privacyHost,
                     color = AmberHot,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -307,7 +320,9 @@ fun AboutScreen(
                 Text(
                     text = "${appAbout.versionPrefix} $safeVersion",
                     color = InkMuted,
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }

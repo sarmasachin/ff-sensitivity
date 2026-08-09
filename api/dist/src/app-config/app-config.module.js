@@ -10,6 +10,7 @@ exports.AppConfigModule = void 0;
 const common_1 = require("@nestjs/common");
 const auth_module_1 = require("../auth/auth.module");
 const app_config_admin_controller_1 = require("./app-config-admin.controller");
+const app_config_ads_admin_controller_1 = require("./app-config-ads-admin.controller");
 const app_config_controller_1 = require("./app-config.controller");
 const app_config_module_guard_1 = require("./app-config-module.guard");
 const app_config_service_1 = require("./app-config.service");
@@ -19,7 +20,11 @@ exports.AppConfigModule = AppConfigModule;
 exports.AppConfigModule = AppConfigModule = __decorate([
     (0, common_1.Module)({
         imports: [auth_module_1.AuthModule],
-        controllers: [app_config_controller_1.AppConfigController, app_config_admin_controller_1.AppConfigAdminController],
+        controllers: [
+            app_config_controller_1.AppConfigController,
+            app_config_admin_controller_1.AppConfigAdminController,
+            app_config_ads_admin_controller_1.AppConfigAdsAdminController,
+        ],
         providers: [app_config_service_1.AppConfigService, app_config_module_guard_1.AppConfigModuleGuard],
     })
 ], AppConfigModule);

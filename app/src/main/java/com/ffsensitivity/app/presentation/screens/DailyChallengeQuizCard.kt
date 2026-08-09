@@ -60,11 +60,14 @@ fun DailyChallengeQuizCard(
     countdownEndsAtMs: Long,
     quizBoostReady: Boolean,
     actionEnabled: Boolean,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    /** When set, overrides the default “Submit Answer” label (e.g. Watch Ad). */
+    submitLabel: String? = null
 ) {
     val showQuestion = phase == QuizUiPhase.AVAILABLE || phase == QuizUiPhase.OPEN
     val doneCorrect = phase == QuizUiPhase.DONE_CORRECT
     val locked = phase == QuizUiPhase.LOCKED
+    val awaitingAd = phase == QuizUiPhase.AWAITING_AD
     val closed = phase == QuizUiPhase.CLOSED
 
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -145,9 +148,10 @@ fun DailyChallengeQuizCard(
                 Text(
                     text = when {
                         doneCorrect -> "Correct · reward claimed"
-                        locked -> "Wrong answer · opens in $countdownLabel"
-                        closed -> "Open window ended · try again tomorrow"
-                        phase == QuizUiPhase.OPEN -> "Open window · closes in $countdownLabel"
+                        locked -> "Wrong answer · retry in $countdownLabel"
+                        awaitingAd -> "Lock over · Watch Ad to unlock a new question"
+                        closed -> "No more chances today · try again tomorrow"
+                        phase == QuizUiPhase.OPEN -> "Second chance question"
                         quizBoostReady -> {
                             val correct = ChallengeQuizTimingConfig.signedCoins(
                                 ChallengeQuizTimingConfig.quizCorrectCoins * 2
@@ -218,7 +222,8 @@ fun DailyChallengeQuizCard(
                 Text(
                     text = when {
                         locked -> "Question locked. Countdown on the button below."
-                        closed -> "Question is off for today after the open window."
+                        awaitingAd -> "Watch a rewarded ad to unlock a different question and earn coins again."
+                        closed -> "Second chance used. Come back tomorrow."
                         else -> "Question hidden."
                     },
                     color = InkMuted,
@@ -233,10 +238,15 @@ fun DailyChallengeQuizCard(
             label = when {
                 doneCorrect -> "Answered"
                 locked -> "Opens in $countdownLabel"
+                awaitingAd -> submitLabel ?: "Watch Ad for New Question"
                 closed -> "Closed today"
-                else -> "Submit Answer"
+                else -> submitLabel ?: "Submit Answer"
             },
-            enabled = actionEnabled && showQuestion && !doneCorrect,
+            enabled = when {
+                doneCorrect || locked || closed -> false
+                awaitingAd -> actionEnabled
+                else -> actionEnabled && showQuestion
+            },
             onClick = onSubmit
         )
     }

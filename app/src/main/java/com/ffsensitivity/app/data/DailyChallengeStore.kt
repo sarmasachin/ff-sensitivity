@@ -19,7 +19,11 @@ object DailyChallengeStore {
     private const val KEY_QUIZ_OK = "quiz_correct"
     private const val KEY_QUIZ_LOCK_UNTIL = "quiz_lock_until"
     private const val KEY_QUIZ_OPEN_UNTIL = "quiz_open_until"
+    private const val KEY_QUIZ_SECOND_UNLOCKED = "quiz_second_unlocked"
+    private const val KEY_QUIZ_CLOSED = "quiz_second_closed"
     private const val KEY_AD = "ad_date"
+    /** Epoch ms when next Watch Ad Bonus unlocks; 0 = available now. */
+    private const val KEY_AD_NEXT_MS = "ad_next_available_ms"
     private const val KEY_LAST_REWARD = "last_reward"
     private const val KEY_CLAIMED = "claimed_milestones"
     private const val KEY_PENDING_SCRATCH = "pending_scratch_days"
@@ -36,15 +40,23 @@ object DailyChallengeStore {
         val checkedInToday: Boolean,
         val quizDoneToday: Boolean,
         val quizCorrectToday: Boolean?,
+        /** True while ad bonus cooldown is active (compat / green check). */
         val adDoneToday: Boolean,
         val lastRewardNote: String,
         val claimedMilestones: Set<Int> = emptySet(),
         val quizPhase: QuizUiPhase = QuizUiPhase.AVAILABLE,
         /** Epoch ms for active countdown (lock end or open-window end). 0 = none. */
-        val quizCountdownEndsAtMs: Long = 0L
+        val quizCountdownEndsAtMs: Long = 0L,
+        /** Epoch ms when Watch Ad Bonus unlocks again; 0 = available now. */
+        val nextAdAvailableAtMs: Long = 0L,
+        val adBonusEnabled: Boolean = true
     ) {
         val todayDoneCount: Int
             get() = listOf(checkedInToday, quizDoneToday).count { it }
+
+        val adAvailable: Boolean
+            get() = adBonusEnabled &&
+                (nextAdAvailableAtMs <= 0L || System.currentTimeMillis() >= nextAdAvailableAtMs)
     }
 
     data class Result(
@@ -60,17 +72,22 @@ object DailyChallengeStore {
             val quizToday = prefs.getString(KEY_QUIZ, null) == today
             val quizOk = if (quizToday) prefs.getBoolean(KEY_QUIZ_OK, false) else null
             val timing = resolveQuizTiming(prefs, quizToday, quizOk)
+            val nextAd = prefs.getLong(KEY_AD_NEXT_MS, 0L).coerceAtLeast(0L)
+            val now = System.currentTimeMillis()
+            val onCooldown = nextAd > now
             Snapshot(
                 coins = clampCoins(prefs.getInt(KEY_COINS, 0)),
                 streak = prefs.getInt(KEY_STREAK, 0).coerceAtLeast(0),
                 checkedInToday = prefs.getString(KEY_CHECKIN, null) == today,
                 quizDoneToday = timing.countsAsDone,
                 quizCorrectToday = quizOk,
-                adDoneToday = prefs.getString(KEY_AD, null) == today,
+                adDoneToday = onCooldown,
                 lastRewardNote = prefs.getString(KEY_LAST_REWARD, "").orEmpty(),
                 claimedMilestones = readClaimed(prefs),
                 quizPhase = timing.phase,
-                quizCountdownEndsAtMs = timing.countdownEndsAtMs
+                quizCountdownEndsAtMs = timing.countdownEndsAtMs,
+                nextAdAvailableAtMs = if (onCooldown) nextAd else 0L,
+                adBonusEnabled = ChallengeQuizTimingConfig.adBonusOptional
             )
         }.getOrElse {
             AppLog.e("DailyChallenge snapshot failed", it)
@@ -101,11 +118,27 @@ object DailyChallengeStore {
                     }
                 }
 
-                payload.adDone?.let { done ->
-                    if (done) {
-                        editor.putString(KEY_AD, today)
-                    } else if (prefs.getString(KEY_AD, null) == today) {
+                when {
+                    payload.adAvailable == true -> {
+                        editor.putLong(KEY_AD_NEXT_MS, 0L)
                         editor.remove(KEY_AD)
+                    }
+                    payload.nextAdAvailableAtMs != null && payload.nextAdAvailableAtMs > 0L -> {
+                        editor.putLong(KEY_AD_NEXT_MS, payload.nextAdAvailableAtMs)
+                    }
+                    payload.adDone == true -> {
+                        // Older API: once/day flag → treat as cooldown until local hours elapse.
+                        val fallback =
+                            System.currentTimeMillis() +
+                                ChallengeQuizTimingConfig.adCooldownDurationMs()
+                        editor.putLong(KEY_AD_NEXT_MS, fallback)
+                        editor.putString(KEY_AD, today)
+                    }
+                    payload.adDone == false -> {
+                        editor.putLong(KEY_AD_NEXT_MS, 0L)
+                        if (prefs.getString(KEY_AD, null) == today) {
+                            editor.remove(KEY_AD)
+                        }
                     }
                 }
 
@@ -113,17 +146,29 @@ object DailyChallengeStore {
                     payload.alreadyCorrect -> {
                         editor.putString(KEY_QUIZ, today)
                             .putBoolean(KEY_QUIZ_OK, true)
+                            .putBoolean(KEY_QUIZ_SECOND_UNLOCKED, false)
+                            .putBoolean(KEY_QUIZ_CLOSED, false)
                             .putLong(KEY_QUIZ_LOCK_UNTIL, 0L)
                             .putLong(KEY_QUIZ_OPEN_UNTIL, 0L)
                     }
-                    payload.wrongAttempts > 0 -> {
-                        val lock = payload.quizLockUntilMs ?: 0L
-                        val open = payload.quizOpenUntilMs ?: 0L
+                    payload.wrongAttempts >= 2 -> {
                         editor.putString(KEY_QUIZ, today)
                             .putBoolean(KEY_QUIZ_OK, false)
-                        if (lock > 0L && open > 0L) {
-                            editor.putLong(KEY_QUIZ_LOCK_UNTIL, lock)
-                                .putLong(KEY_QUIZ_OPEN_UNTIL, open)
+                            .putBoolean(KEY_QUIZ_CLOSED, true)
+                            .putBoolean(KEY_QUIZ_SECOND_UNLOCKED, true)
+                    }
+                    payload.wrongAttempts > 0 -> {
+                        val lock = payload.quizLockUntilMs ?: 0L
+                        editor.putString(KEY_QUIZ, today)
+                            .putBoolean(KEY_QUIZ_OK, false)
+                            .putBoolean(KEY_QUIZ_CLOSED, false)
+                        if (payload.secondChanceUnlocked == true) {
+                            editor.putBoolean(KEY_QUIZ_SECOND_UNLOCKED, true)
+                                .putLong(KEY_QUIZ_LOCK_UNTIL, 0L)
+                        } else if (lock > 0L) {
+                            editor.putBoolean(KEY_QUIZ_SECOND_UNLOCKED, false)
+                                .putLong(KEY_QUIZ_LOCK_UNTIL, lock)
+                                .putLong(KEY_QUIZ_OPEN_UNTIL, 0L)
                         }
                     }
                 }
@@ -269,6 +314,12 @@ object DailyChallengeStore {
                 when (timing.phase) {
                     QuizUiPhase.LOCKED ->
                         return Result(false, "Quiz locked — wait for countdown", snapshot(context))
+                    QuizUiPhase.AWAITING_AD ->
+                        return Result(
+                            false,
+                            "Watch a rewarded ad to unlock a new question",
+                            snapshot(context)
+                        )
                     QuizUiPhase.CLOSED ->
                         return Result(false, "Quiz closed for today", snapshot(context))
                     QuizUiPhase.DONE_CORRECT ->
@@ -303,6 +354,8 @@ object DailyChallengeStore {
                         .putBoolean(KEY_QUIZ_OK, true)
                         .putLong(KEY_QUIZ_LOCK_UNTIL, 0L)
                         .putLong(KEY_QUIZ_OPEN_UNTIL, 0L)
+                        .putBoolean(KEY_QUIZ_SECOND_UNLOCKED, false)
+                        .putBoolean(KEY_QUIZ_CLOSED, false)
                         .putString(KEY_LAST_REWARD, note)
                         .commit()
                     if (!saved) return@synchronized Result(false, "Could not save quiz", snapshot(context))
@@ -313,25 +366,39 @@ object DailyChallengeStore {
                     }
                     Result(true, msg, snapshot(context))
                 } else {
-                    val lockUntil = earn.lockUntilMs
-                        ?: (now + ChallengeQuizTimingConfig.lockDurationMs())
-                    val openUntil = earn.openUntilMs
-                        ?: (lockUntil + ChallengeQuizTimingConfig.openWindowMs())
-                    val note =
-                        "Quiz $deltaLabel · locked ${ChallengeQuizTimingConfig.wrongAnswerLockHours}h"
-                    val saved = prefs.edit()
-                        .putString(KEY_QUIZ, today)
-                        .putBoolean(KEY_QUIZ_OK, false)
-                        .putLong(KEY_QUIZ_LOCK_UNTIL, lockUntil)
-                        .putLong(KEY_QUIZ_OPEN_UNTIL, openUntil)
-                        .putString(KEY_LAST_REWARD, note)
-                        .commit()
-                    if (!saved) return@synchronized Result(false, "Could not save quiz", snapshot(context))
-                    Result(
-                        true,
-                        "$deltaLabel coins · wrong · opens in ${ChallengeQuizTimingConfig.wrongAnswerLockHours}h",
-                        snapshot(context)
-                    )
+                    val alreadySecond = prefs.getBoolean(KEY_QUIZ_SECOND_UNLOCKED, false)
+                    if (alreadySecond) {
+                        val note = "Quiz $deltaLabel · no more chances today"
+                        val saved = prefs.edit()
+                            .putString(KEY_QUIZ, today)
+                            .putBoolean(KEY_QUIZ_OK, false)
+                            .putBoolean(KEY_QUIZ_CLOSED, true)
+                            .putLong(KEY_QUIZ_LOCK_UNTIL, 0L)
+                            .putString(KEY_LAST_REWARD, note)
+                            .commit()
+                        if (!saved) return@synchronized Result(false, "Could not save quiz", snapshot(context))
+                        Result(true, "$deltaLabel coins · wrong · closed today", snapshot(context))
+                    } else {
+                        val lockUntil = earn.lockUntilMs
+                            ?: (now + ChallengeQuizTimingConfig.lockDurationMs())
+                        val mins = ChallengeQuizTimingConfig.wrongAnswerLockMinutes
+                        val note = "Quiz $deltaLabel · locked ${mins}m · then Watch Ad"
+                        val saved = prefs.edit()
+                            .putString(KEY_QUIZ, today)
+                            .putBoolean(KEY_QUIZ_OK, false)
+                            .putBoolean(KEY_QUIZ_SECOND_UNLOCKED, false)
+                            .putBoolean(KEY_QUIZ_CLOSED, false)
+                            .putLong(KEY_QUIZ_LOCK_UNTIL, lockUntil)
+                            .putLong(KEY_QUIZ_OPEN_UNTIL, 0L)
+                            .putString(KEY_LAST_REWARD, note)
+                            .commit()
+                        if (!saved) return@synchronized Result(false, "Could not save quiz", snapshot(context))
+                        Result(
+                            true,
+                            "$deltaLabel coins · wrong · retry in ${mins}m via Watch Ad",
+                            snapshot(context)
+                        )
+                    }
                 }
             }
         }.getOrElse {
@@ -341,12 +408,54 @@ object DailyChallengeStore {
     }
 
     fun claimAdBonus(context: Context): Result {
-        // No rewarded-ad SDK in the app yet — never grant free daily coins.
-        return Result(
-            false,
-            "Ad bonus is not available yet.",
-            snapshot(context)
-        )
+        return runCatching {
+            if (!ChallengeQuizTimingConfig.adBonusOptional) {
+                return Result(false, "Ad bonus is disabled.", snapshot(context))
+            }
+            synchronized(this) {
+                val next = prefs(context).getLong(KEY_AD_NEXT_MS, 0L)
+                if (next > System.currentTimeMillis()) {
+                    return Result(
+                        false,
+                        "Ad bonus is on cooldown.",
+                        snapshot(context)
+                    )
+                }
+            }
+            val remote = com.ffsensitivity.app.data.remote.EconomyRepository.earnAd(context)
+            val earn = remote.getOrElse { err ->
+                AppLog.e("Ad bonus economy earn failed", err)
+                val api = err as? com.ffsensitivity.app.data.remote.ApiException
+                if (api?.code == "ECONOMY_AD_COOLDOWN") {
+                    val nextAt = api.detailLong("nextAdAvailableAtMs")
+                        ?: (System.currentTimeMillis() +
+                            ChallengeQuizTimingConfig.adCooldownDurationMs())
+                    synchronized(this) {
+                        prefs(context).edit().putLong(KEY_AD_NEXT_MS, nextAt).commit()
+                    }
+                }
+                val msg = api?.message ?: "Ad bonus failed. Check connection."
+                return Result(false, msg, snapshot(context))
+            }
+            synchronized(this) {
+                val nextAt = earn.nextAdAvailableAtMs
+                    ?: (System.currentTimeMillis() +
+                        ChallengeQuizTimingConfig.adCooldownDurationMs())
+                val note = "Ad bonus +${earn.delta}"
+                val saved = prefs(context).edit()
+                    .putLong(KEY_AD_NEXT_MS, nextAt)
+                    .putString(KEY_LAST_REWARD, note)
+                    .remove(KEY_AD)
+                    .commit()
+                if (!saved) {
+                    return@synchronized Result(false, "Could not save ad bonus", snapshot(context))
+                }
+                Result(true, "+${earn.delta} coins · ad bonus", snapshot(context))
+            }
+        }.getOrElse {
+            AppLog.e("DailyChallenge ad bonus failed", it)
+            Result(false, "Ad bonus failed. Try again.", snapshot(context))
+        }
     }
 
     /**
@@ -508,22 +617,36 @@ object DailyChallengeStore {
         if (quizOk == true) {
             return QuizTiming(QuizUiPhase.DONE_CORRECT, 0L, countsAsDone = true)
         }
+        if (prefs.getBoolean(KEY_QUIZ_CLOSED, false)) {
+            return QuizTiming(QuizUiPhase.CLOSED, 0L, countsAsDone = false)
+        }
         val now = System.currentTimeMillis()
         val lockUntil = prefs.getLong(KEY_QUIZ_LOCK_UNTIL, 0L)
-        val openUntil = prefs.getLong(KEY_QUIZ_OPEN_UNTIL, 0L)
-        // Wrong-answer cycle only applies when today's quiz was marked wrong with lock times.
-        if (quizToday && quizOk == false && lockUntil > 0L && openUntil > 0L) {
+        val secondUnlocked = prefs.getBoolean(KEY_QUIZ_SECOND_UNLOCKED, false)
+        // Wrong-answer cycle: lock → Watch Ad → new question (no same-Q reopen).
+        if (quizToday && quizOk == false && lockUntil > 0L) {
             return when {
                 now < lockUntil ->
                     QuizTiming(QuizUiPhase.LOCKED, lockUntil, countsAsDone = false)
-                now < openUntil ->
-                    QuizTiming(QuizUiPhase.OPEN, openUntil, countsAsDone = false)
+                !secondUnlocked ->
+                    QuizTiming(QuizUiPhase.AWAITING_AD, 0L, countsAsDone = false)
                 else ->
-                    QuizTiming(QuizUiPhase.CLOSED, 0L, countsAsDone = false)
+                    QuizTiming(QuizUiPhase.AVAILABLE, 0L, countsAsDone = false)
             }
         }
-        // First attempt of the day (or no active lock cycle).
+        if (quizToday && quizOk == false && secondUnlocked) {
+            return QuizTiming(QuizUiPhase.AVAILABLE, 0L, countsAsDone = false)
+        }
         return QuizTiming(QuizUiPhase.AVAILABLE, 0L, countsAsDone = false)
+    }
+
+    fun markSecondChanceUnlocked(context: Context) {
+        synchronized(this) {
+            prefs(context).edit()
+                .putBoolean(KEY_QUIZ_SECOND_UNLOCKED, true)
+                .putLong(KEY_QUIZ_LOCK_UNTIL, 0L)
+                .apply()
+        }
     }
 
     private fun readClaimed(prefs: SharedPreferences): Set<Int> {

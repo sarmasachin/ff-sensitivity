@@ -4,15 +4,15 @@ import com.ffsensitivity.app.data.remote.AppConfigDefaults
 import com.ffsensitivity.app.data.remote.AppConfigRepository
 
 // --- Start: App remote config live wire (Sachin) ---
-/** Store / legal links — live Nest values with hardcoded https fallbacks. */
+/** Store / legal / support links. Privacy & Terms are app-hosted pages. */
 object AppLinks {
     val WEBSITE: String
         get() = AppConfigRepository.snapshot().links.websiteUrl
             .ifBlank { AppConfigDefaults.WEBSITE }
 
+    /** App Privacy page (hosted on app.sensitivitysettings.com). */
     val PRIVACY_POLICY: String
-        get() = AppConfigRepository.snapshot().links.privacyUrl
-            .ifBlank { AppConfigDefaults.PRIVACY }
+        get() = "https://app.sensitivitysettings.com/privacy"
 
     /** App Terms page (hosted on app.sensitivitysettings.com). */
     val TERMS: String

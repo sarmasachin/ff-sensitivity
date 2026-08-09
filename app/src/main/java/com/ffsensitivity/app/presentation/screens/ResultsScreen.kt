@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.CompareArrows
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -77,16 +78,16 @@ fun ResultsScreen(
     result: FullSettingsResult,
     contentPadding: PaddingValues,
     onBack: () -> Boolean,
-    onCompareWithFreeFire: () -> Boolean
+    onCompareWithFreeFire: () -> Boolean,
+    onGoHome: () -> Boolean
 ) {
     val tabs = listOf("Sensitivity", "Custom HUD", "Graphics")
-    val initial = when (featureId) {
+    val unlockedTab = when (featureId) {
         "hud" -> 1
         "graphics" -> 2
-        "sensi", "dpi", "" -> 0
-        else -> 0
+        else -> 0 // sensi / dpi / unknown → Sensitivity only
     }.coerceIn(0, tabs.lastIndex)
-    var selectedTab by remember { mutableIntStateOf(initial) }
+    var selectedTab by remember { mutableIntStateOf(unlockedTab) }
     val context = LocalContext.current
     var actionError by remember { mutableStateOf<ResultsUiError?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -213,9 +214,28 @@ fun ResultsScreen(
             ResultsTabRow(
                 tabs = tabs,
                 selectedTab = selectedTab,
-                onSelect = {
+                unlockedTab = unlockedTab,
+                onSelectUnlocked = {
                     clearError()
-                    selectedTab = it.coerceIn(0, tabs.lastIndex)
+                    selectedTab = unlockedTab
+                },
+                onLockedClick = {
+                    if (busy) {
+                        showBusy()
+                        return@ResultsTabRow
+                    }
+                    clearError()
+                    val ok = runCatching { onGoHome() }.getOrElse {
+                        AppLog.e("Results locked tab goHome failed", it)
+                        false
+                    }
+                    if (!ok) {
+                        showError(
+                            code = "RESULTS_HOME_FAILED",
+                            title = "Couldn’t open Home",
+                            message = "Try again from the menu."
+                        )
+                    }
                 }
             )
 
@@ -329,7 +349,9 @@ private fun ResultsTopBar(onBack: () -> Unit) {
 private fun ResultsTabRow(
     tabs: List<String>,
     selectedTab: Int,
-    onSelect: (Int) -> Unit
+    unlockedTab: Int,
+    onSelectUnlocked: () -> Unit,
+    onLockedClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -343,8 +365,9 @@ private fun ResultsTabRow(
     ) {
         tabs.forEachIndexed { index, label ->
             val selected = selectedTab == index
+            val locked = index != unlockedTab
             val bg by animateColorAsState(
-                targetValue = if (selected) AmberSoft else SurfaceCard,
+                targetValue = if (selected && !locked) AmberSoft else SurfaceCard,
                 label = "tab-bg"
             )
             Box(
@@ -352,17 +375,38 @@ private fun ResultsTabRow(
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
                     .background(bg)
-                    .clickable { onSelect(index) }
-                    .padding(vertical = 11.dp),
+                    .clickable {
+                        if (locked) onLockedClick() else onSelectUnlocked()
+                    }
+                    .padding(vertical = 11.dp, horizontal = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = label,
-                    color = if (selected) Amber else InkMuted,
-                    fontSize = 11.sp,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    textAlign = TextAlign.Center
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    if (locked) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = "Locked",
+                            tint = InkMuted,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                    }
+                    Text(
+                        text = label,
+                        color = when {
+                            locked -> InkMuted
+                            selected -> Amber
+                            else -> InkMuted
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = if (selected && !locked) FontWeight.Bold else FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
             }
         }
     }

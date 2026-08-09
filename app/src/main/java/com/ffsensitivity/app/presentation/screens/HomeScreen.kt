@@ -365,8 +365,9 @@ fun HomeScreen(
                 ) {
                     item {
                         AppScreenHeader(
-                            title = "Free Fire Sensitivity Pro",
-                            onOpenMenu = { openMenuSafe() }
+                            title = "FF Sensitivity Settings",
+                            onOpenMenu = { openMenuSafe() },
+                            brandAiTitle = true
                         )
                     }
 
@@ -436,8 +437,9 @@ private fun HomeCatalogError(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         AppScreenHeader(
-            title = "Free Fire Sensitivity Pro",
-            onOpenMenu = onOpenMenu
+            title = "FF Sensitivity Settings",
+            onOpenMenu = onOpenMenu,
+            brandAiTitle = true
         )
         Spacer(modifier = Modifier.height(24.dp))
         Column(

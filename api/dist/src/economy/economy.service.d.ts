@@ -8,6 +8,8 @@ export declare class EconomyService {
         boosts: {
             [k: string]: number;
         };
+        ownedShopIds: string[];
+        shopBuyCounts: Record<string, number>;
     }>;
     earnChallenge(userId: string, kind: 'CHECKIN' | 'QUIZ' | 'AD' | 'MILESTONE', opts: {
         correct?: boolean;

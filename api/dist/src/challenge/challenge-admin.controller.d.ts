@@ -10,10 +10,12 @@ export declare class ChallengeAdminController {
             requireCheckIn: boolean;
             requireQuiz: boolean;
             adBonusOptional: boolean;
+            adBonusCooldownHours: number;
             scratchCardsPerDay: number;
             cardExpiresSameDay: boolean;
             firstMilestoneDays: number;
             wrongAnswerLockHours: number;
+            wrongAnswerLockMinutes: number;
             quizOpenWindowHours: number;
             quizCorrectCoins: number;
             quizWrongCoins: number;
@@ -41,10 +43,12 @@ export declare class ChallengeAdminController {
             requireCheckIn: boolean;
             requireQuiz: boolean;
             adBonusOptional: boolean;
+            adBonusCooldownHours: number;
             scratchCardsPerDay: number;
             cardExpiresSameDay: boolean;
             firstMilestoneDays: number;
             wrongAnswerLockHours: number;
+            wrongAnswerLockMinutes: number;
             quizOpenWindowHours: number;
             quizCorrectCoins: number;
             quizWrongCoins: number;

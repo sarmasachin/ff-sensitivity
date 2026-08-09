@@ -73,8 +73,15 @@ class MainActivity : ComponentActivity() {
                 var signedIn by remember { mutableStateOf(sessionStore.isSignedIn()) }
                 var showSignOutConfirm by remember { mutableStateOf(false) }
                 var menuOpen by remember { mutableStateOf(false) }
-                val startDestination = if (signedIn) "home" else "login"
-                val route = backStack?.destination?.route ?: startDestination
+                // Cold-start only — do NOT retie to signedIn. Changing startDestination
+                // after Google login recreates the Nav graph and can flash bottom bar
+                // while login is still showing its loading spinner.
+                val startDestination = remember {
+                    if (sessionStore.isSignedIn()) "home" else "login"
+                }
+                // Never fall back to startDestination for chrome — null back stack
+                // during a graph swap would wrongly show the bottom bar on login.
+                val route = backStack?.destination?.route.orEmpty()
                 val showBottomBar =
                     route == "home" || route == "redeem" || route == "stylish"
                 val versionCode = remember {

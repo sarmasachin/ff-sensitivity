@@ -7,15 +7,23 @@ export declare class ChallengeController {
     today(user: AuthUser): Promise<{
         dayKey: string;
         dayOfYear: number;
+        streakDays: number;
+        checkinDone: boolean;
+        adDone: boolean;
+        adAvailable: boolean;
+        nextAdAvailableAtMs: number | null;
+        claimedMilestoneDays: number[];
         rules: {
             missDayResetsStreak: boolean;
             requireCheckIn: boolean;
             requireQuiz: boolean;
             adBonusOptional: boolean;
+            adBonusCooldownHours: number;
             scratchCardsPerDay: number;
             cardExpiresSameDay: boolean;
             firstMilestoneDays: number;
             wrongAnswerLockHours: number;
+            wrongAnswerLockMinutes: number;
             quizOpenWindowHours: number;
             quizCorrectCoins: number;
             quizWrongCoins: number;
@@ -23,12 +31,16 @@ export declare class ChallengeController {
         question: {
             id: string;
             question: string;
-            options: string[];
+            options: [string, string, string, string];
         } | null;
         quizState: {
             alreadyCorrect: boolean;
             wrongAttempts: number;
             maxWrongAttempts: number;
+            lockUntilMs: number | null;
+            openUntilMs: null;
+            secondChanceReady: boolean;
+            secondChanceUnlocked: boolean;
         };
         milestones: {
             id: string;
@@ -45,12 +57,20 @@ export declare class ChallengeController {
         questionId: string;
         selectedIndex: number;
         lockUntilMs: number | null;
-        openUntilMs: number | null;
-        wrongAnswerLockHours: number;
-        quizOpenWindowHours: number;
+        openUntilMs: null;
+        secondChanceReady: boolean;
+        wrongAnswerLockMinutes: number;
         coins: number;
         delta: number;
         alreadyApplied: boolean;
         reason: string;
+    }>;
+    unlockSecondChance(user: AuthUser): Promise<{
+        alreadyUnlocked: boolean;
+        question: {
+            id: string;
+            question: string;
+            options: string[];
+        };
     }>;
 }

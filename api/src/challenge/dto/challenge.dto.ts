@@ -29,6 +29,11 @@ export class ChallengeRulesDto {
   adBonusOptional!: boolean;
 
   @IsInt()
+  @Min(1)
+  @Max(168)
+  adBonusCooldownHours!: number;
+
+  @IsInt()
   @Min(0)
   @Max(20)
   scratchCardsPerDay!: number;
@@ -45,6 +50,13 @@ export class ChallengeRulesDto {
   @Min(1)
   @Max(72)
   wrongAnswerLockHours!: number;
+
+  /** Minutes after wrong before rewarded-ad second chance (default 20). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24 * 60)
+  wrongAnswerLockMinutes?: number;
 
   @IsInt()
   @Min(1)
@@ -129,6 +141,7 @@ export class SaveChallengeDto {
   rules!: ChallengeRulesDto;
 
   @IsArray()
+  @ArrayMaxSize(1500)
   @ValidateNested({ each: true })
   @Type(() => QuizQuestionDto)
   quiz!: QuizQuestionDto[];

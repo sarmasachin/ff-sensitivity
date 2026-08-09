@@ -7,12 +7,15 @@ export type ChallengeRules = {
   requireCheckIn: boolean;
   requireQuiz: boolean;
   adBonusOptional: boolean;
+  /** Hours before another Watch Ad Bonus claim (admin-controlled). */
+  adBonusCooldownHours: number;
   scratchCardsPerDay: number;
   cardExpiresSameDay: boolean;
   firstMilestoneDays: number;
-  /** Hours after a wrong answer before the quiz opens again. */
   wrongAnswerLockHours: number;
-  /** Hours the question stays open after unlock, then it turns off. */
+  /** Minutes after wrong before Watch Ad unlocks a new question (default 20). */
+  wrongAnswerLockMinutes: number;
+  /** Kept for API compat — same-question open window no longer used. */
   quizOpenWindowHours: number;
   /** Coins on correct quiz answer (≥ 0). */
   quizCorrectCoins: number;
@@ -67,10 +70,12 @@ export const CHALLENGE_DEFAULT_RULES: ChallengeRules = {
   requireCheckIn: true,
   requireQuiz: true,
   adBonusOptional: true,
+  adBonusCooldownHours: 4,
   scratchCardsPerDay: 1,
   cardExpiresSameDay: true,
   firstMilestoneDays: 7,
   wrongAnswerLockHours: 4,
+  wrongAnswerLockMinutes: 20,
   quizOpenWindowHours: 2,
   quizCorrectCoins: 50,
   quizWrongCoins: -10,
@@ -294,7 +299,7 @@ export const CHALLENGE_CAPABILITIES = [
   },
   {
     title: "Quiz bank",
-    body: "Remote question pool — one question / day from the bank (day-of-year rotate).",
+    body: "Remote question pool — up to 1500 questions; one new question / UTC day (full-bank rotate).",
   },
   {
     title: "Streak milestones",

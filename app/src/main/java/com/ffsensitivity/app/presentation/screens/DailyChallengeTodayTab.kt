@@ -23,7 +23,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ffsensitivity.app.ads.CalculateRewardedAds
+import com.ffsensitivity.app.ads.CheckInInterstitialAds
+import com.ffsensitivity.app.ads.QuizInterstitialAds
+import com.ffsensitivity.app.ads.findActivity
+import com.ffsensitivity.app.data.AdBonusAdConfig
+import com.ffsensitivity.app.data.CheckInAdConfig
+import com.ffsensitivity.app.data.CheckInAdStore
 import com.ffsensitivity.app.data.DailyChallengeStore
+import com.ffsensitivity.app.data.QuizAdConfig
+import com.ffsensitivity.app.data.QuizAdStore
+import com.ffsensitivity.app.data.SecondChanceAdConfig
+import com.ffsensitivity.app.data.SecondChanceAdStore
 import com.ffsensitivity.app.data.QuizUiPhase
 import com.ffsensitivity.app.data.ShopStore
 import com.ffsensitivity.app.data.remote.ChallengeRemoteCache
@@ -37,6 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 @Composable
 fun DailyChallengeTodayTab(
@@ -73,6 +85,9 @@ fun DailyChallengeTodayTab(
     val quizOptions = remember(question) { question.options }
     var selectedOption by remember { mutableIntStateOf(-1) }
     var busy by remember { mutableStateOf(false) }
+    var quizAdPassTick by remember { mutableIntStateOf(0) }
+    var secondChanceAdPassTick by remember { mutableIntStateOf(0) }
+    var checkInAdPassTick by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(snapshot.quizCountdownEndsAtMs, snapshot.quizPhase) {
         val ends = snapshot.quizCountdownEndsAtMs
@@ -83,12 +98,51 @@ fun DailyChallengeTodayTab(
         runCatching { onSnapshot(DailyChallengeStore.snapshot(context)) }
     }
 
+    // Live “Next Ad Available in …” tick (1 min refresh is enough for hours/mins copy).
+    var adTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(snapshot.nextAdAvailableAtMs) {
+        val ends = snapshot.nextAdAvailableAtMs
+        if (ends <= 0L) return@LaunchedEffect
+        while (System.currentTimeMillis() < ends) {
+            adTick += 1
+            delay(30_000L)
+        }
+        delay(50)
+        runCatching { onSnapshot(DailyChallengeStore.snapshot(context)) }
+    }
+
+    LaunchedEffect(snapshot.adAvailable) {
+        if (snapshot.adAvailable && snapshot.adBonusEnabled) {
+            CalculateRewardedAds.preload(context)
+        }
+    }
+
+    LaunchedEffect(snapshot.checkedInToday) {
+        if (!snapshot.checkedInToday && CheckInAdStore.needsAd(context)) {
+            CheckInInterstitialAds.preload(context)
+        }
+    }
+
+    LaunchedEffect(snapshot.quizPhase) {
+        if (
+            (snapshot.quizPhase == QuizUiPhase.AVAILABLE ||
+                snapshot.quizPhase == QuizUiPhase.OPEN) &&
+            QuizAdStore.needsAd(context)
+        ) {
+            QuizInterstitialAds.preload(context)
+        }
+    }
+
     LaunchedEffect(snapshot.quizPhase) {
         if (
             snapshot.quizPhase == QuizUiPhase.LOCKED ||
-            snapshot.quizPhase == QuizUiPhase.CLOSED
+            snapshot.quizPhase == QuizUiPhase.CLOSED ||
+            snapshot.quizPhase == QuizUiPhase.AWAITING_AD
         ) {
             selectedOption = -1
+        }
+        if (snapshot.quizPhase == QuizUiPhase.AWAITING_AD) {
+            CalculateRewardedAds.preload(context)
         }
     }
 
@@ -191,29 +245,66 @@ fun DailyChallengeTodayTab(
         val quizDouble = runCatching {
             ShopStore.boostCharges(context, ShopStore.ID_BOOST_QUIZ_DOUBLE)
         }.getOrDefault(0)
+        val needsCheckInAd = remember(snapshot.checkedInToday, busy, checkInAdPassTick) {
+            !snapshot.checkedInToday && CheckInAdStore.needsAd(context)
+        }
         ChallengeTaskCard(
             icon = Icons.Outlined.LocalActivity,
             title = "Daily Check-in",
             subtitle = when {
                 snapshot.checkedInToday -> "Claimed today · come back tomorrow"
+                needsCheckInAd && checkInPlus > 0 ->
+                    "Watch ad · Collect +40 · Plus boost ready (×$checkInPlus)"
+                needsCheckInAd -> "Watch ad · Collect your daily +20 coins"
                 checkInPlus > 0 -> "Collect +20 · Plus boost ready (×$checkInPlus)"
                 else -> "Collect your daily +20 coins"
             },
             done = snapshot.checkedInToday,
             actionLabel = when {
                 snapshot.checkedInToday -> "Claimed"
+                busy && needsCheckInAd -> "Watch ad…"
+                needsCheckInAd -> CheckInAdConfig.buttonLabel
                 checkInPlus > 0 -> "Collect +40"
                 else -> "Collect +20"
             },
             actionEnabled = !snapshot.checkedInToday && !busy,
             onAction = {
-                runAction("CHALLENGE_CHECKIN_FAILED", "Check-in failed") {
-                    DailyChallengeStore.claimCheckIn(context)
-                }
+                DailyChallengeCheckInAdGate.run(
+                    context = context,
+                    activity = context.findActivity(),
+                    busy = busy,
+                    scope = scope,
+                    setBusy = { busy = it },
+                    onClearError = onClearError,
+                    onError = onError,
+                    onSnapshot = onSnapshot,
+                    onPassTick = { checkInAdPassTick += 1 },
+                    runClaimWithoutAd = {
+                        runAction("CHALLENGE_CHECKIN_FAILED", "Check-in failed") {
+                            DailyChallengeStore.claimCheckIn(context)
+                        }
+                    }
+                )
             }
         )
         Spacer(modifier = Modifier.height(14.dp))
 
+        val quizCanSubmit = (
+            snapshot.quizPhase == QuizUiPhase.AVAILABLE ||
+                snapshot.quizPhase == QuizUiPhase.OPEN
+            ) &&
+            !busy &&
+            selectedOption in quizOptions.indices &&
+            quizOptions.size >= 2
+        val quizAwaitingAd = snapshot.quizPhase == QuizUiPhase.AWAITING_AD
+        val needsQuizAd = remember(snapshot.quizPhase, busy, quizAdPassTick) {
+            (snapshot.quizPhase == QuizUiPhase.AVAILABLE ||
+                snapshot.quizPhase == QuizUiPhase.OPEN) &&
+                QuizAdStore.needsAd(context)
+        }
+        val needsSecondChanceAd = remember(quizAwaitingAd, secondChanceAdPassTick) {
+            quizAwaitingAd && SecondChanceAdStore.needsAd(context)
+        }
         DailyChallengeQuizCard(
             question = question.question,
             options = quizOptions,
@@ -233,14 +324,34 @@ fun DailyChallengeTodayTab(
             phase = snapshot.quizPhase,
             countdownEndsAtMs = snapshot.quizCountdownEndsAtMs,
             quizBoostReady = quizDouble > 0,
-            actionEnabled = (
-                snapshot.quizPhase == QuizUiPhase.AVAILABLE ||
-                    snapshot.quizPhase == QuizUiPhase.OPEN
-                ) &&
-                !busy &&
-                selectedOption in quizOptions.indices &&
-                quizOptions.size >= 2,
+            actionEnabled = if (quizAwaitingAd) !busy else quizCanSubmit,
+            submitLabel = when {
+                quizAwaitingAd && busy -> "Watch ad…"
+                quizAwaitingAd && needsSecondChanceAd -> SecondChanceAdConfig.buttonLabel
+                quizAwaitingAd -> "Unlock New Question"
+                busy && needsQuizAd -> "Watch ad…"
+                needsQuizAd -> QuizAdConfig.buttonLabel
+                else -> "Submit Answer"
+            },
             onSubmit = {
+                if (quizAwaitingAd) {
+                    DailyChallengeSecondChanceGate.run(
+                        context = context,
+                        activity = context.findActivity(),
+                        busy = busy,
+                        scope = scope,
+                        setBusy = { busy = it },
+                        onClearError = onClearError,
+                        onError = onError,
+                        onQuestion = { q ->
+                            question = q
+                            selectedOption = -1
+                        },
+                        onSnapshot = onSnapshot,
+                        onPassTick = { secondChanceAdPassTick += 1 }
+                    )
+                    return@DailyChallengeQuizCard
+                }
                 if (selectedOption !in quizOptions.indices) {
                     onError(
                         ChallengeUiError(
@@ -251,34 +362,124 @@ fun DailyChallengeTodayTab(
                     )
                     return@DailyChallengeQuizCard
                 }
-                runAction("CHALLENGE_QUIZ_FAILED", "Quiz submit failed") {
-                    if (question.id.isBlank() || question.id == "loading") {
-                        DailyChallengeStore.Result(
-                            false,
-                            "Quiz not loaded yet. Reopen Daily Challenge.",
-                            DailyChallengeStore.snapshot(context)
-                        )
-                    } else {
-                        DailyChallengeStore.submitQuiz(context, question.id, selectedOption)
+                fun doSubmit() {
+                    runAction("CHALLENGE_QUIZ_FAILED", "Quiz submit failed") {
+                        if (question.id.isBlank() || question.id == "loading") {
+                            DailyChallengeStore.Result(
+                                false,
+                                "Quiz not loaded yet. Reopen Daily Challenge.",
+                                DailyChallengeStore.snapshot(context)
+                            )
+                        } else {
+                            DailyChallengeStore.submitQuiz(context, question.id, selectedOption)
+                        }
                     }
                 }
+                if (!QuizAdStore.needsAd(context)) {
+                    doSubmit()
+                    return@DailyChallengeQuizCard
+                }
+                val activity = context.findActivity()
+                if (activity == null) {
+                    onError(
+                        ChallengeUiError(
+                            code = "CHALLENGE_QUIZ_AD_NO_ACTIVITY",
+                            title = "Couldn’t show ad",
+                            message = "Restart the app and try again.",
+                            retryKind = ChallengeRetryKind.QUIZ
+                        )
+                    )
+                    return@DailyChallengeQuizCard
+                }
+                if (busy) {
+                    onError(
+                        ChallengeUiError(
+                            code = "CHALLENGE_BUSY",
+                            title = "Please wait",
+                            message = "Another action is already in progress."
+                        )
+                    )
+                    return@DailyChallengeQuizCard
+                }
+                onClearError()
+                busy = true
+                QuizInterstitialAds.show(
+                    activity = activity,
+                    onCompleted = {
+                        QuizAdStore.markShown(context)
+                        quizAdPassTick += 1
+                        busy = false
+                        doSubmit()
+                    },
+                    onNotCompleted = { message ->
+                        busy = false
+                        onError(
+                            ChallengeUiError(
+                                code = "CHALLENGE_QUIZ_AD_REQUIRED",
+                                title = "Ad required",
+                                message = message,
+                                retryKind = ChallengeRetryKind.QUIZ
+                            )
+                        )
+                    },
+                    incompleteMessage = QuizAdConfig.incompleteMessage
+                )
             }
         )
         Spacer(modifier = Modifier.height(14.dp))
 
+        val adRemainingMs = remember(snapshot.nextAdAvailableAtMs, adTick) {
+            (snapshot.nextAdAvailableAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
+        }
+        val adAvailable = snapshot.adAvailable
         ChallengeTaskCard(
             icon = Icons.Outlined.PlayCircle,
             title = "Watch Ad Bonus",
-            subtitle = if (snapshot.adDoneToday) {
-                "Bonus claimed for today"
-            } else {
-                "Ad bonus not available yet"
+            subtitle = when {
+                !snapshot.adBonusEnabled -> "Ad bonus is turned off"
+                adAvailable -> "Watch a full ad to earn bonus coins"
+                else -> "Next Ad Available in ${formatAdCooldown(adRemainingMs)}"
             },
-            done = snapshot.adDoneToday,
-            actionLabel = if (snapshot.adDoneToday) "Claimed" else "Unavailable",
-            actionEnabled = false,
-            onAction = { }
+            done = !adAvailable && snapshot.adBonusEnabled,
+            actionLabel = when {
+                !snapshot.adBonusEnabled -> "Unavailable"
+                busy && adAvailable -> "Watch ad…"
+                adAvailable -> AdBonusAdConfig.buttonLabel
+                else -> "On cooldown"
+            },
+            actionEnabled = adAvailable && snapshot.adBonusEnabled && !busy,
+            onAction = {
+                DailyChallengeAdBonusGate.run(
+                    context = context,
+                    activity = context.findActivity(),
+                    busy = busy,
+                    scope = scope,
+                    setBusy = { busy = it },
+                    onClearError = onClearError,
+                    onError = onError,
+                    onSnapshot = onSnapshot
+                )
+            }
         )
         Spacer(modifier = Modifier.height(28.dp))
+    }
+}
+
+private fun formatAdCooldown(ms: Long): String {
+    val totalMin = ((ms + 59_999L) / 60_000L).coerceAtLeast(0L)
+    val hours = totalMin / 60L
+    val mins = totalMin % 60L
+    return when {
+        hours <= 0L && mins <= 0L -> "a moment"
+        hours <= 0L -> if (mins == 1L) "1 min" else "$mins mins"
+        mins <= 0L -> if (hours == 1L) "1 hour" else "$hours hours"
+        else -> String.format(
+            Locale.US,
+            "%d hour%s %d min%s",
+            hours,
+            if (hours == 1L) "" else "s",
+            mins,
+            if (mins == 1L) "" else "s"
+        )
     }
 }
