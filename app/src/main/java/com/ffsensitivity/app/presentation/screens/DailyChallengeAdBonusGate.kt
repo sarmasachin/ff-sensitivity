@@ -34,6 +34,55 @@ object DailyChallengeAdBonusGate {
             )
             return
         }
+
+        fun claim() {
+            setBusy(true)
+            scope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DailyChallengeStore.claimAdBonus(context)
+                    }
+                }.getOrElse {
+                    AppLog.e("Ad bonus claim failed", it)
+                    null
+                }
+                setBusy(false)
+                when {
+                    result == null -> onError(
+                        ChallengeUiError(
+                            code = "CHALLENGE_AD_FAILED",
+                            title = "Ad bonus failed",
+                            message = "Something went wrong. Try again.",
+                            retryKind = ChallengeRetryKind.AD
+                        )
+                    )
+                    result.ok -> {
+                        onSnapshot(result.snapshot)
+                        SafeOps.toast(context, result.message)
+                    }
+                    else -> {
+                        onSnapshot(result.snapshot)
+                        onError(
+                            ChallengeUiError(
+                                code = "CHALLENGE_AD_FAILED",
+                                title = "Ad bonus failed",
+                                message = result.message.ifBlank {
+                                    "Action was declined."
+                                },
+                                retryKind = ChallengeRetryKind.AD
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // Admin Off → claim without rewarded ad (same pattern as second chance / calculate).
+        if (!AdBonusAdConfig.enabled) {
+            onClearError()
+            claim()
+            return
+        }
         if (activity == null) {
             onError(
                 ChallengeUiError(
@@ -49,46 +98,7 @@ object DailyChallengeAdBonusGate {
         setBusy(true)
         CalculateRewardedAds.show(
             activity = activity,
-            onRewarded = {
-                scope.launch {
-                    val result = runCatching {
-                        withContext(Dispatchers.IO) {
-                            DailyChallengeStore.claimAdBonus(context)
-                        }
-                    }.getOrElse {
-                        AppLog.e("Ad bonus claim failed", it)
-                        null
-                    }
-                    setBusy(false)
-                    when {
-                        result == null -> onError(
-                            ChallengeUiError(
-                                code = "CHALLENGE_AD_FAILED",
-                                title = "Ad bonus failed",
-                                message = "Something went wrong. Try again.",
-                                retryKind = ChallengeRetryKind.AD
-                            )
-                        )
-                        result.ok -> {
-                            onSnapshot(result.snapshot)
-                            SafeOps.toast(context, result.message)
-                        }
-                        else -> {
-                            onSnapshot(result.snapshot)
-                            onError(
-                                ChallengeUiError(
-                                    code = "CHALLENGE_AD_FAILED",
-                                    title = "Ad bonus failed",
-                                    message = result.message.ifBlank {
-                                        "Action was declined."
-                                    },
-                                    retryKind = ChallengeRetryKind.AD
-                                )
-                            )
-                        }
-                    }
-                }
-            },
+            onRewarded = { claim() },
             onNotCompleted = { message ->
                 setBusy(false)
                 onError(

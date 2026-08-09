@@ -3,6 +3,9 @@ package com.ffsensitivity.app.ads
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import com.ffsensitivity.app.BuildConfig
 import com.ffsensitivity.app.util.AppLog
 import com.google.android.gms.ads.AdError
@@ -12,17 +15,24 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Rewarded ad for Calculate Best Pro Settings.
- * Results open only after reward earned AND the ad fully dismisses.
+ * Shared rewarded unit for Calculate, DPI, Watch Ad Bonus, Second Chance.
+ * Thread-safe load/show; reward↔dismiss order-safe.
  */
 object CalculateRewardedAds {
+    private val lock = Any()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     @Volatile
     private var cached: RewardedAd? = null
 
     @Volatile
     private var loading = false
+
+    @Volatile
+    private var showing = false
 
     @Volatile
     private var pendingShow: PendingShow? = null
@@ -40,12 +50,50 @@ object CalculateRewardedAds {
         }.onFailure { AppLog.e("MobileAds init failed", it) }
     }
 
+    /** Cache only — never auto-present. */
     fun preload(context: Context) {
-        if (cached != null || loading) return
-        loadIntoCache(context.applicationContext, presentPending = true)
+        synchronized(lock) {
+            if (cached != null || loading || showing) return
+            startLoadLocked(context.applicationContext)
+        }
     }
 
-    private fun loadIntoCache(appCtx: Context, presentPending: Boolean) {
+    fun show(
+        activity: Activity,
+        onRewarded: () -> Unit,
+        onNotCompleted: (message: String) -> Unit,
+        incompleteMessage: String = "Watch the full ad to see your settings."
+    ) {
+        fun failBusy() {
+            mainHandler.post {
+                onNotCompleted("Please wait — an ad is already loading or showing.")
+            }
+        }
+        synchronized(lock) {
+            if (showing) {
+                failBusy()
+                return
+            }
+            // Do not steal another screen's in-flight request.
+            if (pendingShow != null) {
+                failBusy()
+                return
+            }
+            val ready = cached
+            if (ready != null) {
+                cached = null
+                showing = true
+                present(activity, ready, onRewarded, onNotCompleted, incompleteMessage)
+                return
+            }
+            pendingShow = PendingShow(activity, onRewarded, onNotCompleted, incompleteMessage)
+            if (!loading) {
+                startLoadLocked(activity.applicationContext)
+            }
+        }
+    }
+
+    private fun startLoadLocked(appCtx: Context) {
         loading = true
         RewardedAd.load(
             appCtx,
@@ -53,61 +101,51 @@ object CalculateRewardedAds {
             AdRequest.Builder().build(),
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
-                    loading = false
-                    val pending = pendingShow
-                    if (presentPending && pending != null) {
-                        pendingShow = null
+                    val toPresent: PendingShow?
+                    synchronized(lock) {
+                        loading = false
+                        val pending = pendingShow
+                        if (pending != null) {
+                            pendingShow = null
+                            showing = true
+                            toPresent = pending
+                        } else {
+                            cached = ad
+                            toPresent = null
+                        }
+                    }
+                    if (toPresent != null) {
                         present(
-                            pending.activity,
+                            toPresent.activity,
                             ad,
-                            pending.onRewarded,
-                            pending.onNotCompleted,
-                            pending.incompleteMessage
+                            toPresent.onRewarded,
+                            toPresent.onNotCompleted,
+                            toPresent.incompleteMessage
                         )
-                    } else {
-                        cached = ad
                     }
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    cached = null
-                    loading = false
-                    AppLog.w("Calculate rewarded load failed: ${error.message}")
-                    val pending = pendingShow
-                    pendingShow = null
-                    pending?.let { p ->
-                        p.activity.runOnUiThread {
-                            p.onNotCompleted("Ad couldn’t load. Check connection and try again.")
+                    AppLog.w(
+                        "Rewarded load failed code=${error.code} domain=${error.domain}: ${error.message}"
+                    )
+                    val failed: PendingShow?
+                    synchronized(lock) {
+                        cached = null
+                        loading = false
+                        failed = pendingShow
+                        pendingShow = null
+                    }
+                    failed?.let { p ->
+                        mainHandler.post {
+                            p.onNotCompleted(
+                                "Ad couldn’t load (${error.code}). Check connection and try again."
+                            )
                         }
                     }
                 }
             }
         )
-    }
-
-    /**
-     * Shows rewarded ad.
-     * [onRewarded] only after user earns reward AND closes the ad.
-     * Early close / fail → [onNotCompleted] (no results).
-     */
-    fun show(
-        activity: Activity,
-        onRewarded: () -> Unit,
-        onNotCompleted: (message: String) -> Unit,
-        incompleteMessage: String = "Watch the full ad to see your settings."
-    ) {
-        val ready = cached
-        if (ready != null) {
-            cached = null
-            present(activity, ready, onRewarded, onNotCompleted, incompleteMessage)
-            return
-        }
-        if (loading) {
-            pendingShow = PendingShow(activity, onRewarded, onNotCompleted, incompleteMessage)
-            return
-        }
-        pendingShow = PendingShow(activity, onRewarded, onNotCompleted, incompleteMessage)
-        loadIntoCache(activity.applicationContext, presentPending = true)
     }
 
     private fun present(
@@ -117,29 +155,70 @@ object CalculateRewardedAds {
         onNotCompleted: (message: String) -> Unit,
         incompleteMessage: String
     ) {
-        var earned = false
+        val earned = AtomicBoolean(false)
+        val dismissed = AtomicBoolean(false)
+        val finished = AtomicBoolean(false)
+        val token = Any()
+
+        fun clearShowing() {
+            synchronized(lock) { showing = false }
+        }
+
+        fun finishOk() {
+            if (!finished.compareAndSet(false, true)) return
+            mainHandler.removeCallbacksAndMessages(token)
+            clearShowing()
+            preload(activity)
+            onRewarded()
+        }
+
+        fun finishFail(message: String) {
+            if (!finished.compareAndSet(false, true)) return
+            mainHandler.removeCallbacksAndMessages(token)
+            clearShowing()
+            preload(activity)
+            onNotCompleted(message)
+        }
+
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
-                preload(activity)
-                activity.runOnUiThread {
-                    if (earned) {
-                        onRewarded()
+                dismissed.set(true)
+                mainHandler.post {
+                    if (earned.get()) {
+                        finishOk()
                     } else {
-                        onNotCompleted(incompleteMessage)
+                        // Reward callback can arrive slightly after dismiss on some devices.
+                        mainHandler.postAtTime(
+                            {
+                                if (earned.get()) finishOk() else finishFail(incompleteMessage)
+                            },
+                            token,
+                            SystemClock.uptimeMillis() + 400L
+                        )
                     }
                 }
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
-                preload(activity)
-                activity.runOnUiThread {
-                    onNotCompleted("Couldn’t show the ad. Try again.")
+                AppLog.w("Rewarded show failed code=${error.code}: ${error.message}")
+                mainHandler.post {
+                    finishFail("Couldn’t show the ad (${error.code}). Try again.")
                 }
             }
         }
-        // Reward marks completion; results open only on dismiss after earn.
-        ad.show(activity) { _ ->
-            earned = true
+
+        try {
+            ad.show(activity) {
+                earned.set(true)
+                mainHandler.post {
+                    if (dismissed.get()) finishOk()
+                }
+            }
+        } catch (t: Throwable) {
+            AppLog.e("Rewarded ad.show crashed", t)
+            mainHandler.post {
+                finishFail("Couldn’t show the ad. Try again.")
+            }
         }
     }
 }
