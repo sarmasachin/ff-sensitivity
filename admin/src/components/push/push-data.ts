@@ -142,22 +142,25 @@ export function computePushStats(rows: PushCampaignRow[]) {
   let scheduled = 0;
   let drafts = 0;
   let sent = 0;
-  let failed = 0;
-  let delivered = 0;
+  let failedJobs = 0;
+  let devicesDelivered = 0;
+  let devicesFailed = 0;
   for (const row of rows) {
     if (row.status === "SCHEDULED") scheduled += 1;
     else if (row.status === "DRAFT") drafts += 1;
     else if (row.status === "SENT") sent += 1;
-    else if (row.status === "FAILED") failed += 1;
-    delivered += row.delivered;
+    else if (row.status === "FAILED") failedJobs += 1;
+    devicesDelivered += row.delivered;
+    devicesFailed += row.failed;
   }
   return {
     total: rows.length,
     scheduled,
     drafts,
     sent,
-    failed,
-    delivered,
+    failedJobs,
+    devicesDelivered,
+    devicesFailed,
   };
 }
 

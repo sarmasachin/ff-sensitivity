@@ -34,7 +34,7 @@ export function PushTable({
               <th className="px-4 py-3">Campaign</th>
               <th className="px-4 py-3">Audience</th>
               <th className="px-4 py-3">Timing</th>
-              <th className="px-4 py-3">Delivery</th>
+              <th className="px-4 py-3">Device delivery</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
@@ -83,13 +83,35 @@ export function PushTable({
                     <p className="text-slate-400">Not queued</p>
                   )}
                 </td>
-                <td className="px-4 py-3.5 tabular-nums text-[12px]">
-                  <p className="font-medium text-slate-800">
-                    {row.delivered.toLocaleString()} ok
-                  </p>
-                  <p className="text-slate-400">
-                    {row.failed.toLocaleString()} fail
-                  </p>
+                <td className="px-4 py-3.5">
+                  {row.status === "SENT" || row.status === "FAILED" ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-baseline gap-2">
+                        <span className="inline-flex min-w-[4.5rem] text-[11px] font-semibold tracking-wide text-emerald-700 uppercase">
+                          Delivered
+                        </span>
+                        <span className="text-[13px] font-semibold tabular-nums text-slate-900">
+                          {row.delivered.toLocaleString()}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          device{row.delivered === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="inline-flex min-w-[4.5rem] text-[11px] font-semibold tracking-wide text-rose-600 uppercase">
+                          Failed
+                        </span>
+                        <span className="text-[13px] font-semibold tabular-nums text-slate-900">
+                          {row.failed.toLocaleString()}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          device{row.failed === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[12px] text-slate-400">Not sent yet</p>
+                  )}
                 </td>
                 <td className="px-4 py-3.5">
                   <span
