@@ -184,9 +184,11 @@ fun HomeScreen(
         withContext(Dispatchers.IO) {
             AppConfigRepository.syncLive()
             CopyRepository.syncLive()
+            // Register FCM before heartbeat so pushEnabled is restored first
+            // (heartbeat only sees enabled tokens).
+            PushRepository.registerAndSync(context)
             DeviceRepository.syncHeartbeat(context)
             PromoRepository.syncLive()
-            PushRepository.registerAndSync(context)
         }
         banners = PromoCatalogCache.banners()
         strips = PromoCatalogCache.strips()

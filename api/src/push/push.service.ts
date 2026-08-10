@@ -260,25 +260,39 @@ export class PushService {
     const installIds = [
       ...new Set(rows.map((row) => row.installId).filter(Boolean) as string[]),
     ];
-    await this.prisma.$transaction([
-      this.prisma.devicePushToken.updateMany({
-        where: { token: { in: tokens } },
-        data: { pushEnabled: false },
-      }),
-      ...(installIds.length > 0
-        ? [
-            this.prisma.deviceInstall.updateMany({
-              where: { installId: { in: installIds } },
-              data: {
-                hasFcmToken: false,
-                fcmTokenHint: '',
-                pushEnabled: false,
-                uninstallSuspectedAt: new Date(),
-              },
-            }),
-          ]
-        : []),
-    ]);
+    // Disable only the dead tokens — never wipe the whole install if another
+    // enabled token still exists (token rotate / multi-token race).
+    await this.prisma.devicePushToken.updateMany({
+      where: { token: { in: tokens } },
+      data: { pushEnabled: false },
+    });
+    for (const installId of installIds) {
+      const stillLive = await this.prisma.devicePushToken.findFirst({
+        where: { installId, pushEnabled: true },
+        select: { token: true },
+      });
+      if (stillLive) {
+        await this.prisma.deviceInstall.updateMany({
+          where: { installId },
+          data: {
+            hasFcmToken: true,
+            fcmTokenHint: `${stillLive.token.slice(0, 4)}…${stillLive.token.slice(-4)}`,
+            pushEnabled: true,
+            uninstallSuspectedAt: null,
+          },
+        });
+      } else {
+        await this.prisma.deviceInstall.updateMany({
+          where: { installId },
+          data: {
+            hasFcmToken: false,
+            fcmTokenHint: '',
+            pushEnabled: false,
+            uninstallSuspectedAt: new Date(),
+          },
+        });
+      }
+    }
   }
 
   async adminCancel(admin: AuthAdmin, id: string) {
@@ -380,6 +394,11 @@ export class PushService {
       },
     });
     if (installId) {
+      // Drop stale tokens for this install so fan-out uses the fresh FCM token only.
+      await this.prisma.devicePushToken.updateMany({
+        where: { installId, token: { not: token } },
+        data: { pushEnabled: false },
+      });
       await this.prisma.deviceInstall.updateMany({
         where: { installId, userId },
         data: {

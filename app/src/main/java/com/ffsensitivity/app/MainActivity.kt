@@ -30,6 +30,7 @@ import com.ffsensitivity.app.data.UserSessionStore
 import com.ffsensitivity.app.data.remote.AnalyticsRepository
 import com.ffsensitivity.app.data.remote.AppConfigRepository
 import com.ffsensitivity.app.data.remote.AppRemoteGate
+import com.ffsensitivity.app.data.remote.PushRepository
 import com.ffsensitivity.app.data.remote.ScreenSessionTracker
 import com.ffsensitivity.app.presentation.components.AppDrawerContent
 import com.ffsensitivity.app.presentation.components.AppRemoteGateOverlay
@@ -296,6 +297,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         screenSessionTracker.onForeground()
+        // Re-bind FCM token on every foreground so rotated / disabled tokens recover.
+        val session = UserSessionStore(this)
+        if (session.isSignedIn() && session.accessToken().isNotBlank()) {
+            Thread {
+                PushRepository.registerAndSync(applicationContext)
+            }.start()
+        }
     }
 
     override fun onStop() {

@@ -205,25 +205,38 @@ let PushService = class PushService {
         const installIds = [
             ...new Set(rows.map((row) => row.installId).filter(Boolean)),
         ];
-        await this.prisma.$transaction([
-            this.prisma.devicePushToken.updateMany({
-                where: { token: { in: tokens } },
-                data: { pushEnabled: false },
-            }),
-            ...(installIds.length > 0
-                ? [
-                    this.prisma.deviceInstall.updateMany({
-                        where: { installId: { in: installIds } },
-                        data: {
-                            hasFcmToken: false,
-                            fcmTokenHint: '',
-                            pushEnabled: false,
-                            uninstallSuspectedAt: new Date(),
-                        },
-                    }),
-                ]
-                : []),
-        ]);
+        await this.prisma.devicePushToken.updateMany({
+            where: { token: { in: tokens } },
+            data: { pushEnabled: false },
+        });
+        for (const installId of installIds) {
+            const stillLive = await this.prisma.devicePushToken.findFirst({
+                where: { installId, pushEnabled: true },
+                select: { token: true },
+            });
+            if (stillLive) {
+                await this.prisma.deviceInstall.updateMany({
+                    where: { installId },
+                    data: {
+                        hasFcmToken: true,
+                        fcmTokenHint: `${stillLive.token.slice(0, 4)}…${stillLive.token.slice(-4)}`,
+                        pushEnabled: true,
+                        uninstallSuspectedAt: null,
+                    },
+                });
+            }
+            else {
+                await this.prisma.deviceInstall.updateMany({
+                    where: { installId },
+                    data: {
+                        hasFcmToken: false,
+                        fcmTokenHint: '',
+                        pushEnabled: false,
+                        uninstallSuspectedAt: new Date(),
+                    },
+                });
+            }
+        }
     }
     async adminCancel(admin, id) {
         id = assertCampaignId(id);
@@ -311,6 +324,10 @@ let PushService = class PushService {
             },
         });
         if (installId) {
+            await this.prisma.devicePushToken.updateMany({
+                where: { installId, token: { not: token } },
+                data: { pushEnabled: false },
+            });
             await this.prisma.deviceInstall.updateMany({
                 where: { installId, userId },
                 data: {
