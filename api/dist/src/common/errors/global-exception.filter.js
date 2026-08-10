@@ -40,7 +40,12 @@ let GlobalExceptionFilter = class GlobalExceptionFilter {
                 code = String(obj.error ?? 'HTTP_ERROR');
                 if (Array.isArray(obj.message)) {
                     details = { fieldErrors: obj.message };
-                    message = 'Validation failed.';
+                    const first = obj.message
+                        .map((m) => String(m))
+                        .filter(Boolean)
+                        .slice(0, 3)
+                        .join(' · ');
+                    message = first || 'Validation failed.';
                     code = 'VALIDATION_ERROR';
                 }
             }

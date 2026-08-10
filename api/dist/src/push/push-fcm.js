@@ -65,29 +65,39 @@ function initFirebaseAdmin() {
     ready = true;
     return true;
 }
+function buildAndroidMessage(input) {
+    return {
+        notification: { title: input.title, body: input.body },
+        data: {
+            title: input.title,
+            body: input.body,
+            deepLink: input.deepLink,
+        },
+        android: {
+            priority: 'high',
+            ttl: 86400000,
+            notification: {
+                channelId: 'ff_ops_push',
+                icon: 'ic_stat_ff_notification',
+                color: '#E8A838',
+                priority: 'high',
+                defaultSound: true,
+            },
+        },
+    };
+}
 async function sendFcmCampaign(input) {
     if (!initFirebaseAdmin()) {
         throw new app_error_1.AppError('PUSH_FCM_UNCONFIGURED', 'Firebase Admin credentials missing. Set FIREBASE_ADMIN_PATH.', 503);
     }
-    const data = {
-        title: input.title,
-        body: input.body,
-        deepLink: input.deepLink,
-    };
+    const msg = buildAndroidMessage(input);
     if (input.audience === 'TOPIC' && input.topic) {
         try {
             await admin.messaging().send({
                 topic: input.topic,
-                notification: { title: input.title, body: input.body },
-                data,
-                android: {
-                    priority: 'high',
-                    notification: {
-                        channelId: 'ff_ops_push',
-                        icon: 'ic_stat_ff_notification',
-                        color: '#E8A838',
-                    },
-                },
+                notification: msg.notification,
+                data: msg.data,
+                android: msg.android,
             });
             return {
                 mode: 'fcm',
@@ -106,6 +116,21 @@ async function sendFcmCampaign(input) {
         }
     }
     const tokens = [...new Set(input.tokens.filter((t) => t.length >= 20))];
+    let delivered = 0;
+    let failed = 0;
+    const unregisteredTokens = [];
+    if (input.audience === 'ALL') {
+        try {
+            await admin.messaging().send({
+                topic: 'all_users',
+                notification: msg.notification,
+                data: msg.data,
+                android: msg.android,
+            });
+        }
+        catch {
+        }
+    }
     if (tokens.length === 0) {
         return {
             mode: 'fcm',
@@ -114,24 +139,14 @@ async function sendFcmCampaign(input) {
             unregisteredTokens: [],
         };
     }
-    let delivered = 0;
-    let failed = 0;
-    const unregisteredTokens = [];
     const chunkSize = 400;
     for (let i = 0; i < tokens.length; i += chunkSize) {
         const chunk = tokens.slice(i, i + chunkSize);
         const res = await admin.messaging().sendEachForMulticast({
             tokens: chunk,
-            notification: { title: input.title, body: input.body },
-            data,
-            android: {
-                priority: 'high',
-                notification: {
-                    channelId: 'ff_ops_push',
-                    icon: 'ic_stat_ff_notification',
-                    color: '#E8A838',
-                },
-            },
+            notification: msg.notification,
+            data: msg.data,
+            android: msg.android,
         });
         delivered += res.successCount;
         failed += res.failureCount;

@@ -40,6 +40,36 @@ export type FcmSendResult = {
   unregisteredTokens: string[];
 };
 
+function buildAndroidMessage(input: {
+  title: string;
+  body: string;
+  deepLink: string;
+}): {
+  notification: { title: string; body: string };
+  data: Record<string, string>;
+  android: admin.messaging.AndroidConfig;
+} {
+  return {
+    notification: { title: input.title, body: input.body },
+    data: {
+      title: input.title,
+      body: input.body,
+      deepLink: input.deepLink,
+    },
+    android: {
+      priority: 'high',
+      ttl: 86400000,
+      notification: {
+        channelId: 'ff_ops_push',
+        icon: 'ic_stat_ff_notification',
+        color: '#E8A838',
+        priority: 'high',
+        defaultSound: true,
+      },
+    },
+  };
+}
+
 export async function sendFcmCampaign(input: {
   title: string;
   body: string;
@@ -56,26 +86,15 @@ export async function sendFcmCampaign(input: {
     );
   }
 
-  const data = {
-    title: input.title,
-    body: input.body,
-    deepLink: input.deepLink,
-  };
+  const msg = buildAndroidMessage(input);
 
   if (input.audience === 'TOPIC' && input.topic) {
     try {
       await admin.messaging().send({
         topic: input.topic,
-        notification: { title: input.title, body: input.body },
-        data,
-        android: {
-          priority: 'high',
-          notification: {
-            channelId: 'ff_ops_push',
-            icon: 'ic_stat_ff_notification',
-            color: '#E8A838',
-          },
-        },
+        notification: msg.notification,
+        data: msg.data,
+        android: msg.android,
       });
       return {
         mode: 'fcm',
@@ -94,6 +113,25 @@ export async function sendFcmCampaign(input: {
   }
 
   const tokens = [...new Set(input.tokens.filter((t) => t.length >= 20))];
+  let delivered = 0;
+  let failed = 0;
+  const unregisteredTokens: string[] = [];
+
+  // ALL: also publish on topic so phones that opened the app (subscribed
+  // all_users) still get tray even if their token is missing from the ledger.
+  if (input.audience === 'ALL') {
+    try {
+      await admin.messaging().send({
+        topic: 'all_users',
+        notification: msg.notification,
+        data: msg.data,
+        android: msg.android,
+      });
+    } catch {
+      // Token path below remains the scored delivery count.
+    }
+  }
+
   if (tokens.length === 0) {
     return {
       mode: 'fcm',
@@ -103,24 +141,14 @@ export async function sendFcmCampaign(input: {
     };
   }
 
-  let delivered = 0;
-  let failed = 0;
-  const unregisteredTokens: string[] = [];
   const chunkSize = 400;
   for (let i = 0; i < tokens.length; i += chunkSize) {
     const chunk = tokens.slice(i, i + chunkSize);
     const res = await admin.messaging().sendEachForMulticast({
       tokens: chunk,
-      notification: { title: input.title, body: input.body },
-      data,
-      android: {
-        priority: 'high',
-        notification: {
-          channelId: 'ff_ops_push',
-          icon: 'ic_stat_ff_notification',
-          color: '#E8A838',
-        },
-      },
+      notification: msg.notification,
+      data: msg.data,
+      android: msg.android,
     });
     delivered += res.successCount;
     failed += res.failureCount;

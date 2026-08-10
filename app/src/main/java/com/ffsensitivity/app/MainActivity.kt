@@ -297,13 +297,14 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         screenSessionTracker.onForeground()
-        // Re-bind FCM token on every foreground so rotated / disabled tokens recover.
-        val session = UserSessionStore(this)
-        if (session.isSignedIn() && session.accessToken().isNotBlank()) {
-            Thread {
+        // Topic subscribe even before JWT — ALL campaigns also fan out on all_users.
+        Thread {
+            PushRepository.ensureFcmSubscribed(applicationContext)
+            val session = UserSessionStore(this@MainActivity)
+            if (session.isSignedIn() && session.accessToken().isNotBlank()) {
                 PushRepository.registerAndSync(applicationContext)
-            }.start()
-        }
+            }
+        }.start()
     }
 
     override fun onStop() {

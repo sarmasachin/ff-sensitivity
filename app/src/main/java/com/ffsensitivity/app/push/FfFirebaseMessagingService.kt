@@ -36,6 +36,9 @@ class FfFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        AppLog.e(
+            "FCM onMessageReceived keys=${message.data.keys.joinToString()} hasNotif=${message.notification != null}"
+        )
         val title =
             message.notification?.title
                 ?: message.data["title"]
@@ -75,6 +78,12 @@ class FfFirebaseMessagingService : FirebaseMessagingService() {
         // Expanded tray: real launcher app icon.
         loadAppIconBitmap()?.let { builder.setLargeIcon(it) }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+            !nm.areNotificationsEnabled()
+        ) {
+            AppLog.e("Notifications disabled in system settings — tray skipped")
+            return
+        }
         nm.notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), builder.build())
     }
 

@@ -346,6 +346,14 @@ let PushService = class PushService {
         };
     }
     async inbox(userId) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { createdAt: true },
+        });
+        if (!user) {
+            return { messages: [] };
+        }
+        const signedUpAt = user.createdAt;
         const [tokens, claimCount, rows] = await Promise.all([
             this.prisma.devicePushToken.findMany({
                 where: { userId, pushEnabled: true },
@@ -353,7 +361,10 @@ let PushService = class PushService {
             }),
             this.prisma.redeemClaim.count({ where: { userId } }),
             this.prisma.pushCampaign.findMany({
-                where: { status: client_1.PushStatus.SENT },
+                where: {
+                    status: client_1.PushStatus.SENT,
+                    sentAt: { gte: signedUpAt },
+                },
                 orderBy: { sentAt: 'desc' },
                 take: 40,
             }),

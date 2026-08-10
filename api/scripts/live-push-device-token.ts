@@ -79,10 +79,13 @@ async function main() {
       data: { title, body, deepLink },
       android: {
         priority: 'high',
+        ttl: 86400000,
         notification: {
           channelId: 'ff_ops_push',
           icon: 'ic_stat_ff_notification',
           color: '#E8A838',
+          priority: 'high',
+          defaultSound: true,
         },
       },
     });

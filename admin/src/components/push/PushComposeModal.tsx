@@ -109,10 +109,21 @@ export function PushComposeModal({
             <input
               className={`${fieldClass} font-mono`}
               value={values.id}
-              onChange={(e) => patch("id", e.target.value)}
+              onChange={(e) =>
+                patch(
+                  "id",
+                  e.target.value
+                    .toLowerCase()
+                    .replace(/[^a-z0-9_]/g, "_")
+                    .slice(0, 64),
+                )
+              }
               placeholder="push_challenge_open"
               disabled={mode === "edit"}
             />
+            <span className="mt-1 block text-[11px] font-normal text-slate-400">
+              Optional. Only a-z, 0-9, underscore. Leave blank to auto-generate.
+            </span>
           </label>
           <label className={labelClass}>
             Title

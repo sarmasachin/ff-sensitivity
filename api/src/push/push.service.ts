@@ -420,6 +420,16 @@ export class PushService {
   }
 
   async inbox(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { createdAt: true },
+    });
+    if (!user) {
+      return { messages: [] };
+    }
+    // New signups must not see campaigns sent before their account existed.
+    const signedUpAt = user.createdAt;
+
     const [tokens, claimCount, rows] = await Promise.all([
       this.prisma.devicePushToken.findMany({
         where: { userId, pushEnabled: true },
@@ -427,7 +437,10 @@ export class PushService {
       }),
       this.prisma.redeemClaim.count({ where: { userId } }),
       this.prisma.pushCampaign.findMany({
-        where: { status: PushStatus.SENT },
+        where: {
+          status: PushStatus.SENT,
+          sentAt: { gte: signedUpAt },
+        },
         orderBy: { sentAt: 'desc' },
         take: 40,
       }),

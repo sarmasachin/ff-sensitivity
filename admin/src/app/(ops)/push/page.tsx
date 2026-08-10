@@ -182,6 +182,7 @@ export default function PushPage() {
   async function onModalSave(row: PushCampaignRow) {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       const mode =
         row.status === "SCHEDULED"
@@ -204,6 +205,7 @@ export default function PushPage() {
       setNotice(`Saved campaign “${saved.title}”.`);
       setFormOpen(false);
     } catch (e) {
+      setNotice(null);
       setError(e instanceof Error ? e.message : "Save failed.");
     } finally {
       setBusy(false);
@@ -217,6 +219,7 @@ export default function PushPage() {
     }
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       const saved = await sendPushCampaign(id);
       setRows((prev) => prev.map((r) => (r.id === id ? saved : r)));
@@ -224,6 +227,7 @@ export default function PushPage() {
         `Sent “${saved.title}” — delivered ${saved.delivered} registered token(s).`,
       );
     } catch (e) {
+      setNotice(null);
       setError(e instanceof Error ? e.message : "Send failed.");
     } finally {
       setBusy(false);
