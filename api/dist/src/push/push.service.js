@@ -268,16 +268,13 @@ let PushService = class PushService {
         if (!campaign) {
             throw new app_error_1.AppError('PUSH_NOT_FOUND', 'Campaign not found.', 404);
         }
-        if (campaign.status === client_1.PushStatus.SENT) {
-            throw new app_error_1.AppError('PUSH_LOCKED', 'Sent campaigns cannot be deleted (audit trail).', 400);
-        }
         await this.prisma.pushCampaign.delete({ where: { id } });
         await this.prisma.auditLog.create({
             data: {
                 actorAdminId: admin.id,
                 action: 'push.delete',
                 entity: 'push_campaign',
-                afterJson: { id },
+                afterJson: { id, status: campaign.status },
             },
         });
         return { ok: true };
@@ -326,6 +323,10 @@ let PushService = class PushService {
         if (installId) {
             await this.prisma.devicePushToken.updateMany({
                 where: { installId, token: { not: token } },
+                data: { pushEnabled: false },
+            });
+            await this.prisma.devicePushToken.updateMany({
+                where: { userId, installId: null, token: { not: token } },
                 data: { pushEnabled: false },
             });
             await this.prisma.deviceInstall.updateMany({
@@ -397,11 +398,17 @@ let PushService = class PushService {
     async resolveAudienceTokens(campaign) {
         const enabled = { pushEnabled: true };
         let rows = [];
-        const select = { token: true, userId: true, installId: true };
+        const select = {
+            token: true,
+            userId: true,
+            installId: true,
+            lastSeenAt: true,
+        };
         if (campaign.audience === client_1.PushAudience.ALL) {
             rows = await this.prisma.devicePushToken.findMany({
                 where: enabled,
                 select,
+                orderBy: { lastSeenAt: 'desc' },
                 take: 5000,
             });
         }
@@ -410,6 +417,7 @@ let PushService = class PushService {
             rows = await this.prisma.devicePushToken.findMany({
                 where: { ...enabled, lastSeenAt: { gte: since } },
                 select,
+                orderBy: { lastSeenAt: 'desc' },
                 take: 5000,
             });
         }
@@ -420,6 +428,7 @@ let PushService = class PushService {
                     user: { claims: { none: {} } },
                 },
                 select,
+                orderBy: { lastSeenAt: 'desc' },
                 take: 5000,
             });
         }
@@ -430,11 +439,26 @@ let PushService = class PushService {
                     topics: { has: campaign.topic },
                 },
                 select,
+                orderBy: { lastSeenAt: 'desc' },
                 take: 5000,
             });
         }
         const allowed = await this.devices.filterEnabledTokens(rows);
-        return allowed.map((r) => r.token);
+        return this.dedupeTokensByDevice(allowed);
+    }
+    dedupeTokensByDevice(rows) {
+        const best = new Map();
+        for (const row of rows) {
+            const key = row.installId
+                ? `install:${row.installId}`
+                : `user:${row.userId}`;
+            const seen = row.lastSeenAt?.getTime?.() ?? 0;
+            const prev = best.get(key);
+            if (!prev || seen >= prev.lastSeenAt) {
+                best.set(key, { token: row.token, lastSeenAt: seen });
+            }
+        }
+        return [...best.values()].map((v) => v.token);
     }
     async resolveAudienceCount(campaign) {
         return (await this.resolveAudienceTokens(campaign)).length;

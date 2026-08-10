@@ -332,20 +332,13 @@ export class PushService {
     if (!campaign) {
       throw new AppError('PUSH_NOT_FOUND', 'Campaign not found.', 404);
     }
-    if (campaign.status === PushStatus.SENT) {
-      throw new AppError(
-        'PUSH_LOCKED',
-        'Sent campaigns cannot be deleted (audit trail).',
-        400,
-      );
-    }
     await this.prisma.pushCampaign.delete({ where: { id } });
     await this.prisma.auditLog.create({
       data: {
         actorAdminId: admin.id,
         action: 'push.delete',
         entity: 'push_campaign',
-        afterJson: { id },
+        afterJson: { id, status: campaign.status },
       },
     });
     return { ok: true };
@@ -397,6 +390,11 @@ export class PushService {
       // Drop stale tokens for this install so fan-out uses the fresh FCM token only.
       await this.prisma.devicePushToken.updateMany({
         where: { installId, token: { not: token } },
+        data: { pushEnabled: false },
+      });
+      // Drop orphan tokens (no installId) for this user — usually old test rows.
+      await this.prisma.devicePushToken.updateMany({
+        where: { userId, installId: null, token: { not: token } },
         data: { pushEnabled: false },
       });
       await this.prisma.deviceInstall.updateMany({
@@ -475,13 +473,23 @@ export class PushService {
     topic: string;
   }): Promise<string[]> {
     const enabled = { pushEnabled: true as const };
-    let rows: { token: string; userId: string; installId: string | null }[] =
-      [];
-    const select = { token: true, userId: true, installId: true } as const;
+    let rows: {
+      token: string;
+      userId: string;
+      installId: string | null;
+      lastSeenAt: Date;
+    }[] = [];
+    const select = {
+      token: true,
+      userId: true,
+      installId: true,
+      lastSeenAt: true,
+    } as const;
     if (campaign.audience === PushAudience.ALL) {
       rows = await this.prisma.devicePushToken.findMany({
         where: enabled,
         select,
+        orderBy: { lastSeenAt: 'desc' },
         take: 5000,
       });
     } else if (campaign.audience === PushAudience.ACTIVE_7D) {
@@ -489,6 +497,7 @@ export class PushService {
       rows = await this.prisma.devicePushToken.findMany({
         where: { ...enabled, lastSeenAt: { gte: since } },
         select,
+        orderBy: { lastSeenAt: 'desc' },
         take: 5000,
       });
     } else if (campaign.audience === PushAudience.NO_CLAIM) {
@@ -498,6 +507,7 @@ export class PushService {
           user: { claims: { none: {} } },
         },
         select,
+        orderBy: { lastSeenAt: 'desc' },
         take: 5000,
       });
     } else {
@@ -507,11 +517,40 @@ export class PushService {
           topics: { has: campaign.topic },
         },
         select,
+        orderBy: { lastSeenAt: 'desc' },
         take: 5000,
       });
     }
     const allowed = await this.devices.filterEnabledTokens(rows);
-    return allowed.map((r) => r.token);
+    // One live token per physical install (and one orphan token per user).
+    // Stops emulator/reinstall leftovers from inflating "devices delivered".
+    return this.dedupeTokensByDevice(allowed);
+  }
+
+  /** Prefer newest lastSeenAt; key = installId, else userId for null-install rows. */
+  private dedupeTokensByDevice(
+    rows: {
+      token: string;
+      userId: string;
+      installId?: string | null;
+      lastSeenAt?: Date;
+    }[],
+  ): string[] {
+    const best = new Map<
+      string,
+      { token: string; lastSeenAt: number }
+    >();
+    for (const row of rows) {
+      const key = row.installId
+        ? `install:${row.installId}`
+        : `user:${row.userId}`;
+      const seen = row.lastSeenAt?.getTime?.() ?? 0;
+      const prev = best.get(key);
+      if (!prev || seen >= prev.lastSeenAt) {
+        best.set(key, { token: row.token, lastSeenAt: seen });
+      }
+    }
+    return [...best.values()].map((v) => v.token);
   }
 
   private async resolveAudienceCount(campaign: {

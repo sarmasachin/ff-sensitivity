@@ -154,8 +154,7 @@ export function PushTable({
                     <button
                       type="button"
                       onClick={() => onDelete(row.id)}
-                      disabled={row.status === "SENT"}
-                      className={`${btn} bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40`}
+                      className={`${btn} bg-rose-50 text-rose-700 hover:bg-rose-100`}
                     >
                       Delete
                     </button>
