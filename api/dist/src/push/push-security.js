@@ -18,6 +18,18 @@ exports.ALLOWED_PUSH_DEEP_PATHS = new Set([
     'redeem',
     'names',
     'stylish',
+    'inbox',
+    'notifications',
+    'push_inbox',
+    'contact',
+    'support',
+    'about',
+    'share',
+    'share_sensi',
+    'sensi',
+    'hud',
+    'graphics',
+    'dpi',
 ]);
 function sanitizePushText(raw, max) {
     return [...(raw ?? '')]

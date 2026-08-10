@@ -72,6 +72,8 @@ export async function sendFcmCampaign(input: {
           priority: 'high',
           notification: {
             channelId: 'ff_ops_push',
+            icon: 'ic_stat_ff_notification',
+            color: '#E8A838',
           },
         },
       });
@@ -113,7 +115,11 @@ export async function sendFcmCampaign(input: {
       data,
       android: {
         priority: 'high',
-        notification: { channelId: 'ff_ops_push' },
+        notification: {
+          channelId: 'ff_ops_push',
+          icon: 'ic_stat_ff_notification',
+          color: '#E8A838',
+        },
       },
     });
     delivered += res.successCount;

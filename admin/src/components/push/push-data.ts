@@ -60,7 +60,7 @@ export const PUSH_STATUS_CLASS: Record<PushStatus, string> = {
 export const PUSH_CAPABILITIES = [
   {
     title: "Compose",
-    body: "Title, body, and allowlisted ffops:// deep link — saved on Nest PushCampaign.",
+    body: "Title, body, and destination page (Home, Challenge, Shop, DPI, Inbox, …).",
   },
   {
     title: "Audience",
@@ -87,7 +87,37 @@ export const PUSH_ALLOWED_DEEP_PATHS = new Set([
   "redeem",
   "names",
   "stylish",
+  "inbox",
+  "notifications",
+  "push_inbox",
+  "contact",
+  "support",
+  "about",
+  "share",
+  "share_sensi",
+  "sensi",
+  "hud",
+  "graphics",
+  "dpi",
 ]);
+
+/** Admin picker — label → ffops path (what opens in the Android app). */
+export const PUSH_DEEP_LINK_OPTIONS: { label: string; path: string }[] = [
+  { label: "Home", path: "home" },
+  { label: "Best Sensitivity (device scan)", path: "sensi" },
+  { label: "Custom HUD (device scan)", path: "hud" },
+  { label: "Graphics Settings (device scan)", path: "graphics" },
+  { label: "DPI & Resolution (device scan)", path: "dpi" },
+  { label: "Daily Challenge", path: "challenge" },
+  { label: "Scratch Cards", path: "scratch" },
+  { label: "Coin Shop", path: "shop" },
+  { label: "Redeem", path: "redeem" },
+  { label: "Stylish Names", path: "names" },
+  { label: "Share Sensitivity", path: "share" },
+  { label: "Notifications Inbox", path: "inbox" },
+  { label: "Contact / Support", path: "contact" },
+  { label: "About", path: "about" },
+];
 
 export function assertClientDeepLink(raw: string): string | null {
   const link = raw.trim().toLowerCase();

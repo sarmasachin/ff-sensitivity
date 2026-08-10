@@ -41,6 +41,14 @@ object PromoRepository {
             "shop", "coin_shop" -> "coin_shop"
             "redeem" -> "redeem"
             "names", "stylish" -> "stylish"
+            "inbox", "notifications", "push_inbox" -> "push_inbox"
+            "contact", "support" -> "contact"
+            "about" -> "about"
+            "share", "share_sensi" -> "share_sensi"
+            "sensi" -> "device_fetch/sensi"
+            "hud" -> "device_fetch/hud"
+            "graphics" -> "device_fetch/graphics"
+            "dpi" -> "device_fetch/dpi"
             else -> null
         }
     }

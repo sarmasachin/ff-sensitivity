@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   formToCampaign,
+  PUSH_DEEP_LINK_OPTIONS,
   type PushAudience,
   type PushCampaignRow,
   type PushFormValues,
@@ -137,14 +138,29 @@ export function PushComposeModal({
             />
           </label>
           <label className={labelClass}>
-            Deep link
-            <input
-              className={`${fieldClass} font-mono`}
+            Open in app (deep link)
+            <select
+              className={fieldClass}
               value={values.deepLink}
               onChange={(e) => patch("deepLink", e.target.value)}
-              placeholder="ffops://challenge"
               required
-            />
+            >
+              {!PUSH_DEEP_LINK_OPTIONS.some(
+                (o) => `ffops://${o.path}` === values.deepLink,
+              ) && values.deepLink ? (
+                <option value={values.deepLink}>
+                  {values.deepLink} (saved)
+                </option>
+              ) : null}
+              {PUSH_DEEP_LINK_OPTIONS.map((opt) => (
+                <option key={opt.path} value={`ffops://${opt.path}`}>
+                  {opt.label} — ffops://{opt.path}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block font-mono text-[11px] text-slate-500">
+              {values.deepLink}
+            </span>
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className={labelClass}>

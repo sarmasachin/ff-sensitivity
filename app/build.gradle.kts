@@ -25,8 +25,8 @@ android {
         applicationId = "com.ffsensitivity.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 4
+        versionName = "1.0.3"
 
         val googleServerClientId = localProps.getProperty("GOOGLE_SERVER_CLIENT_ID", "")
         buildConfigField(
@@ -73,6 +73,19 @@ android {
             val debugApi =
                 localProps.getProperty("API_BASE_URL", "http://10.0.2.2:4000")
             buildConfigField("String", "API_BASE_URL", "\"$debugApi\"")
+            // Always Google sample units in debug — avoids NO_FILL from unused real units.
+            val sampleApp = "ca-app-pub-3940256099942544~3347511713"
+            val sampleRewarded = "ca-app-pub-3940256099942544/5227853062"
+            val sampleInterstitial = "ca-app-pub-3940256099942544/1033173712"
+            manifestPlaceholders["admobAppId"] = sampleApp
+            buildConfigField("String", "ADMOB_REWARDED_CALCULATE", "\"$sampleRewarded\"")
+            buildConfigField("String", "ADMOB_INTERSTITIAL_CHECKIN", "\"$sampleInterstitial\"")
+            buildConfigField("String", "ADMOB_INTERSTITIAL_QUIZ", "\"$sampleInterstitial\"")
+            buildConfigField(
+                "String",
+                "ADMOB_INTERSTITIAL_REDEEM_DAILY",
+                "\"$sampleInterstitial\""
+            )
         }
         release {
             // Full-size installable release (no R8 strip). Re-enable minify

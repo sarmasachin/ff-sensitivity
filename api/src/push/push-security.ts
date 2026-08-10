@@ -11,6 +11,19 @@ export const ALLOWED_PUSH_DEEP_PATHS = new Set([
   'redeem',
   'names',
   'stylish',
+  'inbox',
+  'notifications',
+  'push_inbox',
+  // Extra app destinations
+  'contact',
+  'support',
+  'about',
+  'share',
+  'share_sensi',
+  'sensi',
+  'hud',
+  'graphics',
+  'dpi',
 ]);
 
 export function sanitizePushText(raw: string, max: number): string {

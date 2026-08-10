@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Mail
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -57,6 +58,7 @@ import com.ffsensitivity.app.presentation.theme.SurfaceLift
 
 enum class AppDrawerAction {
     HOME,
+    NOTIFICATIONS,
     DAILY_CHALLENGE,
     REDEEM,
     STYLISH,
@@ -79,15 +81,32 @@ fun AppDrawerContent(
     modifier: Modifier = Modifier,
     configTick: Int = 0
 ) {
-    // Parent OverlayAppDrawer already sizes + paints the panel. Do NOT combine
-    // weight() with verticalScroll() — that measure path intermittently collapsed
-    // the list to an empty dark panel (looked like a black screen with bottom bar).
+    // Never put fillMaxSize()/weight() on the SAME node as verticalScroll() —
+    // that measure path can collapse children to an empty panel.
+    // Look stays the same: fixed header + scrollable menu list inside.
+    val cfg = remember(configTick) { AppConfigRepository.snapshot() }
+    val copy = remember(configTick) {
+        com.ffsensitivity.app.data.remote.CopyRepository.snapshot()
+    }
+    val showScratch =
+        cfg.features["scratch"] != false && cfg.navigation["homeScratch"] != false
+    val showShop =
+        cfg.features["shop"] != false && cfg.navigation["homeShop"] != false
+    val showShare = cfg.features["share"] != false
+    val showSupport =
+        cfg.features["support"] != false && cfg.navigation["navSupport"] != false
+    val showAbout = cfg.navigation["navAbout"] != false
+    val versionNumber = if (appVersion.startsWith("v", ignoreCase = true)) {
+        appVersion.removePrefix("v").removePrefix("V")
+    } else {
+        appVersion
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Column(
@@ -98,13 +117,39 @@ fun AppDrawerContent(
                 .border(1.dp, Amber.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
                 .padding(16.dp)
         ) {
-            Text(
-                text = "FF SENSITIVITY",
-                color = AmberHot,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.6.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "FF SENSITIVITY",
+                    color = AmberHot,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.6.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (selectedRoute == "push_inbox") Amber.copy(alpha = 0.18f) else SurfaceCard)
+                        .border(
+                            1.dp,
+                            if (selectedRoute == "push_inbox") Amber.copy(alpha = 0.45f) else HairlineStrong,
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable { onAction(AppDrawerAction.NOTIFICATIONS) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Notifications,
+                        contentDescription = "Notifications",
+                        tint = if (selectedRoute == "push_inbox") AmberHot else Amber,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Tools · Rewards · Codes",
@@ -114,120 +159,120 @@ fun AppDrawerContent(
         }
 
         Spacer(modifier = Modifier.height(18.dp))
-        Text(
-            text = "MENU",
-            color = Amber,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.5.sp
-        )
-        Spacer(modifier = Modifier.height(10.dp))
 
-        val cfg = remember(configTick) { AppConfigRepository.snapshot() }
-        val copy = remember(configTick) {
-            com.ffsensitivity.app.data.remote.CopyRepository.snapshot()
-        }
-        val showScratch =
-            cfg.features["scratch"] != false && cfg.navigation["homeScratch"] != false
-        val showShop =
-            cfg.features["shop"] != false && cfg.navigation["homeShop"] != false
-        val showShare = cfg.features["share"] != false
-        val showSupport =
-            cfg.features["support"] != false && cfg.navigation["navSupport"] != false
-        val showAbout = cfg.navigation["navAbout"] != false
-
-        DrawerItem(
-            label = "Home",
-            icon = Icons.Outlined.Home,
-            selected = selectedRoute == "home"
-        ) { onAction(AppDrawerAction.HOME) }
-        if (showScratch) {
-            DrawerItem(
-                label = "Scratch Cards",
-                icon = Icons.Outlined.Style,
-                selected = selectedRoute == "scratch_cards"
-            ) { onAction(AppDrawerAction.SCRATCH_CARDS) }
-        }
-        if (showShop) {
-            DrawerItem(
-                label = "Coin Shop",
-                icon = Icons.Outlined.ShoppingBag,
-                selected = selectedRoute == "coin_shop"
-            ) { onAction(AppDrawerAction.COIN_SHOP) }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
-        Spacer(modifier = Modifier.height(8.dp))
-        DrawerItem(
-            copy.legal.storeLabel.ifBlank { "Rate App" },
-            Icons.Outlined.StarRate,
-            selected = false
+        Box(
+            modifier = Modifier
+                .weight(1f, fill = true)
+                .fillMaxWidth()
         ) {
-            onAction(AppDrawerAction.RATE_APP)
-        }
-        if (showShare) {
-            DrawerItem(
-                copy.share.sheetTitle.ifBlank { "Share App" },
-                Icons.Outlined.Share,
-                selected = false
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
             ) {
-                onAction(AppDrawerAction.SHARE_APP)
+                Text(
+                    text = "MENU",
+                    color = Amber,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                DrawerItem(
+                    label = "Home",
+                    icon = Icons.Outlined.Home,
+                    selected = selectedRoute == "home"
+                ) { onAction(AppDrawerAction.HOME) }
+                DrawerItem(
+                    label = "Notifications",
+                    icon = Icons.Outlined.Notifications,
+                    selected = selectedRoute == "push_inbox"
+                ) { onAction(AppDrawerAction.NOTIFICATIONS) }
+                if (showScratch) {
+                    DrawerItem(
+                        label = "Scratch Cards",
+                        icon = Icons.Outlined.Style,
+                        selected = selectedRoute == "scratch_cards"
+                    ) { onAction(AppDrawerAction.SCRATCH_CARDS) }
+                }
+                if (showShop) {
+                    DrawerItem(
+                        label = "Coin Shop",
+                        icon = Icons.Outlined.ShoppingBag,
+                        selected = selectedRoute == "coin_shop"
+                    ) { onAction(AppDrawerAction.COIN_SHOP) }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
+                Spacer(modifier = Modifier.height(8.dp))
+                DrawerItem(
+                    copy.legal.storeLabel.ifBlank { "Rate App" },
+                    Icons.Outlined.StarRate,
+                    selected = false
+                ) {
+                    onAction(AppDrawerAction.RATE_APP)
+                }
+                if (showShare) {
+                    DrawerItem(
+                        copy.share.sheetTitle.ifBlank { "Share App" },
+                        Icons.Outlined.Share,
+                        selected = false
+                    ) {
+                        onAction(AppDrawerAction.SHARE_APP)
+                    }
+                }
+                DrawerItem(
+                    copy.about.websiteCta.ifBlank { "Our Website" },
+                    Icons.Outlined.Language,
+                    selected = false
+                ) {
+                    onAction(AppDrawerAction.WEBSITE)
+                }
+                DrawerItem(
+                    copy.legal.privacyLabel.ifBlank { "Privacy Policy" },
+                    Icons.Outlined.Policy,
+                    selected = false
+                ) {
+                    onAction(AppDrawerAction.PRIVACY)
+                }
+                if (showSupport) {
+                    DrawerItem(
+                        label = copy.legal.supportLabel.ifBlank { "Contact Us" },
+                        icon = Icons.Outlined.Mail,
+                        selected = selectedRoute == "contact"
+                    ) { onAction(AppDrawerAction.CONTACT_US) }
+                }
+                if (showAbout) {
+                    DrawerItem(
+                        label = "About",
+                        icon = Icons.Outlined.Info,
+                        selected = selectedRoute == "about"
+                    ) { onAction(AppDrawerAction.ABOUT) }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
+                Spacer(modifier = Modifier.height(8.dp))
+                DrawerItem(
+                    label = "Sign out",
+                    icon = Icons.Outlined.Logout,
+                    selected = false
+                ) { onAction(AppDrawerAction.SIGN_OUT) }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "${copy.about.versionPrefix.ifBlank { "Version" }} $versionNumber",
+                    color = InkMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                )
             }
         }
-        DrawerItem(
-            copy.about.websiteCta.ifBlank { "Our Website" },
-            Icons.Outlined.Language,
-            selected = false
-        ) {
-            onAction(AppDrawerAction.WEBSITE)
-        }
-        DrawerItem(
-            copy.legal.privacyLabel.ifBlank { "Privacy Policy" },
-            Icons.Outlined.Policy,
-            selected = false
-        ) {
-            onAction(AppDrawerAction.PRIVACY)
-        }
-        if (showSupport) {
-            DrawerItem(
-                label = copy.legal.supportLabel.ifBlank { "Contact Us" },
-                icon = Icons.Outlined.Mail,
-                selected = selectedRoute == "contact"
-            ) { onAction(AppDrawerAction.CONTACT_US) }
-        }
-        if (showAbout) {
-            DrawerItem(
-                label = "About",
-                icon = Icons.Outlined.Info,
-                selected = selectedRoute == "about"
-            ) { onAction(AppDrawerAction.ABOUT) }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Hairline))
-        Spacer(modifier = Modifier.height(8.dp))
-        DrawerItem(
-            label = "Sign out",
-            icon = Icons.Outlined.Logout,
-            selected = false
-        ) { onAction(AppDrawerAction.SIGN_OUT) }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        val versionNumber = if (appVersion.startsWith("v", ignoreCase = true)) {
-            appVersion.removePrefix("v").removePrefix("V")
-        } else {
-            appVersion
-        }
-        Text(
-            text = "${copy.about.versionPrefix.ifBlank { "Version" }} $versionNumber",
-            color = InkMuted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-        )
     }
 }
 

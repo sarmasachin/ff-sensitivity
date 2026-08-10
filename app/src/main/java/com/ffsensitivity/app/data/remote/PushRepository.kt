@@ -77,17 +77,23 @@ object PushRepository {
         }
     }
 
+    /** Token + topic subscribe (works even before JWT). Needed for tray topic pushes. */
+    fun ensureFcmSubscribed(context: Context): String {
+        val fcm = fetchFcmToken(context)
+        if (fcm.length >= 8) subscribeTopics()
+        return fcm
+    }
+
     fun registerAndSync(context: Context): Result<List<PushInboxMessage>> {
-        val access = UserSessionStore(context).accessToken()
-        if (access.isBlank()) {
-            return Result.failure(IllegalStateException("Not signed in"))
-        }
         return runCatching {
-            val fcm = fetchFcmToken(context)
+            val fcm = ensureFcmSubscribed(context)
             if (fcm.length < 8) {
                 throw IllegalStateException("FCM token unavailable")
             }
-            subscribeTopics()
+            val access = UserSessionStore(context).accessToken()
+            if (access.isBlank()) {
+                throw IllegalStateException("Not signed in")
+            }
             PushApi.registerDevice(
                 accessToken = access,
                 token = fcm,
@@ -96,11 +102,23 @@ object PushRepository {
             ).getOrThrow()
             // Keep Nest device registry in sync after FCM bind.
             DeviceRepository.syncHeartbeat(context)
-            val inbox = PushApi.getInbox(access).getOrElse { emptyList() }
-            PushInboxCache.set(inbox)
-            inbox
+            refreshInbox(context).getOrElse { emptyList() }
         }.onFailure {
             AppLog.e("PushRepository.registerAndSync failed", it)
+        }
+    }
+
+    /** Reload inbox messages for the signed-in user (call off main thread). */
+    fun refreshInbox(context: Context): Result<List<PushInboxMessage>> {
+        val access = UserSessionStore(context).accessToken()
+        if (access.isBlank()) {
+            return Result.failure(IllegalStateException("Not signed in"))
+        }
+        return PushApi.getInbox(access).map { list ->
+            PushInboxCache.set(list)
+            list
+        }.onFailure {
+            AppLog.e("PushRepository.refreshInbox failed", it)
         }
     }
 

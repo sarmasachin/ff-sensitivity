@@ -22,6 +22,7 @@ import com.ffsensitivity.app.presentation.screens.DailyChallengeScreen
 import com.ffsensitivity.app.presentation.screens.DeviceFetchScreen
 import com.ffsensitivity.app.presentation.screens.DpiResultScreen
 import com.ffsensitivity.app.presentation.screens.HomeScreen
+import com.ffsensitivity.app.presentation.screens.PushInboxScreen
 import com.ffsensitivity.app.presentation.screens.RedeemCommentsScreen
 import com.ffsensitivity.app.presentation.screens.RedeemScreen
 import com.ffsensitivity.app.presentation.screens.ResultsScreen
@@ -298,6 +299,44 @@ internal fun MainNavHost(
                         true
                     }.getOrElse {
                         AppLog.e("About back failed", it)
+                        false
+                    }
+                }
+            )
+        }
+        composable("push_inbox") {
+            PushInboxScreen(
+                contentPadding = padding,
+                onBack = {
+                    runCatching {
+                        navController.popBackStack()
+                        true
+                    }.getOrElse {
+                        AppLog.e("Push inbox back failed", it)
+                        false
+                    }
+                },
+                onOpenDeepLink = { deepLink ->
+                    val route =
+                        com.ffsensitivity.app.data.remote.PushRepository.routeForDeepLink(deepLink)
+                    if (route == null) {
+                        SafeOps.toast(context, "Link unavailable")
+                        return@PushInboxScreen false
+                    }
+                    if (route == "push_inbox") {
+                        return@PushInboxScreen true
+                    }
+                    if (!com.ffsensitivity.app.data.remote.AppConfigRepository.routeAllowed(route)) {
+                        SafeOps.toast(context, "That screen is temporarily unavailable")
+                        return@PushInboxScreen false
+                    }
+                    runCatching {
+                        navController.navigate(route) {
+                            launchSingleTop = true
+                        }
+                        true
+                    }.getOrElse {
+                        AppLog.e("Push inbox open deep link failed", it)
                         false
                     }
                 }

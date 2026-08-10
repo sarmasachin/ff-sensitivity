@@ -146,8 +146,10 @@ fun WizardScreen(
     var submitting by remember { mutableStateOf(false) }
     var adPassTick by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val featureId = AppSession.featureId
     // Read tick so reward/markRewarded recomposes CTA; always re-check live store + remote config.
-    val needsCalculateAd = adPassTick.let { CalculateAdStore.needsAd(context) }
+    // Per-feature gate: sensi / hud / graphics each need their own rewarded unlock.
+    val needsCalculateAd = adPassTick.let { CalculateAdStore.needsAd(context, featureId) }
 
     val safeStep = step.coerceIn(0, wizardSteps.lastIndex)
     val current = wizardSteps[safeStep]
@@ -239,7 +241,7 @@ fun WizardScreen(
             )
             return
         }
-        if (!CalculateAdStore.needsAd(context)) {
+        if (!CalculateAdStore.needsAd(context, featureId)) {
             submitting = true
             openResults(answers)
             return
@@ -258,7 +260,7 @@ fun WizardScreen(
         CalculateRewardedAds.show(
             activity = activity,
             onRewarded = {
-                CalculateAdStore.markRewarded(context)
+                CalculateAdStore.markRewarded(context, featureId)
                 adPassTick += 1
                 openResults(answers)
             },

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -22,23 +21,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.ffsensitivity.app.presentation.theme.SurfaceCard
 import com.ffsensitivity.app.presentation.theme.SurfaceLift
 import kotlin.math.roundToInt
 
 /**
- * Drawer that **overlays** the app instead of sliding the main content away.
+ * Side menu overlays home — main content never slides away.
  *
- * Material [androidx.compose.material3.ModalNavigationDrawer] translates the Scaffold
- * by ~drawer width. On our dark VoidBlack theme that peek looks like a black screen
- * (home cards gone, bottom bar strip still visible).
+ * Why not Material [ModalNavigationDrawer]: it translates the Scaffold; on VoidBlack
+ * that peek looks like a black screen (bottom bar still visible).
  *
- * Panel keeps its **own opaque background** so a child measure glitch can never show
- * an empty black hole over home.
+ * Why not Popup: a separate window can paint opaque black over content while the
+ * Scaffold bottom bar stays in the activity window — exact “black + bottom bar” bug.
+ *
+ * Slide uses [graphicsLayer] translation (GPU) instead of layout [offset] so opening
+ * does not relayout the tree every frame (jank / ANR risk on weak devices).
  */
 @Composable
 fun OverlayAppDrawer(
@@ -57,36 +58,34 @@ fun OverlayAppDrawer(
     val density = LocalDensity.current
     val drawerWidthPx = with(density) { drawerWidthDp.dp.toPx() }
     val drawerShape = RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)
+    val panelVisible = progress > 0.001f
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Main app never translates — home / bottom bar stay put.
+        // Home / bottom bar stay put under the overlay.
         content()
 
-        if (progress > 0.001f) {
-            // Light scrim — home cards must stay readable under the menu.
+        if (panelVisible) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.28f * progress))
+                    .graphicsLayer { alpha = progress }
+                    .background(Color.Black.copy(alpha = 0.28f))
                     .clickable(
                         indication = null,
                         interactionSource = remember { MutableInteractionSource() },
                         onClick = onClose
                     )
             )
-            // Opaque panel shell (not transparent) — empty child ≠ black hole.
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
                     .width(drawerWidthDp.dp)
-                    .offset {
-                        IntOffset(
-                            x = (-drawerWidthPx * (1f - progress)).roundToInt(),
-                            y = 0
-                        )
+                    .graphicsLayer {
+                        translationX = -drawerWidthPx * (1f - progress)
                     }
                     .clip(drawerShape)
+                    // Opaque shell — empty child cannot show VoidBlack “hole”.
                     .background(Brush.verticalGradient(listOf(SurfaceLift, SurfaceCard)))
                     .clickable(
                         indication = null,
@@ -98,6 +97,5 @@ fun OverlayAppDrawer(
         }
     }
 
-    // After content() so this wins over screen BackHandlers while the menu is open.
     BackHandler(enabled = open) { onClose() }
 }

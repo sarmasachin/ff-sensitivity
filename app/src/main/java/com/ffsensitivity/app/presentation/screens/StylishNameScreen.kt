@@ -1,5 +1,10 @@
 package com.ffsensitivity.app.presentation.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,7 +24,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ffsensitivity.app.data.StylishNameCatalog
@@ -126,26 +137,56 @@ fun StylishNameScreen(
     }
 
     suspend fun loadCatalog(): Boolean {
-        return runCatching {
+        // Local assets are enough to generate names. Nest sync is best-effort only —
+        // never surface "Could not load" when offline catalog already works.
+        return try {
             withContext(Dispatchers.IO) {
                 StylishNameCatalog.ensureLoaded(context)
-                // Best-effort Nest sync; offline catalog stays if API is down.
-                NamesRepository.syncCatalog(context)
+            }
+            if (!StylishNameCatalog.isLoaded) {
+                catalogFailed = true
+                catalogReady = false
+                showError(
+                    code = "STYLISH_CATALOG_FAILED",
+                    title = "Styles unavailable",
+                    message = "Could not load stylish name fonts. Try again.",
+                    retryKind = StylishRetryKind.RELOAD_CATALOG
+                )
+                return false
             }
             catalogFailed = false
             catalogReady = true
+            clearError()
+            // Nest sync must never flip the screen back into a load error.
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    NamesRepository.syncCatalog(context)
+                }
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                AppLog.e("Stylish remote catalog sync failed — using offline fonts", it)
+            }
             true
-        }.getOrElse {
-            AppLog.e("Stylish catalog load failed", it)
-            catalogFailed = true
-            catalogReady = false
-            showError(
-                code = "STYLISH_CATALOG_FAILED",
-                title = "Styles unavailable",
-                message = "Could not load stylish name fonts. Try again.",
-                retryKind = StylishRetryKind.RELOAD_CATALOG
-            )
-            false
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            AppLog.e("Stylish catalog load failed", t)
+            if (StylishNameCatalog.isLoaded) {
+                // Offline / local catalog OK — do not block search with a false error.
+                catalogFailed = false
+                catalogReady = true
+                clearError()
+                true
+            } else {
+                catalogFailed = true
+                catalogReady = false
+                showError(
+                    code = "STYLISH_CATALOG_FAILED",
+                    title = "Styles unavailable",
+                    message = "Could not load stylish name fonts. Try again.",
+                    retryKind = StylishRetryKind.RELOAD_CATALOG
+                )
+                false
+            }
         }
     }
 
@@ -178,6 +219,7 @@ fun StylishNameScreen(
             )
             pool
         }.getOrElse {
+            if (it is kotlinx.coroutines.CancellationException) throw it
             AppLog.e("Stylish generate failed", it)
             showError(
                 code = "STYLISH_GENERATE_FAILED",
@@ -285,7 +327,6 @@ fun StylishNameScreen(
             StylishRetryKind.RELOAD_CATALOG -> {
                 scope.launch {
                     if (loadCatalog() && baseName.isNotBlank()) {
-                        clearError()
                         buildRoundSuspend(resetUsed = true)
                     }
                 }
@@ -306,10 +347,35 @@ fun StylishNameScreen(
         loadCatalog()
     }
 
+    val listState = rememberLazyListState()
+    var searchBarVisible by remember { mutableStateOf(true) }
+    val searchBarScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val dy = available.y
+                when {
+                    dy < -10f -> searchBarVisible = false // scroll down → hide
+                    dy > 10f -> searchBarVisible = true // scroll up → show
+                }
+                return Offset.Zero
+            }
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+        }.collect { (index, offset) ->
+            if (index == 0 && offset <= 6) searchBarVisible = true
+        }
+    }
+
     // Debounce regenerate: typing each char used to set generating=true and disable the
     // name field → focus lost → keyboard closed after 1 character.
     LaunchedEffect(baseName, catalogReady) {
-        if (!catalogReady) return@LaunchedEffect
+        if (!catalogReady) {
+            searchBarVisible = true
+            return@LaunchedEffect
+        }
         if (baseName.isBlank()) {
             fontChoiceId = null
             usedValues = emptySet()
@@ -318,9 +384,11 @@ fun StylishNameScreen(
             roundIndex = 0
             remainingUnique = 0
             generating = false
+            searchBarVisible = true
             clearError()
             return@LaunchedEffect
         }
+        searchBarVisible = true
         delay(400)
         fontChoiceId = null
         clearError()
@@ -370,19 +438,23 @@ fun StylishNameScreen(
             if (catalogFailed && !catalogReady) {
                 StylishNameHint("Stylish fonts failed to load. Use Retry above.")
             } else {
-                StylishNameComposer(
-                    baseName = baseName,
-                    onBaseNameChange = { raw ->
-                        clearError()
-                        baseName = raw.filter { !it.isWhitespace() }.take(12)
-                    },
-                    catalogReady = catalogReady,
-                    roundIndex = roundIndex,
-                    remainingUnique = remainingUnique,
-                    resultCount = visible.size
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
+                AnimatedVisibility(
+                    visible = searchBarVisible,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Column {
+                        StylishNameComposer(
+                            baseName = baseName,
+                            onBaseNameChange = { raw ->
+                                clearError()
+                                baseName = raw.filter { !it.isWhitespace() }.take(12)
+                            },
+                            catalogReady = catalogReady
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+                }
 
                 when {
                     !catalogReady -> StylishNameHint("Loading stylish fonts…")
@@ -395,7 +467,10 @@ fun StylishNameScreen(
                     }
                     else -> {
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .nestedScroll(searchBarScroll),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                             contentPadding = PaddingValues(bottom = 28.dp)
                         ) {

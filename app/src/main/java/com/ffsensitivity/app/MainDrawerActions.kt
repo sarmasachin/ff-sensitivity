@@ -19,6 +19,16 @@ internal fun handleDrawerAction(
     closeMenu()
     when (action) {
         AppDrawerAction.HOME -> goHome()
+        AppDrawerAction.NOTIFICATIONS -> {
+            runCatching {
+                navController.navigate("push_inbox") {
+                    launchSingleTop = true
+                }
+            }.onFailure {
+                AppLog.e("Open notifications inbox failed", it)
+                SafeOps.toast(context, "Could not open Notifications")
+            }
+        }
         AppDrawerAction.DAILY_CHALLENGE -> {
             if (!AppConfigRepository.routeAllowed("daily_challenge")) {
                 SafeOps.toast(context, "Daily Challenge is temporarily unavailable")

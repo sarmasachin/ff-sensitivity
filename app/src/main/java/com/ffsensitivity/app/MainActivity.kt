@@ -56,6 +56,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // DEBUG-only: adb … --ez e2e_signed_in true  (menu black-screen QA; never in release)
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("e2e_signed_in", false)) {
+            UserSessionStore(this).signInLocal(
+                displayName = "E2E Tester",
+                email = "e2e@test.local",
+                userId = "e2e-local"
+            )
+        }
         capturePushDeepLink(intent)
         maybeRequestNotificationPermission()
         // Dark chrome → light status/nav icons (clock, battery stay visible outdoors/indoors).
@@ -73,6 +81,9 @@ class MainActivity : ComponentActivity() {
                 var signedIn by remember { mutableStateOf(sessionStore.isSignedIn()) }
                 var showSignOutConfirm by remember { mutableStateOf(false) }
                 var menuOpen by remember { mutableStateOf(false) }
+                val e2eOpenMenu = remember {
+                    BuildConfig.DEBUG && intent.getBooleanExtra("e2e_open_menu", false)
+                }
                 // Cold-start only — do NOT retie to signedIn. Changing startDestination
                 // after Google login recreates the Nav graph and can flash bottom bar
                 // while login is still showing its loading spinner.
@@ -179,6 +190,14 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(route, signedIn) {
                     if (!signedIn || !showBottomBar) {
                         menuOpen = false
+                    }
+                }
+
+                // DEBUG-only: open drawer after home chrome is ready (menu black-screen QA).
+                LaunchedEffect(e2eOpenMenu, signedIn, showBottomBar) {
+                    if (e2eOpenMenu && signedIn && showBottomBar) {
+                        delay(900)
+                        menuOpen = true
                     }
                 }
 
@@ -328,6 +347,7 @@ private val ANALYTICS_SCREENS = setOf(
     "stylish",
     "contact",
     "about",
+    "push_inbox",
     "scratch_cards",
     "coin_shop",
     "share_sensi",

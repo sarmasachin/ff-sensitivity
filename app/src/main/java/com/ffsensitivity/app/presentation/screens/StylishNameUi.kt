@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -56,10 +55,7 @@ import com.ffsensitivity.app.presentation.theme.VoidBlack
 internal fun StylishNameComposer(
     baseName: String,
     onBaseNameChange: (String) -> Unit,
-    catalogReady: Boolean,
-    roundIndex: Int,
-    remainingUnique: Int,
-    resultCount: Int
+    catalogReady: Boolean
 ) {
     Column(
         modifier = Modifier
@@ -96,68 +92,6 @@ internal fun StylishNameComposer(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             shape = RoundedCornerShape(12.dp),
             colors = stylishFieldColors()
-        )
-
-        if (baseName.isNotBlank() && (roundIndex > 0 || resultCount > 0)) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(Hairline)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StylishMetaPill(
-                    label = "Batch",
-                    value = if (roundIndex > 0) "#$roundIndex" else "—",
-                    modifier = Modifier.weight(1f)
-                )
-                StylishMetaPill(
-                    label = "Showing",
-                    value = "$resultCount",
-                    modifier = Modifier.weight(1f)
-                )
-                StylishMetaPill(
-                    label = "Left",
-                    value = "$remainingUnique",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StylishMetaPill(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(SurfaceDeep.copy(alpha = 0.55f))
-            .border(1.dp, Hairline, RoundedCornerShape(10.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = label.uppercase(),
-            color = InkMuted,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.8.sp
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = value,
-            color = InkPrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace
         )
     }
 }
