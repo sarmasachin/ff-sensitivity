@@ -45,12 +45,14 @@ function buildAndroidMessage(input: {
   body: string;
   deepLink: string;
 }): {
-  notification: { title: string; body: string };
   data: Record<string, string>;
   android: admin.messaging.AndroidConfig;
 } {
+  // Data-only. A `notification` (or android.notification) payload makes
+  // Android show the system tray itself and skip onMessageReceived when the
+  // app is in background/killed — if that system display fails, nothing
+  // appears. The app already posts the shade from onMessageReceived.
   return {
-    notification: { title: input.title, body: input.body },
     data: {
       title: input.title,
       body: input.body,
@@ -59,13 +61,6 @@ function buildAndroidMessage(input: {
     android: {
       priority: 'high',
       ttl: 86400000,
-      notification: {
-        channelId: 'ff_ops_push',
-        icon: 'ic_stat_ff_notification',
-        color: '#E8A838',
-        priority: 'high',
-        defaultSound: true,
-      },
     },
   };
 }
@@ -92,7 +87,6 @@ export async function sendFcmCampaign(input: {
     try {
       await admin.messaging().send({
         topic: input.topic,
-        notification: msg.notification,
         data: msg.data,
         android: msg.android,
       });
@@ -124,12 +118,12 @@ export async function sendFcmCampaign(input: {
     try {
       await admin.messaging().send({
         topic: 'all_users',
-        notification: msg.notification,
         data: msg.data,
         android: msg.android,
       });
-    } catch {
-      // Token path below remains the scored delivery count.
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[push-fcm] all_users topic send failed', e);
     }
   }
 
@@ -147,7 +141,6 @@ export async function sendFcmCampaign(input: {
     const chunk = tokens.slice(i, i + chunkSize);
     const res = await admin.messaging().sendEachForMulticast({
       tokens: chunk,
-      notification: msg.notification,
       data: msg.data,
       android: msg.android,
     });

@@ -25,13 +25,13 @@ class FfFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         AppLog.e("FCM token refreshed")
-        PushRepository.storeFcmToken(applicationContext, token)
-        val access = UserSessionStore(applicationContext).accessToken()
-        if (access.isNotBlank()) {
-            Thread {
+        Thread {
+            PushRepository.ensureFcmSubscribed(applicationContext)
+            val access = UserSessionStore(applicationContext).accessToken()
+            if (access.isNotBlank()) {
                 PushRepository.registerAndSync(applicationContext)
-            }.start()
-        }
+            }
+        }.start()
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

@@ -76,18 +76,17 @@ async function main() {
   }
 
   const stamp = new Date().toISOString().slice(11, 19);
-  const title = `Live Test ${stamp}`;
-  const body = 'FF Sensi Pro live push smoke — open Challenge';
+  const title = `E2E tray ${stamp}`;
+  const body = 'Phone shade check — FF Sensi Pro';
   const deepLink = 'ffops://challenge';
 
   try {
     const id = await admin.messaging().send({
       topic: 'all_users',
-      notification: { title, body },
       data: { title, body, deepLink },
       android: {
         priority: 'high',
-        notification: { channelId: 'ff_ops_push' },
+        ttl: 86400000,
       },
     });
     console.log(`PASS fcm_topic_all_users messageId=${id.slice(0, 24)}…`);
