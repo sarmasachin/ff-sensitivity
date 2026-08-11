@@ -95,6 +95,7 @@ export declare class PushService {
         }[];
     }>;
     private resolveAudienceTokens;
-    private dedupeTokensByDevice;
+    private keepLatestTokenPerUser;
+    private retireOtherUserTokens;
     private resolveAudienceCount;
 }

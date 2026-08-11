@@ -119,6 +119,7 @@ export declare class DevicesService {
         };
     }>;
     assertInstallAllowed(userId: string, installIdRaw?: string): Promise<void>;
+    assertInstallNotBlocked(installIdRaw: string): Promise<void>;
     filterEnabledTokens<T extends {
         userId: string;
         installId?: string | null;

@@ -224,7 +224,7 @@ export default function PushPage() {
       const saved = await sendPushCampaign(id);
       setRows((prev) => prev.map((r) => (r.id === id ? saved : r)));
       setNotice(
-        `Sent “${saved.title}” — delivered ${saved.delivered.toLocaleString()} device(s), failed ${saved.failed.toLocaleString()}.`,
+        `Sent “${saved.title}” — received by ${saved.delivered.toLocaleString()} live device(s), failed ${saved.failed.toLocaleString()}.`,
       );
     } catch (e) {
       setNotice(null);

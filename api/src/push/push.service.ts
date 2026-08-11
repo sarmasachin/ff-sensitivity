@@ -360,10 +360,8 @@ export class PushService {
 
     let installId: string | undefined;
     if (dto.installId) {
-      await this.devices.assertInstallAllowed(userId, dto.installId);
+      await this.devices.assertInstallNotBlocked(dto.installId);
       installId = assertInstallId(dto.installId);
-    } else {
-      await this.devices.assertInstallAllowed(userId);
     }
 
     const row = await this.prisma.devicePushToken.upsert({
@@ -386,27 +384,9 @@ export class PushService {
         lastSeenAt: new Date(),
       },
     });
-    if (installId) {
-      // Drop stale tokens for this install so fan-out uses the fresh FCM token only.
-      await this.prisma.devicePushToken.updateMany({
-        where: { installId, token: { not: token } },
-        data: { pushEnabled: false },
-      });
-      // Drop orphan tokens (no installId) for this user — usually old test rows.
-      await this.prisma.devicePushToken.updateMany({
-        where: { userId, installId: null, token: { not: token } },
-        data: { pushEnabled: false },
-      });
-      await this.prisma.deviceInstall.updateMany({
-        where: { installId, userId },
-        data: {
-          hasFcmToken: true,
-          fcmTokenHint: `${token.slice(0, 4)}…${token.slice(-4)}`,
-          pushEnabled: true,
-          uninstallSuspectedAt: null,
-        },
-      });
-    }
+    // One live token per Google account. Reinstall / emulator leftovers
+    // must not keep receiving or inflating "devices delivered".
+    await this.retireOtherUserTokens(userId, token, installId);
 
     return {
       ok: true,
@@ -425,8 +405,11 @@ export class PushService {
     if (!user) {
       return { messages: [] };
     }
-    // New signups must not see campaigns sent before their account existed.
-    const signedUpAt = user.createdAt;
+    // Hide long pre-signup history, but keep the last 7 days so a new
+    // account still sees a blast that was sent just before they signed up.
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const since =
+      user.createdAt.getTime() < weekAgo.getTime() ? user.createdAt : weekAgo;
 
     const [tokens, claimCount, rows] = await Promise.all([
       this.prisma.devicePushToken.findMany({
@@ -437,7 +420,7 @@ export class PushService {
       this.prisma.pushCampaign.findMany({
         where: {
           status: PushStatus.SENT,
-          sentAt: { gte: signedUpAt },
+          sentAt: { gte: since },
         },
         orderBy: { sentAt: 'desc' },
         take: 40,
@@ -522,35 +505,101 @@ export class PushService {
       });
     }
     const allowed = await this.devices.filterEnabledTokens(rows);
-    // One live token per physical install (and one orphan token per user).
-    // Stops emulator/reinstall leftovers from inflating "devices delivered".
-    return this.dedupeTokensByDevice(allowed);
+    return this.keepLatestTokenPerUser(allowed);
   }
 
-  /** Prefer newest lastSeenAt; key = installId, else userId for null-install rows. */
-  private dedupeTokensByDevice(
+  /**
+   * Uninstall/reinstall creates a new installId but leaves old tokens enabled.
+   * Keep only the newest token per user and disable the rest in DB.
+   */
+  private async keepLatestTokenPerUser(
     rows: {
       token: string;
       userId: string;
-      installId?: string | null;
-      lastSeenAt?: Date;
+      installId: string | null;
+      lastSeenAt: Date;
     }[],
-  ): string[] {
+  ): Promise<string[]> {
     const best = new Map<
       string,
-      { token: string; lastSeenAt: number }
+      {
+        token: string;
+        installId: string | null;
+        lastSeenAt: number;
+      }
     >();
     for (const row of rows) {
-      const key = row.installId
-        ? `install:${row.installId}`
-        : `user:${row.userId}`;
       const seen = row.lastSeenAt?.getTime?.() ?? 0;
-      const prev = best.get(key);
+      const prev = best.get(row.userId);
       if (!prev || seen >= prev.lastSeenAt) {
-        best.set(key, { token: row.token, lastSeenAt: seen });
+        best.set(row.userId, {
+          token: row.token,
+          installId: row.installId,
+          lastSeenAt: seen,
+        });
+      }
+    }
+    const keepTokens = new Set([...best.values()].map((v) => v.token));
+    const stale = rows.filter((row) => !keepTokens.has(row.token));
+    if (stale.length > 0) {
+      await this.prisma.devicePushToken.updateMany({
+        where: { token: { in: stale.map((row) => row.token) } },
+        data: { pushEnabled: false },
+      });
+      const staleInstalls = [
+        ...new Set(
+          stale
+            .map((row) => row.installId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      if (staleInstalls.length > 0) {
+        await this.prisma.deviceInstall.updateMany({
+          where: { installId: { in: staleInstalls } },
+          data: {
+            hasFcmToken: false,
+            pushEnabled: false,
+            uninstallSuspectedAt: new Date(),
+          },
+        });
       }
     }
     return [...best.values()].map((v) => v.token);
+  }
+
+  private async retireOtherUserTokens(
+    userId: string,
+    liveToken: string,
+    liveInstallId?: string,
+  ) {
+    await this.prisma.devicePushToken.updateMany({
+      where: { userId, token: { not: liveToken } },
+      data: { pushEnabled: false },
+    });
+    if (liveInstallId) {
+      // Same phone, new Google account: stop the previous owner's token.
+      await this.prisma.devicePushToken.updateMany({
+        where: { installId: liveInstallId, token: { not: liveToken } },
+        data: { pushEnabled: false },
+      });
+      await this.prisma.deviceInstall.updateMany({
+        where: { userId, installId: { not: liveInstallId } },
+        data: {
+          hasFcmToken: false,
+          pushEnabled: false,
+          uninstallSuspectedAt: new Date(),
+        },
+      });
+      await this.prisma.deviceInstall.updateMany({
+        where: { installId: liveInstallId, userId },
+        data: {
+          hasFcmToken: true,
+          fcmTokenHint: `${liveToken.slice(0, 4)}…${liveToken.slice(-4)}`,
+          pushEnabled: true,
+          uninstallSuspectedAt: null,
+        },
+      });
+    }
   }
 
   private async resolveAudienceCount(campaign: {

@@ -294,11 +294,8 @@ let PushService = class PushService {
             .slice(0, 20);
         let installId;
         if (dto.installId) {
-            await this.devices.assertInstallAllowed(userId, dto.installId);
+            await this.devices.assertInstallNotBlocked(dto.installId);
             installId = (0, devices_security_1.assertInstallId)(dto.installId);
-        }
-        else {
-            await this.devices.assertInstallAllowed(userId);
         }
         const row = await this.prisma.devicePushToken.upsert({
             where: { token },
@@ -320,25 +317,7 @@ let PushService = class PushService {
                 lastSeenAt: new Date(),
             },
         });
-        if (installId) {
-            await this.prisma.devicePushToken.updateMany({
-                where: { installId, token: { not: token } },
-                data: { pushEnabled: false },
-            });
-            await this.prisma.devicePushToken.updateMany({
-                where: { userId, installId: null, token: { not: token } },
-                data: { pushEnabled: false },
-            });
-            await this.prisma.deviceInstall.updateMany({
-                where: { installId, userId },
-                data: {
-                    hasFcmToken: true,
-                    fcmTokenHint: `${token.slice(0, 4)}…${token.slice(-4)}`,
-                    pushEnabled: true,
-                    uninstallSuspectedAt: null,
-                },
-            });
-        }
+        await this.retireOtherUserTokens(userId, token, installId);
         return {
             ok: true,
             platform: row.platform,
@@ -354,7 +333,8 @@ let PushService = class PushService {
         if (!user) {
             return { messages: [] };
         }
-        const signedUpAt = user.createdAt;
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const since = user.createdAt.getTime() < weekAgo.getTime() ? user.createdAt : weekAgo;
         const [tokens, claimCount, rows] = await Promise.all([
             this.prisma.devicePushToken.findMany({
                 where: { userId, pushEnabled: true },
@@ -364,7 +344,7 @@ let PushService = class PushService {
             this.prisma.pushCampaign.findMany({
                 where: {
                     status: client_1.PushStatus.SENT,
-                    sentAt: { gte: signedUpAt },
+                    sentAt: { gte: since },
                 },
                 orderBy: { sentAt: 'desc' },
                 take: 40,
@@ -444,21 +424,74 @@ let PushService = class PushService {
             });
         }
         const allowed = await this.devices.filterEnabledTokens(rows);
-        return this.dedupeTokensByDevice(allowed);
+        return this.keepLatestTokenPerUser(allowed);
     }
-    dedupeTokensByDevice(rows) {
+    async keepLatestTokenPerUser(rows) {
         const best = new Map();
         for (const row of rows) {
-            const key = row.installId
-                ? `install:${row.installId}`
-                : `user:${row.userId}`;
             const seen = row.lastSeenAt?.getTime?.() ?? 0;
-            const prev = best.get(key);
+            const prev = best.get(row.userId);
             if (!prev || seen >= prev.lastSeenAt) {
-                best.set(key, { token: row.token, lastSeenAt: seen });
+                best.set(row.userId, {
+                    token: row.token,
+                    installId: row.installId,
+                    lastSeenAt: seen,
+                });
+            }
+        }
+        const keepTokens = new Set([...best.values()].map((v) => v.token));
+        const stale = rows.filter((row) => !keepTokens.has(row.token));
+        if (stale.length > 0) {
+            await this.prisma.devicePushToken.updateMany({
+                where: { token: { in: stale.map((row) => row.token) } },
+                data: { pushEnabled: false },
+            });
+            const staleInstalls = [
+                ...new Set(stale
+                    .map((row) => row.installId)
+                    .filter((id) => Boolean(id))),
+            ];
+            if (staleInstalls.length > 0) {
+                await this.prisma.deviceInstall.updateMany({
+                    where: { installId: { in: staleInstalls } },
+                    data: {
+                        hasFcmToken: false,
+                        pushEnabled: false,
+                        uninstallSuspectedAt: new Date(),
+                    },
+                });
             }
         }
         return [...best.values()].map((v) => v.token);
+    }
+    async retireOtherUserTokens(userId, liveToken, liveInstallId) {
+        await this.prisma.devicePushToken.updateMany({
+            where: { userId, token: { not: liveToken } },
+            data: { pushEnabled: false },
+        });
+        if (liveInstallId) {
+            await this.prisma.devicePushToken.updateMany({
+                where: { installId: liveInstallId, token: { not: liveToken } },
+                data: { pushEnabled: false },
+            });
+            await this.prisma.deviceInstall.updateMany({
+                where: { userId, installId: { not: liveInstallId } },
+                data: {
+                    hasFcmToken: false,
+                    pushEnabled: false,
+                    uninstallSuspectedAt: new Date(),
+                },
+            });
+            await this.prisma.deviceInstall.updateMany({
+                where: { installId: liveInstallId, userId },
+                data: {
+                    hasFcmToken: true,
+                    fcmTokenHint: `${liveToken.slice(0, 4)}…${liveToken.slice(-4)}`,
+                    pushEnabled: true,
+                    uninstallSuspectedAt: null,
+                },
+            });
+        }
     }
     async resolveAudienceCount(campaign) {
         return (await this.resolveAudienceTokens(campaign)).length;

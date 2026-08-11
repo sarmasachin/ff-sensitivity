@@ -119,18 +119,6 @@ async function sendFcmCampaign(input) {
     let delivered = 0;
     let failed = 0;
     const unregisteredTokens = [];
-    if (input.audience === 'ALL') {
-        try {
-            await admin.messaging().send({
-                topic: 'all_users',
-                notification: msg.notification,
-                data: msg.data,
-                android: msg.android,
-            });
-        }
-        catch {
-        }
-    }
     if (tokens.length === 0) {
         return {
             mode: 'fcm',

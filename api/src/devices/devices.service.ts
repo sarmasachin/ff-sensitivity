@@ -361,6 +361,22 @@ export class DevicesService {
     }
   }
 
+  /** Push token refresh: block only banned devices. Account switch on the same phone is allowed. */
+  async assertInstallNotBlocked(installIdRaw: string) {
+    const installId = assertInstallId(installIdRaw);
+    const row = await this.prisma.deviceInstall.findUnique({
+      where: { installId },
+      select: { blocked: true },
+    });
+    if (row?.blocked) {
+      throw new AppError(
+        'DEVICE_BLOCKED',
+        'This device is blocked by ops.',
+        403,
+      );
+    }
+  }
+
   /** Filter push fan-out: drop tokens tied to blocked installs. */
   async filterEnabledTokens<
     T extends { userId: string; installId?: string | null; token: string },

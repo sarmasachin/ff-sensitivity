@@ -100,8 +100,8 @@ object PushRepository {
                 topics = defaultTopics,
                 installId = DeviceInstallStore.installId(context)
             ).getOrThrow()
-            // Keep Nest device registry in sync after FCM bind.
-            DeviceRepository.syncHeartbeat(context)
+            // Heartbeat may be DEVICE_OWNED after account switch — push token is enough.
+            runCatching { DeviceRepository.syncHeartbeat(context) }
             refreshInbox(context).getOrElse { emptyList() }
         }.onFailure {
             AppLog.e("PushRepository.registerAndSync failed", it)

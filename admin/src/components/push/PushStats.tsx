@@ -53,7 +53,7 @@ export function PushStats({
       <Stat
         label="Devices delivered"
         value={devicesDelivered.toLocaleString()}
-        hint="FCM accepted on device tokens"
+        hint="Live devices that received the send"
         valueClassName="text-emerald-700"
       />
       <Stat

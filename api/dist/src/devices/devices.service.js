@@ -302,6 +302,16 @@ let DevicesService = class DevicesService {
             throw new app_error_1.AppError('DEVICE_OWNED', 'This install is already linked to another account.', 403);
         }
     }
+    async assertInstallNotBlocked(installIdRaw) {
+        const installId = (0, devices_security_1.assertInstallId)(installIdRaw);
+        const row = await this.prisma.deviceInstall.findUnique({
+            where: { installId },
+            select: { blocked: true },
+        });
+        if (row?.blocked) {
+            throw new app_error_1.AppError('DEVICE_BLOCKED', 'This device is blocked by ops.', 403);
+        }
+    }
     async filterEnabledTokens(rows) {
         if (rows.length === 0)
             return rows;
