@@ -31,6 +31,61 @@ export class UsersService {
     }
   }
 
+  private readonly installSelect = {
+    installId: true,
+    userId: true,
+    brand: true,
+    model: true,
+    androidVersion: true,
+    appVersion: true,
+    lastSeenAt: true,
+  } as const;
+
+  /** Same phone, second Google id: install stays on first user; token still has installId. */
+  private async attachSharedInstalls<
+    T extends {
+      id: string;
+      deviceInstalls: {
+        installId: string;
+        userId?: string | null;
+        brand: string;
+        model: string;
+        androidVersion: string;
+        appVersion: string;
+        lastSeenAt: Date;
+      }[];
+    },
+  >(users: T[]): Promise<T[]> {
+    const missing = users.filter((u) => u.deviceInstalls.length === 0);
+    if (missing.length === 0) return users;
+    const tokens = await this.prisma.devicePushToken.findMany({
+      where: {
+        userId: { in: missing.map((u) => u.id) },
+        installId: { not: null },
+      },
+      orderBy: { lastSeenAt: 'desc' },
+      select: { userId: true, installId: true },
+    });
+    const installIdByUser = new Map<string, string>();
+    for (const row of tokens) {
+      if (row.installId && !installIdByUser.has(row.userId)) {
+        installIdByUser.set(row.userId, row.installId);
+      }
+    }
+    if (installIdByUser.size === 0) return users;
+    const extras = await this.prisma.deviceInstall.findMany({
+      where: { installId: { in: [...new Set(installIdByUser.values())] } },
+      select: this.installSelect,
+    });
+    const byInstall = new Map(extras.map((row) => [row.installId, row]));
+    return users.map((user) => {
+      if (user.deviceInstalls.length > 0) return user;
+      const installId = installIdByUser.get(user.id);
+      const shared = installId ? byInstall.get(installId) : undefined;
+      return shared ? { ...user, deviceInstalls: [shared] } : user;
+    });
+  }
+
   private toUserRow(
     user: {
       id: string;
@@ -46,6 +101,7 @@ export class UsersService {
       _count: { claims: number };
       deviceInstalls: {
         installId: string;
+        userId: string | null;
         brand: string;
         model: string;
         androidVersion: string;
@@ -56,8 +112,10 @@ export class UsersService {
     now = new Date(),
   ) {
     const install = user.deviceInstalls[0];
+    const ownsInstall = Boolean(install?.userId && install.userId === user.id);
     const activityAt =
-      install?.lastSeenAt &&
+      ownsInstall &&
+      install.lastSeenAt &&
       (!user.lastLoginAt || install.lastSeenAt > user.lastLoginAt)
         ? install.lastSeenAt
         : (user.lastLoginAt ?? user.createdAt);
@@ -105,21 +163,15 @@ export class UsersService {
         deviceInstalls: {
           orderBy: { lastSeenAt: 'desc' },
           take: 1,
-          select: {
-            installId: true,
-            brand: true,
-            model: true,
-            androidVersion: true,
-            appVersion: true,
-            lastSeenAt: true,
-          },
+          select: this.installSelect,
         },
       },
     });
     if (!user) {
       throw new AppError('USER_NOT_FOUND', 'User not found.', 404);
     }
-    return this.toUserRow(user);
+    const [resolved] = await this.attachSharedInstalls([user]);
+    return this.toUserRow(resolved);
   }
 
   async adminListUsers() {
@@ -141,19 +193,13 @@ export class UsersService {
         deviceInstalls: {
           orderBy: { lastSeenAt: 'desc' },
           take: 1,
-          select: {
-            installId: true,
-            brand: true,
-            model: true,
-            androidVersion: true,
-            appVersion: true,
-            lastSeenAt: true,
-          },
+          select: this.installSelect,
         },
       },
     });
     const now = new Date();
-    return { users: users.map((u) => this.toUserRow(u, now)) };
+    const resolved = await this.attachSharedInstalls(users);
+    return { users: resolved.map((u) => this.toUserRow(u, now)) };
   }
 
   async adminSetStatus(

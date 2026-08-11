@@ -297,7 +297,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         screenSessionTracker.onForeground()
-        // Topic subscribe even before JWT — used only when admin sends an FCM topic.
+        // Topic subscribe even before JWT — ALL campaigns also fan out on all_users (tray).
         Thread {
             PushRepository.ensureFcmSubscribed(applicationContext)
             val session = UserSessionStore(this@MainActivity)

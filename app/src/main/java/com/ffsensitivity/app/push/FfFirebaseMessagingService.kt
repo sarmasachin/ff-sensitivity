@@ -6,11 +6,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.ffsensitivity.app.MainActivity
 import com.ffsensitivity.app.R
 import com.ffsensitivity.app.data.UserSessionStore
@@ -80,6 +83,8 @@ class FfFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pending)
+        // Left shade circle (Paytm/PhonePe style) = full-color launcher logo.
+        // Small icon stays the status-bar silhouette — Android tints that white.
         loadAppIconBitmap()?.let { builder.setLargeIcon(it) }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
@@ -97,22 +102,35 @@ class FfFirebaseMessagingService : FirebaseMessagingService() {
         nm.notify(notifyId, builder.build())
     }
 
-    /** Full-color launcher art for the left notification circle. */
+    /**
+     * Same home-screen logo other apps put in the left notification circle.
+     * Do not draw a custom triangle plate — that overrides the launcher icon.
+     */
     private fun loadAppIconBitmap(): Bitmap? {
         return runCatching {
-            val decoded =
-                BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_foreground)
-                    ?: BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
-            if (decoded != null) return@runCatching decoded
-            val drawable = packageManager.getApplicationIcon(packageName)
-            val size = 192
-            Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { bmp ->
-                drawable.setBounds(0, 0, size, size)
-                drawable.draw(Canvas(bmp))
-            }
+            val size = (48f * resources.displayMetrics.density).toInt().coerceIn(128, 256)
+            val icon =
+                applicationInfo.loadUnbadgedIcon(packageManager)
+                    ?: packageManager.getApplicationIcon(packageName)
+            drawableToBitmap(icon, size)
         }.onFailure {
             AppLog.e("Notification app icon bitmap failed", it)
         }.getOrNull()
+    }
+
+    private fun drawableToBitmap(drawable: Drawable, size: Int): Bitmap {
+        if (drawable is BitmapDrawable && drawable.bitmap != null) {
+            return Bitmap.createScaledBitmap(drawable.bitmap, size, size, true)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            drawable is AdaptiveIconDrawable
+        ) {
+            return drawable.toBitmap(size, size)
+        }
+        return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { bmp ->
+            drawable.setBounds(0, 0, size, size)
+            drawable.draw(Canvas(bmp))
+        }
     }
 
     companion object {

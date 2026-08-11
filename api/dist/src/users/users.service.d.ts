@@ -5,6 +5,8 @@ export declare class UsersService {
     private readonly prisma;
     constructor(prisma: PrismaService);
     private assertCanMutate;
+    private readonly installSelect;
+    private attachSharedInstalls;
     private toUserRow;
     private loadRow;
     adminListUsers(): Promise<{

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import com.ffsensitivity.app.BuildConfig
 import com.ffsensitivity.app.data.DeviceInstallStore
+import com.ffsensitivity.app.data.DeviceMarketName
 import com.ffsensitivity.app.data.UserSessionStore
 import com.ffsensitivity.app.util.AppLog
 
@@ -47,7 +48,7 @@ object DeviceRepository {
                 accessToken = access,
                 installId = installId,
                 brand = Build.BRAND.orEmpty().take(40),
-                model = Build.MODEL.orEmpty().take(60),
+                model = DeviceMarketName.forHeartbeat().take(60),
                 androidVersion = Build.VERSION.RELEASE.orEmpty().take(20),
                 appVersion = versionName.take(32),
                 appVersionCode = versionCode,

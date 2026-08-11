@@ -25,9 +25,53 @@ let UsersService = class UsersService {
             throw new app_error_1.AppError('FORBIDDEN_ROLE', 'Viewers cannot change users.', 403);
         }
     }
+    installSelect = {
+        installId: true,
+        userId: true,
+        brand: true,
+        model: true,
+        androidVersion: true,
+        appVersion: true,
+        lastSeenAt: true,
+    };
+    async attachSharedInstalls(users) {
+        const missing = users.filter((u) => u.deviceInstalls.length === 0);
+        if (missing.length === 0)
+            return users;
+        const tokens = await this.prisma.devicePushToken.findMany({
+            where: {
+                userId: { in: missing.map((u) => u.id) },
+                installId: { not: null },
+            },
+            orderBy: { lastSeenAt: 'desc' },
+            select: { userId: true, installId: true },
+        });
+        const installIdByUser = new Map();
+        for (const row of tokens) {
+            if (row.installId && !installIdByUser.has(row.userId)) {
+                installIdByUser.set(row.userId, row.installId);
+            }
+        }
+        if (installIdByUser.size === 0)
+            return users;
+        const extras = await this.prisma.deviceInstall.findMany({
+            where: { installId: { in: [...new Set(installIdByUser.values())] } },
+            select: this.installSelect,
+        });
+        const byInstall = new Map(extras.map((row) => [row.installId, row]));
+        return users.map((user) => {
+            if (user.deviceInstalls.length > 0)
+                return user;
+            const installId = installIdByUser.get(user.id);
+            const shared = installId ? byInstall.get(installId) : undefined;
+            return shared ? { ...user, deviceInstalls: [shared] } : user;
+        });
+    }
     toUserRow(user, now = new Date()) {
         const install = user.deviceInstalls[0];
-        const activityAt = install?.lastSeenAt &&
+        const ownsInstall = Boolean(install?.userId && install.userId === user.id);
+        const activityAt = ownsInstall &&
+            install.lastSeenAt &&
             (!user.lastLoginAt || install.lastSeenAt > user.lastLoginAt)
             ? install.lastSeenAt
             : (user.lastLoginAt ?? user.createdAt);
@@ -74,21 +118,15 @@ let UsersService = class UsersService {
                 deviceInstalls: {
                     orderBy: { lastSeenAt: 'desc' },
                     take: 1,
-                    select: {
-                        installId: true,
-                        brand: true,
-                        model: true,
-                        androidVersion: true,
-                        appVersion: true,
-                        lastSeenAt: true,
-                    },
+                    select: this.installSelect,
                 },
             },
         });
         if (!user) {
             throw new app_error_1.AppError('USER_NOT_FOUND', 'User not found.', 404);
         }
-        return this.toUserRow(user);
+        const [resolved] = await this.attachSharedInstalls([user]);
+        return this.toUserRow(resolved);
     }
     async adminListUsers() {
         const users = await this.prisma.user.findMany({
@@ -109,19 +147,13 @@ let UsersService = class UsersService {
                 deviceInstalls: {
                     orderBy: { lastSeenAt: 'desc' },
                     take: 1,
-                    select: {
-                        installId: true,
-                        brand: true,
-                        model: true,
-                        androidVersion: true,
-                        appVersion: true,
-                        lastSeenAt: true,
-                    },
+                    select: this.installSelect,
                 },
             },
         });
         const now = new Date();
-        return { users: users.map((u) => this.toUserRow(u, now)) };
+        const resolved = await this.attachSharedInstalls(users);
+        return { users: resolved.map((u) => this.toUserRow(u, now)) };
     }
     async adminSetStatus(admin, userIdRaw, dto) {
         this.assertCanMutate(admin);
