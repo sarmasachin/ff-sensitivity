@@ -117,6 +117,22 @@ export async function sendFcmCampaign(input: {
   let failed = 0;
   const unregisteredTokens: string[] = [];
 
+  // Tray: every phone that opened the app subscribed to all_users.
+  // Do this even when the token ledger is empty. Do not add to delivered —
+  // admin count stays unique live tokens only.
+  if (input.audience === 'ALL') {
+    try {
+      await admin.messaging().send({
+        topic: 'all_users',
+        notification: msg.notification,
+        data: msg.data,
+        android: msg.android,
+      });
+    } catch {
+      // Token path below remains the scored delivery count.
+    }
+  }
+
   if (tokens.length === 0) {
     return {
       mode: 'fcm',
