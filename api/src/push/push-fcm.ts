@@ -44,6 +44,7 @@ function buildAndroidMessage(input: {
   title: string;
   body: string;
   deepLink: string;
+  campaignId?: string;
 }): {
   data: Record<string, string>;
   android: admin.messaging.AndroidConfig;
@@ -52,15 +53,18 @@ function buildAndroidMessage(input: {
   // Android show the system tray itself and skip onMessageReceived when the
   // app is in background/killed — if that system display fails, nothing
   // appears. The app already posts the shade from onMessageReceived.
+  const campaignId = input.campaignId?.trim() ?? '';
   return {
     data: {
       title: input.title,
       body: input.body,
       deepLink: input.deepLink,
+      ...(campaignId ? { campaignId } : {}),
     },
     android: {
       priority: 'high',
       ttl: 86400000,
+      ...(campaignId ? { collapseKey: campaignId.slice(0, 64) } : {}),
     },
   };
 }
@@ -72,6 +76,7 @@ export async function sendFcmCampaign(input: {
   audience: 'ALL' | 'ACTIVE_7D' | 'NO_CLAIM' | 'TOPIC';
   topic: string;
   tokens: string[];
+  campaignId?: string;
 }): Promise<FcmSendResult> {
   if (!initFirebaseAdmin()) {
     throw new AppError(
@@ -111,9 +116,9 @@ export async function sendFcmCampaign(input: {
   let failed = 0;
   const unregisteredTokens: string[] = [];
 
-  // Tray: every phone that opened the app subscribed to all_users.
-  // Do this even when the token ledger is empty. Do not add to delivered —
-  // admin count stays unique live tokens only.
+  // ALL: one topic send only. Token multicast on top of all_users
+  // duplicates the shade on every phone that is both subscribed and
+  // in the ledger (the live admin-send case).
   if (input.audience === 'ALL') {
     try {
       await admin.messaging().send({
@@ -121,6 +126,12 @@ export async function sendFcmCampaign(input: {
         data: msg.data,
         android: msg.android,
       });
+      return {
+        mode: 'fcm',
+        delivered: tokens.length > 0 ? tokens.length : 1,
+        failed: 0,
+        unregisteredTokens: [],
+      };
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[push-fcm] all_users topic send failed', e);

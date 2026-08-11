@@ -200,6 +200,7 @@ export class PushService {
         audience: campaign.audience,
         topic: campaign.topic,
         tokens,
+        campaignId: campaign.id,
       });
       delivered = fcm.delivered;
       failed = fcm.failed;

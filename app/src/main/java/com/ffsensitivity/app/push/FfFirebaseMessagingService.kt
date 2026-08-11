@@ -6,8 +6,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Paint
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -18,7 +18,6 @@ import com.ffsensitivity.app.data.remote.PushRepository
 import com.ffsensitivity.app.util.AppLog
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import kotlin.math.roundToInt
 
 // --- Start: Push FCM live wire (Sachin) ---
 class FfFirebaseMessagingService : FirebaseMessagingService() {
@@ -50,10 +49,16 @@ class FfFirebaseMessagingService : FirebaseMessagingService() {
         val deepLink =
             message.data["deepLink"]?.trim()?.ifBlank { null }
                 ?: "ffops://home"
-        showTrayNotification(title, body, deepLink)
+        val campaignId = message.data["campaignId"]?.trim().orEmpty()
+        showTrayNotification(title, body, deepLink, campaignId)
     }
 
-    private fun showTrayNotification(title: String, body: String, deepLink: String) {
+    private fun showTrayNotification(
+        title: String,
+        body: String,
+        deepLink: String,
+        campaignId: String = "",
+    ) {
         ensureChannel(this)
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -75,7 +80,6 @@ class FfFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pending)
-        // Expanded tray: real launcher app icon.
         loadAppIconBitmap()?.let { builder.setLargeIcon(it) }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
@@ -84,27 +88,27 @@ class FfFirebaseMessagingService : FirebaseMessagingService() {
             AppLog.e("Notifications disabled in system settings — tray skipped")
             return
         }
-        nm.notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), builder.build())
+        val notifyId =
+            if (campaignId.isNotEmpty()) {
+                campaignId.hashCode()
+            } else {
+                (System.currentTimeMillis() % Int.MAX_VALUE).toInt()
+            }
+        nm.notify(notifyId, builder.build())
     }
 
-    /**
-     * Large-icon circle: dark round plate + padded launcher mark so OEM circular crop
-     * does not clip the brand mark flush to the edge.
-     */
+    /** Full-color launcher art for the left notification circle. */
     private fun loadAppIconBitmap(): Bitmap? {
         return runCatching {
+            val decoded =
+                BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_foreground)
+                    ?: BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+            if (decoded != null) return@runCatching decoded
             val drawable = packageManager.getApplicationIcon(packageName)
             val size = 192
-            val pad = (size * 0.18f).roundToInt()
             Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { bmp ->
-                val canvas = Canvas(bmp)
-                val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xFF07080A.toInt()
-                    style = Paint.Style.FILL
-                }
-                canvas.drawCircle(size / 2f, size / 2f, size / 2f, bg)
-                drawable.setBounds(pad, pad, size - pad, size - pad)
-                drawable.draw(canvas)
+                drawable.setBounds(0, 0, size, size)
+                drawable.draw(Canvas(bmp))
             }
         }.onFailure {
             AppLog.e("Notification app icon bitmap failed", it)
