@@ -155,7 +155,9 @@ export default function RedeemPage() {
 
   async function saveForm(values: RedeemFormValues): Promise<string | null> {
     const body = formToApiBody(values, formMode);
-    if ("error" in body) return body.error;
+    if ("error" in body) {
+      return typeof body.error === "string" ? body.error : "Invalid form.";
+    }
     setError(null);
     try {
       if (formMode === "edit" && editingId) {

@@ -155,7 +155,9 @@ export default function ShopPage() {
 
   async function saveForm(values: ShopFormValues): Promise<string | null> {
     const body = shopFormBody(values, formMode);
-    if ("error" in body) return body.error;
+    if ("error" in body) {
+      return typeof body.error === "string" ? body.error : "Invalid form.";
+    }
     setError(null);
     try {
       if (formMode === "edit" && editingId) {
