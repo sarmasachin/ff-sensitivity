@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,12 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ffsensitivity.app.data.DailyChallengeStore
-import com.ffsensitivity.app.data.ShopAdminTable
-import com.ffsensitivity.app.data.ShopCategory
+import com.ffsensitivity.app.data.ShopCatalogCache
+import com.ffsensitivity.app.data.ShopCategoryRef
 import com.ffsensitivity.app.data.ShopItem
 import com.ffsensitivity.app.data.ShopStore
 import com.ffsensitivity.app.data.UserSessionStore
-import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.EconomyRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
@@ -49,7 +47,8 @@ fun CoinShopScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(ShopTab.STORE) }
-    var category by remember { mutableStateOf<ShopCategory?>(null) }
+    var categoryId by remember { mutableStateOf<String?>(null) }
+    var categories by remember { mutableStateOf<List<ShopCategoryRef>>(emptyList()) }
     var coins by remember { mutableIntStateOf(0) }
     var catalog by remember { mutableStateOf<List<ShopItem>>(emptyList()) }
     var owned by remember { mutableStateOf<List<ShopStore.OwnedItem>>(emptyList()) }
@@ -83,75 +82,51 @@ fun CoinShopScreen(
 
     fun applyLocalSnapshot() {
         coins = DailyChallengeStore.snapshot(context).coins
-        catalog = ShopAdminTable.items()
+        catalog = ShopCatalogCache.items()
+        categories = ShopCatalogCache.categories()
         owned = ShopStore.myItems(context)
         goldWallet = ShopStore.hasGoldWalletStyle(context)
         walletFrozen = EconomyRepository.lastFrozen
     }
 
     suspend fun refreshFromServer(): Boolean {
-        return runCatching {
-            val wallet = withContext(Dispatchers.IO) {
-                EconomyRepository.refreshWallet(context)
-            }
-            wallet.fold(
-                onSuccess = {
-                    applyLocalSnapshot()
-                    catalogLoadFailed = false
-                    if (EconomyRepository.lastFrozen) {
-                        showError(
-                            code = "WALLET_FROZEN",
-                            title = "Wallet frozen",
-                            message = "Purchases are temporarily blocked by support. You can still browse the shop."
-                        )
-                    } else {
-                        clearError()
-                    }
-                    true
-                },
-                onFailure = { err ->
-                    AppLog.e("Shop wallet refresh failed", err)
-                    applyLocalSnapshot()
-                    val auth = err is ApiException && err.code == "AUTH_REQUIRED"
-                    if (auth) {
-                        catalogLoadFailed = false
-                        showError(
-                            code = "AUTH_REQUIRED",
-                            title = "Sign in required",
-                            message = (err as? ApiException)?.message
-                                ?: "Please sign in again to use Coin Shop.",
-                            retryKind = ShopRetryKind.SIGN_IN
-                        )
-                    } else {
-                        catalogLoadFailed = catalog.isEmpty()
-                        showError(
-                            code = "SHOP_REFRESH_FAILED",
-                            title = "Shop unavailable",
-                            message = when (err) {
-                                is ApiException -> err.message
-                                is java.net.ConnectException,
-                                is java.net.SocketTimeoutException,
-                                is java.net.UnknownHostException,
-                                is java.io.IOException ->
-                                    "Can't reach the server. Check Wi‑Fi and try again."
-                                else -> "Could not load wallet or shop. Try again."
-                            },
-                            retryKind = ShopRetryKind.REFRESH
-                        )
-                    }
-                    false
+        return when (val out = refreshShopFromServer(context)) {
+            is ShopRefreshOutcome.Ok -> {
+                applyLocalSnapshot()
+                catalogLoadFailed = false
+                if (out.frozen) {
+                    showError(
+                        code = "WALLET_FROZEN",
+                        title = "Wallet frozen",
+                        message = "Purchases are temporarily blocked by support. You can still browse the shop."
+                    )
+                } else {
+                    clearError()
                 }
-            )
-        }.getOrElse {
-            AppLog.e("Shop refresh crashed", it)
-            catalogLoadFailed = true
-            showError(
-                code = "SHOP_REFRESH_FAILED",
-                title = "Shop unavailable",
-                message = "Could not load wallet or shop. Try again.",
-                retryKind = ShopRetryKind.REFRESH
-            )
-            false
+                true
+            }
+            is ShopRefreshOutcome.AuthRequired -> {
+                applyLocalSnapshot()
+                catalogLoadFailed = false
+                showError(
+                    code = "AUTH_REQUIRED",
+                    title = "Sign in required",
+                    message = out.message,
+                    retryKind = ShopRetryKind.SIGN_IN
+                )
+                false
+            }
+            is ShopRefreshOutcome.Failed -> {
+                applyLocalSnapshot()
+                catalogLoadFailed = catalog.isEmpty()
+                showError(
+                    code = "SHOP_REFRESH_FAILED",
+                    title = "Shop unavailable",
+                    message = out.message,
+                    retryKind = ShopRetryKind.REFRESH
+                )
+                false
+            }
         }
     }
 
@@ -258,7 +233,8 @@ fun CoinShopScreen(
                         coins = result.coinsLeft
                         walletFrozen = EconomyRepository.lastFrozen
                         runCatching {
-                            catalog = ShopAdminTable.items()
+                            catalog = ShopCatalogCache.items()
+                            categories = ShopCatalogCache.categories()
                             owned = ShopStore.myItems(context)
                             goldWallet = ShopStore.hasGoldWalletStyle(context)
                         }.onFailure {
@@ -319,7 +295,7 @@ fun CoinShopScreen(
             ShopRetryKind.BUY -> {
                 val id = error.retryItemId ?: return
                 val item = catalog.firstOrNull { it.id == id }
-                    ?: ShopAdminTable.findById(id)
+                    ?: ShopCatalogCache.findById(id)
                 if (item == null) {
                     ShopStore.clearPendingRequestId(context, id)
                     showError(
@@ -341,9 +317,10 @@ fun CoinShopScreen(
         refreshFromServer()
     }
 
-    val filtered = remember(catalog, category) {
+    val filtered = remember(catalog, categoryId) {
         runCatching {
-            if (category == null) catalog else catalog.filter { it.category == category }
+            if (categoryId == null) catalog
+            else catalog.filter { it.categoryId == categoryId }
         }.getOrElse {
             AppLog.e("Shop filter failed", it)
             catalog
@@ -396,67 +373,24 @@ fun CoinShopScreen(
                     )
                 }
                 if (tab == ShopTab.STORE) {
-                    item {
-                        CategoryChips(
-                            selected = category,
-                            onSelect = {
-                                clearError()
-                                category = it
-                            }
-                        )
-                    }
-                    when {
-                        catalogLoadFailed && catalog.isEmpty() -> {
-                            item {
-                                EmptyShopBlock("Catalog failed to load. Use Retry above.")
-                            }
-                        }
-                        filtered.isEmpty() -> {
-                            item { EmptyShopBlock("No items in this category.") }
-                        }
-                        else -> {
-                            items(filtered, key = { it.id }) { item ->
-                                val ownedOnce = runCatching {
-                                    ShopStore.isOwned(context, item)
-                                }.getOrDefault(false)
-                                val count = runCatching {
-                                    ShopStore.buyCount(context, item.id)
-                                }.getOrDefault(0)
-                                val (canBuy, reason) = runCatching {
-                                    ShopStore.canBuy(context, item, coins)
-                                }.getOrElse {
-                                    AppLog.e("Shop canBuy failed id=${item.id}", it)
-                                    false to "Unavailable right now"
-                                }
-                                val buyEnabled = canBuy &&
-                                    buyingId == null &&
-                                    !walletFrozen
-                                ShopProductCard(
-                                    item = item,
-                                    ownedOnce = ownedOnce,
-                                    buyCount = count,
-                                    canBuy = buyEnabled,
-                                    blockedReason = when {
-                                        walletFrozen -> "Wallet frozen"
-                                        canBuy -> null
-                                        else -> reason
-                                    },
-                                    busy = buyingId == item.id,
-                                    onBuy = { buyItem(item) }
-                                )
-                            }
-                        }
-                    }
+                    coinShopStoreSection(
+                        context = context,
+                        categories = categories,
+                        categoryId = categoryId,
+                        onSelectCategory = {
+                            clearError()
+                            categoryId = it
+                        },
+                        catalogLoadFailed = catalogLoadFailed,
+                        catalogEmpty = catalog.isEmpty(),
+                        filtered = filtered,
+                        coins = coins,
+                        buyingId = buyingId,
+                        walletFrozen = walletFrozen,
+                        onBuy = { buyItem(it) }
+                    )
                 } else {
-                    if (owned.isEmpty()) {
-                        item {
-                            EmptyShopBlock("No purchases yet. Buy items from the Store tab.")
-                        }
-                    } else {
-                        items(owned, key = { "${it.itemId}_${it.purchasedAtMs}" }) { row ->
-                            OwnedProductCard(row)
-                        }
-                    }
+                    coinShopOwnedSection(owned)
                 }
                 item { Spacer(modifier = Modifier.height(24.dp)) }
             }

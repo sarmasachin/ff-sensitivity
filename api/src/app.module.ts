@@ -12,6 +12,9 @@ import { RedeemModule } from './redeem/redeem.module';
 // --- Start: Economy live wire (Sachin) ---
 import { EconomyModule } from './economy/economy.module';
 // --- End: Economy live wire (Sachin) ---
+// --- Start: Shop live wire (Sachin) ---
+import { ShopModule } from './shop/shop.module';
+// --- End: Shop live wire (Sachin) ---
 // --- Start: Community live wire (Sachin) ---
 import { CommunityModule } from './community/community.module';
 // --- End: Community live wire (Sachin) ---
@@ -83,6 +86,9 @@ import { SettingsAdminModule } from './settings/settings.module';
     // --- Start: Economy live wire (Sachin) ---
     EconomyModule,
     // --- End: Economy live wire (Sachin) ---
+    // --- Start: Shop live wire (Sachin) ---
+    ShopModule,
+    // --- End: Shop live wire (Sachin) ---
     // --- Start: Community live wire (Sachin) ---
     CommunityModule,
     // --- End: Community live wire (Sachin) ---

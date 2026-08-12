@@ -23,8 +23,9 @@ export function ShopHeader({ onAdd }: Props) {
             Shop
           </h1>
           <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-white/90">
-            Coin shop for Android — packs, boosts, prizes, enable/disable, and
-            stock limits. Matches the in-app Coin Shop catalog.
+            Live coin-shop catalog for Android — packs, boosts, prizes,
+            enable/disable, and stock. Saves to the same Postgres table the app
+            purchases against.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

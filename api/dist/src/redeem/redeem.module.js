@@ -13,7 +13,10 @@ const analytics_module_1 = require("../analytics/analytics.module");
 const settings_module_1 = require("../settings/settings.module");
 const claims_admin_controller_1 = require("./claims-admin.controller");
 const claims_module_guard_1 = require("./claims-module.guard");
+const redeem_admin_controller_1 = require("./redeem-admin.controller");
+const redeem_admin_service_1 = require("./redeem-admin.service");
 const redeem_controller_1 = require("./redeem.controller");
+const redeem_module_guard_1 = require("./redeem-module.guard");
 const redeem_service_1 = require("./redeem.service");
 let RedeemModule = class RedeemModule {
 };
@@ -21,8 +24,13 @@ exports.RedeemModule = RedeemModule;
 exports.RedeemModule = RedeemModule = __decorate([
     (0, common_1.Module)({
         imports: [auth_module_1.AuthModule, settings_module_1.SettingsAdminModule, analytics_module_1.AnalyticsModule],
-        controllers: [redeem_controller_1.RedeemController, claims_admin_controller_1.ClaimsAdminController],
-        providers: [redeem_service_1.RedeemService, claims_module_guard_1.ClaimsModuleGuard],
+        controllers: [redeem_controller_1.RedeemController, claims_admin_controller_1.ClaimsAdminController, redeem_admin_controller_1.RedeemAdminController],
+        providers: [
+            redeem_service_1.RedeemService,
+            claims_module_guard_1.ClaimsModuleGuard,
+            redeem_admin_service_1.RedeemAdminService,
+            redeem_module_guard_1.RedeemModuleGuard,
+        ],
         exports: [redeem_service_1.RedeemService],
     })
 ], RedeemModule);

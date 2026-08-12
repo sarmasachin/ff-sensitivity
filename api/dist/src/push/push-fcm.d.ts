@@ -12,4 +12,5 @@ export declare function sendFcmCampaign(input: {
     audience: 'ALL' | 'ACTIVE_7D' | 'NO_CLAIM' | 'TOPIC';
     topic: string;
     tokens: string[];
+    campaignId?: string;
 }): Promise<FcmSendResult>;

@@ -283,7 +283,18 @@ internal fun RedeemCodeCard(
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = if (unlocked) {
+                Modifier.clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    onClick = onCopy
+                )
+            } else {
+                Modifier
+            }
+        ) {
             Icon(
                 if (unlocked) Icons.Outlined.Key else Icons.Outlined.Lock,
                 null,
@@ -332,7 +343,7 @@ internal fun RedeemCodeCard(
                 pillModifier = Modifier.weight(1f),
                 label = if (unlocked) "COPY CODE" else "LOCKED",
                 icon = if (unlocked) Icons.Outlined.ContentCopy else Icons.Outlined.Lock,
-                enabled = active && unlocked,
+                enabled = unlocked,
                 filled = false,
                 onClick = onCopy
             )

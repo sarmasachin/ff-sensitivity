@@ -1,7 +1,6 @@
 import {
   PrismaClient,
   AdminRole,
-  RedeemType,
   RedeemCodeStatus,
   RedeemCadence,
 } from '@prisma/client';
@@ -61,92 +60,220 @@ async function main() {
     data: { expiresAt: in7d },
   });
 
-  const existing = await prisma.redeemCode.count();
-  if (existing === 0) {
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-
-    await prisma.redeemCode.createMany({
-      data: [
-        {
-          title: 'GOOGLE PLAY GIFT CARD',
-          type: RedeemType.GOOGLE_PLAY,
-          valueLabel: '₹50 INR',
-          codeSecret: 'ABCD-8X92-K12M-99PL',
-          status: RedeemCodeStatus.ACTIVE,
-          cadence: RedeemCadence.DAILY,
-          stockLeft: 1,
-          coinCost: null,
-          expiresLabel: 'In 4 Hours',
-          expiresAt: in4h,
-          tip: 'First Come, First Serve!',
-          redeemUrl: 'https://play.google.com/redeem',
-        },
-        {
-          title: 'GOOGLE PLAY GIFT CARD',
-          type: RedeemType.GOOGLE_PLAY,
-          valueLabel: '₹50 INR',
-          codeSecret: 'ABCD-8X92-K12M-99P2',
-          status: RedeemCodeStatus.ACTIVE,
-          cadence: RedeemCadence.DAILY,
-          stockLeft: 1,
-          coinCost: null,
-          expiresLabel: 'In 4 Hours',
-          expiresAt: in4h,
-          tip: 'First Come, First Serve!',
-          redeemUrl: 'https://play.google.com/redeem',
-        },
-        {
-          title: 'FREE FIRE DIAMONDS',
-          type: RedeemType.FF_DIAMONDS,
-          valueLabel: '100 Diamonds',
-          codeSecret: 'FFDX-7K21-P90Q-44MZ',
-          status: RedeemCodeStatus.ACTIVE,
-          cadence: RedeemCadence.DAILY,
-          stockLeft: 1,
-          coinCost: 1000,
-          expiresLabel: 'Valid till Midnight',
-          expiresAt: endOfDay,
-          tip: 'First Come, First Serve!',
-          redeemUrl: 'https://reward.ff.garena.com',
-        },
-        {
-          title: 'GOOGLE PLAY GIFT CARD',
-          type: RedeemType.GOOGLE_PLAY,
-          valueLabel: '₹10 INR',
-          codeSecret: 'USED-0000-0000-0001',
-          status: RedeemCodeStatus.EXHAUSTED,
-          cadence: RedeemCadence.DAILY,
-          stockLeft: 0,
-          coinCost: null,
-          expiresLabel: 'Expired',
-          expiresAt: new Date(Date.now() - 60_000),
-          tip: 'First Come, First Serve!',
-          redeemUrl: 'https://play.google.com/redeem',
-        },
-        {
-          title: 'GOOGLE PLAY GIFT CARD',
-          type: RedeemType.GOOGLE_PLAY,
-          valueLabel: '₹100 INR',
-          codeSecret: 'WEEK-9K21-M88P-12QT',
-          status: RedeemCodeStatus.ACTIVE,
-          cadence: RedeemCadence.WEEKLY,
-          stockLeft: 1,
-          coinCost: null,
-          expiresLabel: '7-day streak bonus',
-          expiresAt: in7d,
-          tip: 'Complete 7-day streak for a bigger chance!',
-          redeemUrl: 'https://play.google.com/redeem',
-        },
-      ],
-    });
-    // eslint-disable-next-line no-console
-    console.log('Redeem codes seeded (5 rows, stockLeft=0|1).');
-  } else {
-    // eslint-disable-next-line no-console
-    console.log(`Redeem codes already present: ${existing}`);
-  }
+  const dummySecrets = [
+    'ABCD-8X92-K12M-99PL',
+    'ABCD-8X92-K12M-99P2',
+    'FFDX-7K21-P90Q-44MZ',
+    'USED-0000-0000-0001',
+    'WEEK-9K21-M88P-12QT',
+    'LOWX-7K21-P90Q-0001',
+    'HOLD-9K21-M88P-55ZX',
+  ];
+  const removedDummy = await prisma.redeemCode.deleteMany({
+    where: { codeSecret: { in: dummySecrets } },
+  });
+  // eslint-disable-next-line no-console
+  console.log(`Dummy redeem secrets removed: ${removedDummy.count}`);
   // --- End: Redeem live wire (Sachin) ---
+
+  // --- Start: Shop live wire (Sachin) ---
+  const shopCategories = [
+    { id: 'PRIZE', label: 'Prizes', sortOrder: 10, enabled: true, isBoost: false },
+    { id: 'BOOST', label: 'Boosts', sortOrder: 20, enabled: true, isBoost: true },
+    { id: 'UNLOCK', label: 'Unlocks', sortOrder: 30, enabled: true, isBoost: false },
+    { id: 'PACK', label: 'Packs', sortOrder: 40, enabled: true, isBoost: false },
+    { id: 'COSMETIC', label: 'Cosmetics', sortOrder: 50, enabled: true, isBoost: false },
+  ];
+  for (const cat of shopCategories) {
+    await prisma.shopCategoryDef.upsert({
+      where: { id: cat.id },
+      update: {},
+      create: cat,
+    });
+  }
+  // eslint-disable-next-line no-console
+  console.log(`Shop categories upserted: ${shopCategories.length}`);
+
+  const shopCount = await prisma.shopItem.count();
+  if (shopCount === 0) {
+  const shopSeed: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    category: string;
+    priceCoins: number;
+    enabled: boolean;
+    oneTime: boolean;
+    stockLimit: number | null;
+    rewardTag: string;
+    sortOrder: number;
+  }> = [
+    {
+      id: 'prize_google_play_gift',
+      title: 'Google Play Gift Card',
+      subtitle: 'In-app vault entry only � not a real Google Play code yet.',
+      category: 'PRIZE',
+      priceCoins: 500,
+      enabled: true,
+      oneTime: false,
+      stockLimit: 20,
+      rewardTag: 'VAULT',
+      sortOrder: 10,
+    },
+    {
+      id: 'prize_ff_diamonds',
+      title: 'Free Fire Diamonds',
+      subtitle: 'In-app vault entry only � diamonds are not delivered in-game yet.',
+      category: 'PRIZE',
+      priceCoins: 400,
+      enabled: true,
+      oneTime: false,
+      stockLimit: 40,
+      rewardTag: 'VAULT',
+      sortOrder: 20,
+    },
+    {
+      id: 'prize_ffmax_diamonds',
+      title: 'FF Max Diamonds',
+      subtitle: 'In-app vault entry only � FF Max diamonds not delivered yet.',
+      category: 'PRIZE',
+      priceCoins: 450,
+      enabled: true,
+      oneTime: false,
+      stockLimit: 40,
+      rewardTag: 'VAULT',
+      sortOrder: 30,
+    },
+    {
+      id: 'prize_royale_pass',
+      title: 'Royale Pass',
+      subtitle: 'In-app vault entry only � Pass is not activated on your account yet.',
+      category: 'PRIZE',
+      priceCoins: 600,
+      enabled: true,
+      oneTime: true,
+      stockLimit: null,
+      rewardTag: 'VAULT',
+      sortOrder: 40,
+    },
+    {
+      id: 'prize_premium_skin',
+      title: 'Premium Skin',
+      subtitle: 'In-app vault entry only � skin is not applied in Free Fire yet.',
+      category: 'PRIZE',
+      priceCoins: 350,
+      enabled: true,
+      oneTime: false,
+      stockLimit: 30,
+      rewardTag: 'VAULT',
+      sortOrder: 50,
+    },
+    {
+      id: 'boost_quiz_double',
+      title: 'Quiz Double Coins',
+      subtitle: 'Next correct daily quiz pays 2� coins. Stacks if you buy more.',
+      category: 'BOOST',
+      priceCoins: 80,
+      enabled: true,
+      oneTime: false,
+      stockLimit: 30,
+      rewardTag: '2� QUIZ',
+      sortOrder: 60,
+    },
+    {
+      id: 'boost_checkin_plus',
+      title: 'Check-in Plus',
+      subtitle: 'Next daily check-in pays +20 extra coins. Stacks if you buy more.',
+      category: 'BOOST',
+      priceCoins: 60,
+      enabled: true,
+      oneTime: false,
+      stockLimit: 30,
+      rewardTag: 'STREAK+',
+      sortOrder: 70,
+    },
+    {
+      id: 'unlock_premium_badge',
+      title: 'Pro Player Badge',
+      subtitle: 'Unlock a Pro Player badge for your profile & archive.',
+      category: 'UNLOCK',
+      priceCoins: 200,
+      enabled: false,
+      oneTime: true,
+      stockLimit: null,
+      rewardTag: 'BADGE',
+      sortOrder: 80,
+    },
+    {
+      id: 'unlock_elite_title',
+      title: 'Elite Title',
+      subtitle: 'Unlock the Elite title tag in your rewards identity.',
+      category: 'UNLOCK',
+      priceCoins: 350,
+      enabled: false,
+      oneTime: true,
+      stockLimit: null,
+      rewardTag: 'TITLE',
+      sortOrder: 90,
+    },
+    {
+      id: 'pack_stylish_rare',
+      title: 'Rare Stylish Pack',
+      subtitle: 'Unlocks a rare stylish-name symbol flavor for generators.',
+      category: 'PACK',
+      priceCoins: 150,
+      enabled: false,
+      oneTime: true,
+      stockLimit: null,
+      rewardTag: 'NAMES',
+      sortOrder: 100,
+    },
+    {
+      id: 'pack_scratch_bonus',
+      title: 'Bonus Scratch Token',
+      subtitle: 'Adds a shop win token to your scratch archive history.',
+      category: 'PACK',
+      priceCoins: 120,
+      enabled: true,
+      oneTime: false,
+      stockLimit: 50,
+      rewardTag: 'TOKEN',
+      sortOrder: 110,
+    },
+    {
+      id: 'cosmetic_gold_wallet',
+      title: 'Gold Wallet Chip',
+      subtitle: 'Applies a premium gold accent on your in-app coin wallet chip.',
+      category: 'COSMETIC',
+      priceCoins: 100,
+      enabled: true,
+      oneTime: true,
+      stockLimit: null,
+      rewardTag: 'STYLE',
+      sortOrder: 120,
+    },
+    {
+      id: 'cosmetic_foil_obsidian',
+      title: 'Obsidian Foil Skin',
+      subtitle: 'Applies a dark premium foil look on scratch cards in this app.',
+      category: 'COSMETIC',
+      priceCoins: 180,
+      enabled: true,
+      oneTime: true,
+      stockLimit: null,
+      rewardTag: 'FOIL',
+      sortOrder: 130,
+    },
+  ];
+
+  await prisma.shopItem.createMany({ data: shopSeed });
+  // eslint-disable-next-line no-console
+  console.log(`Shop catalog seeded: ${shopSeed.length}`);
+  } else {
+  // eslint-disable-next-line no-console
+  console.log(`Shop catalog already has ${shopCount} row(s) ? skip item seed`);
+  }
+  // --- End: Shop live wire (Sachin) ---
 
   // --- Start: Challenge live wire (Sachin) ---
   await prisma.challengeConfig.upsert({
@@ -250,26 +377,26 @@ async function main() {
       coinReward: number;
       badge: string | null;
     }> = [
-      { id: 'm7', days: 7, title: 'Week Warrior', rewardLabel: '+50 coins · Scratch', coinReward: 50, badge: null },
-      { id: 'm15', days: 15, title: 'Rising Pro', rewardLabel: '+75 coins · Scratch', coinReward: 75, badge: null },
-      { id: 'm20', days: 20, title: 'Solid Start', rewardLabel: '+100 coins · Scratch', coinReward: 100, badge: null },
-      { id: 'm30', days: 30, title: 'Monthly Elite', rewardLabel: '+150 coins · Badge · Scratch', coinReward: 150, badge: 'Monthly Elite' },
-      { id: 'm45', days: 45, title: 'Focus Fire', rewardLabel: '+200 coins · Scratch', coinReward: 200, badge: null },
-      { id: 'm60', days: 60, title: 'Two Month Ace', rewardLabel: '+250 coins · Scratch', coinReward: 250, badge: null },
-      { id: 'm75', days: 75, title: 'Sharp Shooter', rewardLabel: '+300 coins · Scratch', coinReward: 300, badge: null },
-      { id: 'm90', days: 90, title: 'Quarter Legend', rewardLabel: '+400 coins · Badge · Scratch', coinReward: 400, badge: 'Quarter Legend' },
-      { id: 'm100', days: 100, title: 'Century Club', rewardLabel: '+500 coins · Scratch', coinReward: 500, badge: null },
-      { id: 'm120', days: 120, title: 'Iron Streak', rewardLabel: '+600 coins · Scratch', coinReward: 600, badge: null },
-      { id: 'm150', days: 150, title: 'Half-Year Heat', rewardLabel: '+750 coins · Scratch', coinReward: 750, badge: null },
-      { id: 'm180', days: 180, title: 'Season Master', rewardLabel: '+1000 coins · Badge · Scratch', coinReward: 1000, badge: 'Season Master' },
-      { id: 'm200', days: 200, title: '200 Club', rewardLabel: '+1200 coins · Scratch', coinReward: 1200, badge: null },
-      { id: 'm240', days: 240, title: 'Unbroken', rewardLabel: '+1500 coins · Scratch', coinReward: 1500, badge: null },
-      { id: 'm260', days: 260, title: 'Hardcore', rewardLabel: '+1700 coins · Scratch', coinReward: 1700, badge: null },
-      { id: 'm290', days: 290, title: 'Near Immortal', rewardLabel: '+2000 coins · Scratch', coinReward: 2000, badge: null },
-      { id: 'm300', days: 300, title: '300 Crown', rewardLabel: '+2200 coins · Badge · Scratch', coinReward: 2200, badge: '300 Crown' },
-      { id: 'm350', days: 350, title: 'Final Push', rewardLabel: '+2500 coins · Scratch', coinReward: 2500, badge: null },
-      { id: 'm360', days: 360, title: 'Almost Eternal', rewardLabel: '+2800 coins · Scratch', coinReward: 2800, badge: null },
-      { id: 'm365', days: 365, title: 'Year Legend', rewardLabel: '+5000 coins · Legend · Scratch', coinReward: 5000, badge: 'Year Legend' },
+      { id: 'm7', days: 7, title: 'Week Warrior', rewardLabel: '+50 coins � Scratch', coinReward: 50, badge: null },
+      { id: 'm15', days: 15, title: 'Rising Pro', rewardLabel: '+75 coins � Scratch', coinReward: 75, badge: null },
+      { id: 'm20', days: 20, title: 'Solid Start', rewardLabel: '+100 coins � Scratch', coinReward: 100, badge: null },
+      { id: 'm30', days: 30, title: 'Monthly Elite', rewardLabel: '+150 coins � Badge � Scratch', coinReward: 150, badge: 'Monthly Elite' },
+      { id: 'm45', days: 45, title: 'Focus Fire', rewardLabel: '+200 coins � Scratch', coinReward: 200, badge: null },
+      { id: 'm60', days: 60, title: 'Two Month Ace', rewardLabel: '+250 coins � Scratch', coinReward: 250, badge: null },
+      { id: 'm75', days: 75, title: 'Sharp Shooter', rewardLabel: '+300 coins � Scratch', coinReward: 300, badge: null },
+      { id: 'm90', days: 90, title: 'Quarter Legend', rewardLabel: '+400 coins � Badge � Scratch', coinReward: 400, badge: 'Quarter Legend' },
+      { id: 'm100', days: 100, title: 'Century Club', rewardLabel: '+500 coins � Scratch', coinReward: 500, badge: null },
+      { id: 'm120', days: 120, title: 'Iron Streak', rewardLabel: '+600 coins � Scratch', coinReward: 600, badge: null },
+      { id: 'm150', days: 150, title: 'Half-Year Heat', rewardLabel: '+750 coins � Scratch', coinReward: 750, badge: null },
+      { id: 'm180', days: 180, title: 'Season Master', rewardLabel: '+1000 coins � Badge � Scratch', coinReward: 1000, badge: 'Season Master' },
+      { id: 'm200', days: 200, title: '200 Club', rewardLabel: '+1200 coins � Scratch', coinReward: 1200, badge: null },
+      { id: 'm240', days: 240, title: 'Unbroken', rewardLabel: '+1500 coins � Scratch', coinReward: 1500, badge: null },
+      { id: 'm260', days: 260, title: 'Hardcore', rewardLabel: '+1700 coins � Scratch', coinReward: 1700, badge: null },
+      { id: 'm290', days: 290, title: 'Near Immortal', rewardLabel: '+2000 coins � Scratch', coinReward: 2000, badge: null },
+      { id: 'm300', days: 300, title: '300 Crown', rewardLabel: '+2200 coins � Badge � Scratch', coinReward: 2200, badge: '300 Crown' },
+      { id: 'm350', days: 350, title: 'Final Push', rewardLabel: '+2500 coins � Scratch', coinReward: 2500, badge: null },
+      { id: 'm360', days: 360, title: 'Almost Eternal', rewardLabel: '+2800 coins � Scratch', coinReward: 2800, badge: null },
+      { id: 'm365', days: 365, title: 'Year Legend', rewardLabel: '+5000 coins � Legend � Scratch', coinReward: 5000, badge: 'Year Legend' },
     ];
     await prisma.challengeMilestone.createMany({
       data: msSeed.map((m) => ({ ...m, enabled: true })),
@@ -323,7 +450,7 @@ async function main() {
         {
           id: 'gift_vault_hint',
           title: 'Vault Hint',
-          detail: 'Foil tease — small coin consolation.',
+          detail: 'Foil tease ? small coin consolation.',
           kind: 'GIFT',
           rewardLabel: '+10 coins',
           coinReward: 10,
@@ -336,7 +463,7 @@ async function main() {
           title: 'Week Warrior',
           detail: 'Day-7 streak scratch card grant.',
           kind: 'MILESTONE',
-          rewardLabel: '+50 coins · Scratch',
+          rewardLabel: '+50 coins � Scratch',
           coinReward: 50,
           oddsPercent: 100,
           enabled: true,
@@ -391,21 +518,21 @@ async function main() {
   if (nameFrameCount === 0) {
     await prisma.nameFrame.createMany({
       data: [
-        { id: 'classic', label: 'Classic', prefix: '꧁', suffix: '꧂', premium: true, enabled: true, sortOrder: 0 },
-        { id: 'diamond', label: 'Diamond', prefix: '꧁༒', suffix: '༒꧂', premium: true, enabled: true, sortOrder: 1 },
-        { id: 'tibetan', label: 'Tibetan', prefix: '꧁༺', suffix: '༻꧂', premium: true, enabled: true, sortOrder: 2 },
-        { id: 'star_flow', label: 'Star Flow', prefix: '★彡', suffix: '彡★', premium: false, enabled: true, sortOrder: 3 },
-        { id: 'jp_corner', label: 'JP Corner', prefix: '『', suffix: '』', premium: false, enabled: true, sortOrder: 4 },
-        { id: 'square', label: 'Square', prefix: '【', suffix: '】', premium: false, enabled: true, sortOrder: 5 },
-        { id: 'royal', label: 'Royal', prefix: '♛', suffix: '♛', premium: true, enabled: true, sortOrder: 6 },
-        { id: 'skull', label: 'Skull', prefix: '☠', suffix: '☠', premium: true, enabled: true, sortOrder: 7 },
-        { id: 'bolt', label: 'Bolt', prefix: '⚡', suffix: '⚡', premium: false, enabled: true, sortOrder: 8 },
-        { id: 'blade', label: 'Blade', prefix: '⚔', suffix: '⚔', premium: true, enabled: true, sortOrder: 9 },
-        { id: 'dark', label: 'Dark Elite', prefix: '꧁༒☬', suffix: '☬༒꧂', premium: true, enabled: true, sortOrder: 10 },
-        { id: 'vip_tag', label: 'VIP Tag', prefix: '『VIP』', suffix: '', premium: false, enabled: true, sortOrder: 11 },
-        { id: 'ff_tag', label: 'FF Tag', prefix: '『FF』', suffix: '', premium: false, enabled: false, sortOrder: 12 },
-        { id: 'shadow', label: 'Shadow', prefix: '꧁丨', suffix: '丨꧂', premium: false, enabled: true, sortOrder: 13 },
-        { id: 'clan', label: 'Clan Bars', prefix: '丨', suffix: '丨', premium: false, enabled: true, sortOrder: 14 },
+        { id: 'classic', label: 'Classic', prefix: '?', suffix: '?', premium: true, enabled: true, sortOrder: 0 },
+        { id: 'diamond', label: 'Diamond', prefix: '??', suffix: '??', premium: true, enabled: true, sortOrder: 1 },
+        { id: 'tibetan', label: 'Tibetan', prefix: '??', suffix: '??', premium: true, enabled: true, sortOrder: 2 },
+        { id: 'star_flow', label: 'Star Flow', prefix: '??', suffix: '??', premium: false, enabled: true, sortOrder: 3 },
+        { id: 'jp_corner', label: 'JP Corner', prefix: '?', suffix: '?', premium: false, enabled: true, sortOrder: 4 },
+        { id: 'square', label: 'Square', prefix: '?', suffix: '?', premium: false, enabled: true, sortOrder: 5 },
+        { id: 'royal', label: 'Royal', prefix: '?', suffix: '?', premium: true, enabled: true, sortOrder: 6 },
+        { id: 'skull', label: 'Skull', prefix: '?', suffix: '?', premium: true, enabled: true, sortOrder: 7 },
+        { id: 'bolt', label: 'Bolt', prefix: '?', suffix: '?', premium: false, enabled: true, sortOrder: 8 },
+        { id: 'blade', label: 'Blade', prefix: '?', suffix: '?', premium: true, enabled: true, sortOrder: 9 },
+        { id: 'dark', label: 'Dark Elite', prefix: '???', suffix: '???', premium: true, enabled: true, sortOrder: 10 },
+        { id: 'vip_tag', label: 'VIP Tag', prefix: '?VIP?', suffix: '', premium: false, enabled: true, sortOrder: 11 },
+        { id: 'ff_tag', label: 'FF Tag', prefix: '?FF?', suffix: '', premium: false, enabled: false, sortOrder: 12 },
+        { id: 'shadow', label: 'Shadow', prefix: '??', suffix: '??', premium: false, enabled: true, sortOrder: 13 },
+        { id: 'clan', label: 'Clan Bars', prefix: '?', suffix: '?', premium: false, enabled: true, sortOrder: 14 },
       ],
     });
     // eslint-disable-next-line no-console
@@ -417,13 +544,13 @@ async function main() {
     await prisma.nameFont.createMany({
       data: [
         { id: 'normal', label: 'Caps', sample: 'GHOST', enabled: true, sortOrder: 0 },
-        { id: 'small_caps', label: 'Small Caps', sample: 'ɢʜᴏsᴛ', enabled: true, sortOrder: 1 },
-        { id: 'wide', label: 'Wide', sample: 'ＧＨＯＳＴ', enabled: true, sortOrder: 2 },
-        { id: 'bubbled', label: 'Bubbled', sample: 'ⒼⒽⓄⓈⓉ', enabled: true, sortOrder: 3 },
+        { id: 'small_caps', label: 'Small Caps', sample: '???s?', enabled: true, sortOrder: 1 },
+        { id: 'wide', label: 'Wide', sample: '?????', enabled: true, sortOrder: 2 },
+        { id: 'bubbled', label: 'Bubbled', sample: '?????', enabled: true, sortOrder: 3 },
         {
           id: 'parenthesized',
           label: 'Parenthesized',
-          sample: '🄶🄷🄾🅂🅃',
+          sample: '??????????',
           enabled: false,
           sortOrder: 4,
         },
@@ -511,7 +638,7 @@ async function main() {
         {
           id: 'push_challenge_open',
           title: 'Daily Challenge is live',
-          body: 'Quiz window is open — claim coins before it closes.',
+          body: 'Quiz window is open ? claim coins before it closes.',
           deepLink: 'ffops://challenge',
           audience: 'ACTIVE_7D',
           topic: '',
@@ -542,7 +669,7 @@ async function main() {
       ],
     });
     // eslint-disable-next-line no-console
-    console.log(`Push campaigns seeded (3) — schedule example ${stamp(later)}.`);
+    console.log(`Push campaigns seeded (3) ? schedule example ${stamp(later)}.`);
   }
   // --- End: Push live wire (Sachin) ---
 
@@ -585,20 +712,20 @@ async function main() {
             enabled: true,
             cooldownHours: 24,
             incompleteMessage: 'Watch the full ad to see your settings.',
-            buttonLabel: 'Calculate Best Pro Settings · Watch Ad',
+            buttonLabel: 'Calculate Best Pro Settings � Watch Ad',
           },
           dpi: {
             enabled: true,
             cooldownHours: 24,
             incompleteMessage:
               'Watch the full ad to see your DPI & Resolution result.',
-            buttonLabel: 'DPI & Resolution Result · Watch Ad',
+            buttonLabel: 'DPI & Resolution Result � Watch Ad',
           },
           quiz: {
             enabled: true,
             cooldownHours: 24,
             incompleteMessage: 'Watch the ad to submit the quiz.',
-            buttonLabel: 'Submit Answer · Watch Ad',
+            buttonLabel: 'Submit Answer � Watch Ad',
           },
           secondChance: {
             enabled: true,
@@ -616,13 +743,13 @@ async function main() {
             enabled: true,
             cooldownHours: 24,
             incompleteMessage: 'Watch the ad to claim check-in.',
-            buttonLabel: 'Collect +20 · Watch Ad',
+            buttonLabel: 'Collect +20 � Watch Ad',
           },
           redeemDaily: {
             enabled: true,
             cooldownHours: 24,
-            incompleteMessage: 'Watch the ad to open today’s redeem card.',
-            buttonLabel: 'Redeem Now · Watch Ad',
+            incompleteMessage: 'Watch the ad to open today?s redeem card.',
+            buttonLabel: 'Redeem Now � Watch Ad',
           },
         },
         playStoreUrl:

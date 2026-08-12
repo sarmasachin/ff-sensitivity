@@ -8,13 +8,4 @@ export declare const ECONOMY_AMOUNTS: {
 export declare const BOOST_CHECKIN = "boost_checkin_plus";
 export declare const BOOST_QUIZ = "boost_quiz_double";
 export declare const MILESTONE_REWARDS: Record<number, number>;
-export type ShopCatalogItem = {
-    id: string;
-    priceCoins: number;
-    oneTime: boolean;
-    stockLimit: number | null;
-    enabled: boolean;
-    isBoost: boolean;
-};
-export declare const SHOP_CATALOG: Record<string, ShopCatalogItem>;
 export declare function utcDateKey(d?: Date): string;

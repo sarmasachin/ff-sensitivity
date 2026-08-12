@@ -2,20 +2,12 @@ package com.ffsensitivity.app.data
 
 import android.content.Context
 import com.ffsensitivity.app.util.AppLog
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * Owns purchases + inventory for Coin Shop.
  */
 object ShopStore {
 
-    private const val PREFS = "coin_shop_v1"
-    private const val KEY_OWNED = "owned_ids"
-    private const val KEY_COUNTS = "buy_counts_json"
-    private const val KEY_HISTORY = "history_json"
-    private const val KEY_BOOSTS = "boost_charges_json"
-    private const val KEY_PENDING_REQ = "pending_buy_req_json"
 
     const val ID_BOOST_QUIZ_DOUBLE = "boost_quiz_double"
     const val ID_BOOST_CHECKIN_PLUS = "boost_checkin_plus"
@@ -27,7 +19,8 @@ object ShopStore {
         val itemId: String,
         val title: String,
         val rewardTag: String,
-        val category: ShopCategory,
+        val categoryId: String,
+        val categoryLabel: String,
         val purchasedAtMs: Long,
         val qty: Int
     )
@@ -39,18 +32,18 @@ object ShopStore {
         val errorCode: String? = null
     )
 
-    fun ownedIds(context: Context): Set<String> = readOwned(context)
+    fun ownedIds(context: Context): Set<String> = ShopStoreIo.readOwned(context)
 
     fun buyCount(context: Context, itemId: String): Int =
-        readCounts(context)[itemId] ?: 0
+        ShopStoreIo.readCounts(context)[itemId] ?: 0
 
     fun isOwned(context: Context, item: ShopItem): Boolean {
         if (!item.oneTime) return false
-        return item.id in readOwned(context)
+        return item.id in ShopStoreIo.readOwned(context)
     }
 
     fun ownsItemId(context: Context, itemId: String): Boolean =
-        itemId in readOwned(context)
+        itemId in ShopStoreIo.readOwned(context)
 
     fun hasGoldWalletStyle(context: Context): Boolean =
         ownsItemId(context, ID_COSMETIC_GOLD_WALLET)
@@ -59,13 +52,13 @@ object ShopStore {
         ownsItemId(context, ID_COSMETIC_FOIL_OBSIDIAN)
 
     fun boostCharges(context: Context, itemId: String): Int =
-        readBoosts(context)[itemId] ?: 0
+        ShopStoreIo.readBoosts(context)[itemId] ?: 0
 
     // --- Start: Economy live wire (Sachin) ---
     /** Replace local boost UI cache from Nest wallet. */
     fun replaceBoostCharges(context: Context, charges: Map<String, Int>) {
         synchronized(this) {
-            writeBoosts(context, charges.filterValues { it > 0 })
+            ShopStoreIo.writeBoosts(context, charges.filterValues { it > 0 })
         }
     }
 
@@ -80,16 +73,16 @@ object ShopStore {
     ) {
         runCatching {
             synchronized(this) {
-                val owned = readOwned(context).toMutableSet()
+                val owned = ShopStoreIo.readOwned(context).toMutableSet()
                 owned.addAll(ownedShopIds.filter { it.isNotBlank() })
-                writeOwned(context, owned)
+                ShopStoreIo.writeOwned(context, owned)
 
-                val counts = readCounts(context).toMutableMap()
+                val counts = ShopStoreIo.readCounts(context).toMutableMap()
                 shopBuyCounts.forEach { (id, n) ->
                     if (id.isBlank() || n <= 0) return@forEach
                     counts[id] = n
                 }
-                writeCounts(context, counts.filterValues { it > 0 })
+                ShopStoreIo.writeCounts(context, counts.filterValues { it > 0 })
             }
         }.onFailure {
             AppLog.e("Shop syncInventoryFromServer failed", it)
@@ -100,7 +93,7 @@ object ShopStore {
     fun peekPendingRequestId(context: Context, itemId: String): String? {
         if (itemId.isBlank()) return null
         return synchronized(this) {
-            readPendingRequests(context)[itemId]?.takeIf { it.length in 8..80 }
+            ShopStoreIo.readPendingRequests(context)[itemId]?.takeIf { it.length in 8..80 }
         }
     }
 
@@ -109,9 +102,9 @@ object ShopStore {
         val safeReq = requestId.trim()
         if (safeItem.isBlank() || safeReq.length < 8 || safeReq.length > 80) return
         synchronized(this) {
-            val map = readPendingRequests(context).toMutableMap()
+            val map = ShopStoreIo.readPendingRequests(context).toMutableMap()
             map[safeItem] = safeReq
-            writePendingRequests(context, map)
+            ShopStoreIo.writePendingRequests(context, map)
         }
     }
 
@@ -119,9 +112,9 @@ object ShopStore {
         val safeItem = itemId.trim()
         if (safeItem.isBlank()) return
         synchronized(this) {
-            val map = readPendingRequests(context).toMutableMap()
+            val map = ShopStoreIo.readPendingRequests(context).toMutableMap()
             if (map.remove(safeItem) != null) {
-                writePendingRequests(context, map)
+                ShopStoreIo.writePendingRequests(context, map)
             }
         }
     }
@@ -131,11 +124,11 @@ object ShopStore {
     fun consumeBoostCharge(context: Context, itemId: String): Boolean {
         return runCatching {
             synchronized(this) {
-                val map = readBoosts(context).toMutableMap()
+                val map = ShopStoreIo.readBoosts(context).toMutableMap()
                 val left = map[itemId] ?: 0
                 if (left <= 0) return false
                 if (left == 1) map.remove(itemId) else map[itemId] = left - 1
-                writeBoosts(context, map)
+                ShopStoreIo.writeBoosts(context, map)
                 true
             }
         }.getOrElse {
@@ -144,17 +137,11 @@ object ShopStore {
         }
     }
 
-    private fun grantBoostCharge(context: Context, itemId: String) {
-        val map = readBoosts(context).toMutableMap()
-        map[itemId] = (map[itemId] ?: 0) + 1
-        writeBoosts(context, map)
-    }
-
     fun canBuy(context: Context, item: ShopItem, coins: Int): Pair<Boolean, String> {
         if (!item.enabled) return false to "Item unavailable"
         if (item.priceCoins <= 0) return false to "Invalid price"
         if (coins < item.priceCoins) return false to "Need ${item.priceCoins - coins} more coins"
-        if (item.oneTime && item.id in readOwned(context)) return false to "Already owned"
+        if (item.oneTime && item.id in ShopStoreIo.readOwned(context)) return false to "Already owned"
         val limit = item.stockLimit
         if (limit != null && buyCount(context, item.id) >= limit) {
             return false to "Out of stock"
@@ -169,7 +156,7 @@ object ShopStore {
     fun purchase(context: Context, itemId: String, requestId: String): BuyResult {
         val coinsNow = { DailyChallengeStore.snapshot(context).coins }
         return runCatching {
-            val item = ShopAdminTable.findById(itemId)
+            val item = ShopCatalogCache.findById(itemId)
                 ?: return BuyResult(false, "Item not found", coinsNow())
             if (!item.enabled) {
                 return BuyResult(false, "Item unavailable", coinsNow())
@@ -197,13 +184,13 @@ object ShopStore {
                     runCatching {
                         synchronized(this) {
                             if (item.oneTime) {
-                                val owned = readOwned(context).toMutableSet()
+                                val owned = ShopStoreIo.readOwned(context).toMutableSet()
                                 owned.add(item.id)
-                                writeOwned(context, owned)
-                                val counts = readCounts(context).toMutableMap()
+                                ShopStoreIo.writeOwned(context, owned)
+                                val counts = ShopStoreIo.readCounts(context).toMutableMap()
                                 if ((counts[item.id] ?: 0) < 1) {
                                     counts[item.id] = 1
-                                    writeCounts(context, counts)
+                                    ShopStoreIo.writeCounts(context, counts)
                                 }
                             }
                         }
@@ -221,9 +208,9 @@ object ShopStore {
                     if (paid.alreadyApplied) {
                         // Idempotent replay — ensure one-time owned, do not bump counts/history again.
                         if (item.oneTime) {
-                            val owned = readOwned(context).toMutableSet()
+                            val owned = ShopStoreIo.readOwned(context).toMutableSet()
                             owned.add(item.id)
-                            writeOwned(context, owned)
+                            ShopStoreIo.writeOwned(context, owned)
                         }
                         when (item.id) {
                             ID_PACK_SCRATCH_BONUS ->
@@ -236,27 +223,28 @@ object ShopStore {
                             ID_BOOST_CHECKIN_PLUS -> refreshBoosts = true
                         }
                     } else {
-                        val owned = readOwned(context).toMutableSet()
+                        val owned = ShopStoreIo.readOwned(context).toMutableSet()
                         if (item.oneTime) owned.add(item.id)
-                        val counts = readCounts(context).toMutableMap()
+                        val counts = ShopStoreIo.readCounts(context).toMutableMap()
                         counts[item.id] = (counts[item.id] ?: 0) + 1
-                        val history = readHistory(context).toMutableList()
+                        val history = ShopStoreIo.readHistory(context).toMutableList()
                         history.add(
                             0,
                             OwnedItem(
                                 itemId = item.id,
                                 title = item.title,
                                 rewardTag = item.rewardTag,
-                                category = item.category,
+                                categoryId = item.categoryId,
+                                categoryLabel = item.categoryLabel,
                                 purchasedAtMs = System.currentTimeMillis(),
                                 qty = counts[item.id] ?: 1
                             )
                         )
                         while (history.size > 100) history.removeAt(history.lastIndex)
 
-                        writeOwned(context, owned)
-                        writeCounts(context, counts)
-                        writeHistory(context, history)
+                        ShopStoreIo.writeOwned(context, owned)
+                        ShopStoreIo.writeCounts(context, counts)
+                        ShopStoreIo.writeHistory(context, history)
 
                         when (item.id) {
                             ID_PACK_SCRATCH_BONUS ->
@@ -291,31 +279,43 @@ object ShopStore {
     fun myItems(context: Context): List<OwnedItem> {
         return runCatching {
             // Collapse history by itemId keeping latest + total qty from counts
-            val counts = readCounts(context)
-            val owned = readOwned(context)
-            val catalog = ShopAdminTable.items().associateBy { it.id }
+            val counts = ShopStoreIo.readCounts(context)
+            val owned = ShopStoreIo.readOwned(context)
+            val history = ShopStoreIo.readHistory(context)
+            val catalog = ShopCatalogCache.items().associateBy { it.id }
             val fromCounts = counts.keys.mapNotNull { id ->
-                val item = catalog[id] ?: ShopAdminTable.findById(id) ?: return@mapNotNull null
-                OwnedItem(
-                    itemId = id,
-                    title = item.title,
-                    rewardTag = item.rewardTag,
-                    category = item.category,
-                    purchasedAtMs = readHistory(context).firstOrNull { it.itemId == id }?.purchasedAtMs
-                        ?: System.currentTimeMillis(),
-                    qty = counts[id] ?: 1
-                )
+                val item = catalog[id]
+                val hist = history.firstOrNull { it.itemId == id }
+                when {
+                    item != null -> OwnedItem(
+                        itemId = id,
+                        title = item.title,
+                        rewardTag = item.rewardTag,
+                        categoryId = item.categoryId,
+                        categoryLabel = item.categoryLabel,
+                        purchasedAtMs = hist?.purchasedAtMs ?: System.currentTimeMillis(),
+                        qty = counts[id] ?: 1
+                    )
+                    hist != null -> hist.copy(qty = counts[id] ?: hist.qty)
+                    else -> null
+                }
             }
             val oneTimeOnly = owned.filter { id -> fromCounts.none { it.itemId == id } }.mapNotNull { id ->
-                val item = catalog[id] ?: ShopAdminTable.findById(id) ?: return@mapNotNull null
-                OwnedItem(
-                    itemId = id,
-                    title = item.title,
-                    rewardTag = item.rewardTag,
-                    category = item.category,
-                    purchasedAtMs = System.currentTimeMillis(),
-                    qty = 1
-                )
+                val item = catalog[id]
+                val hist = history.firstOrNull { it.itemId == id }
+                when {
+                    item != null -> OwnedItem(
+                        itemId = id,
+                        title = item.title,
+                        rewardTag = item.rewardTag,
+                        categoryId = item.categoryId,
+                        categoryLabel = item.categoryLabel,
+                        purchasedAtMs = hist?.purchasedAtMs ?: System.currentTimeMillis(),
+                        qty = 1
+                    )
+                    hist != null -> hist
+                    else -> null
+                }
             }
             (fromCounts + oneTimeOnly).sortedByDescending { it.purchasedAtMs }
         }.getOrElse {
@@ -324,107 +324,4 @@ object ShopStore {
         }
     }
 
-    private fun readOwned(context: Context): Set<String> {
-        return prefs(context).getStringSet(KEY_OWNED, null)
-            ?.let { HashSet(it) }
-            .orEmpty()
-    }
-
-    private fun writeOwned(context: Context, owned: Set<String>) {
-        prefs(context).edit().putStringSet(KEY_OWNED, HashSet(owned)).apply()
-    }
-
-    private fun readCounts(context: Context): Map<String, Int> {
-        val raw = prefs(context).getString(KEY_COUNTS, null).orEmpty()
-        if (raw.isBlank()) return emptyMap()
-        return runCatching {
-            val o = JSONObject(raw)
-            o.keys().asSequence().associateWith { o.optInt(it, 0) }
-        }.getOrDefault(emptyMap())
-    }
-
-    private fun writeCounts(context: Context, counts: Map<String, Int>) {
-        val o = JSONObject()
-        counts.forEach { (k, v) -> o.put(k, v) }
-        prefs(context).edit().putString(KEY_COUNTS, o.toString()).apply()
-    }
-
-    private fun readHistory(context: Context): List<OwnedItem> {
-        val raw = prefs(context).getString(KEY_HISTORY, null).orEmpty()
-        if (raw.isBlank()) return emptyList()
-        return runCatching {
-            val arr = JSONArray(raw)
-            buildList {
-                for (i in 0 until arr.length()) {
-                    val o = arr.optJSONObject(i) ?: continue
-                    add(
-                        OwnedItem(
-                            itemId = o.getString("itemId"),
-                            title = o.optString("title"),
-                            rewardTag = o.optString("rewardTag"),
-                            category = runCatching {
-                                ShopCategory.valueOf(o.getString("category"))
-                            }.getOrDefault(ShopCategory.PACK),
-                            purchasedAtMs = o.getLong("purchasedAtMs"),
-                            qty = o.optInt("qty", 1)
-                        )
-                    )
-                }
-            }
-        }.getOrElse {
-            AppLog.e("Shop history parse failed", it)
-            emptyList()
-        }
-    }
-
-    private fun writeHistory(context: Context, history: List<OwnedItem>) {
-        val arr = JSONArray()
-        history.forEach { e ->
-            arr.put(
-                JSONObject()
-                    .put("itemId", e.itemId)
-                    .put("title", e.title)
-                    .put("rewardTag", e.rewardTag)
-                    .put("category", e.category.name)
-                    .put("purchasedAtMs", e.purchasedAtMs)
-                    .put("qty", e.qty)
-            )
-        }
-        prefs(context).edit().putString(KEY_HISTORY, arr.toString()).apply()
-    }
-
-    private fun readBoosts(context: Context): Map<String, Int> {
-        val raw = prefs(context).getString(KEY_BOOSTS, null).orEmpty()
-        if (raw.isBlank()) return emptyMap()
-        return runCatching {
-            val o = JSONObject(raw)
-            o.keys().asSequence().associateWith { o.optInt(it, 0) }
-                .filterValues { it > 0 }
-        }.getOrDefault(emptyMap())
-    }
-
-    private fun writeBoosts(context: Context, boosts: Map<String, Int>) {
-        val o = JSONObject()
-        boosts.filterValues { it > 0 }.forEach { (k, v) -> o.put(k, v) }
-        prefs(context).edit().putString(KEY_BOOSTS, o.toString()).apply()
-    }
-
-    private fun readPendingRequests(context: Context): Map<String, String> {
-        val raw = prefs(context).getString(KEY_PENDING_REQ, null).orEmpty()
-        if (raw.isBlank()) return emptyMap()
-        return runCatching {
-            val o = JSONObject(raw)
-            o.keys().asSequence().associateWith { o.optString(it) }
-                .filterValues { it.length in 8..80 }
-        }.getOrDefault(emptyMap())
-    }
-
-    private fun writePendingRequests(context: Context, pending: Map<String, String>) {
-        val o = JSONObject()
-        pending.forEach { (k, v) -> o.put(k, v) }
-        prefs(context).edit().putString(KEY_PENDING_REQ, o.toString()).apply()
-    }
-
-    private fun prefs(context: Context) =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

@@ -215,6 +215,40 @@ model UserBoostCharge {
 
 // --- End: Economy live wire (Sachin) ---
 
+// --- Start: Shop live wire (Sachin) ---
+model ShopCategoryDef {
+  id        String   @id
+  label     String
+  sortOrder Int      @default(0) @map("sort_order")
+  enabled   Boolean  @default(true)
+  isBoost   Boolean  @default(false) @map("is_boost")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, sortOrder])
+  @@map("shop_categories")
+}
+
+model ShopItem {
+  id         String   @id
+  title      String
+  subtitle   String
+  category   String
+  priceCoins Int      @map("price_coins")
+  enabled    Boolean  @default(true)
+  oneTime    Boolean  @default(true) @map("one_time")
+  stockLimit Int?     @map("stock_limit")
+  rewardTag  String   @map("reward_tag")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, sortOrder])
+  @@index([category])
+  @@map("shop_items")
+}
+// --- End: Shop live wire (Sachin) ---
+
 model RedeemCode {
   id           String           @id @default(cuid())
   title        String

@@ -17,6 +17,12 @@ object EconomyRepository {
         if (token.isBlank()) {
             return Result.failure(ApiException("AUTH_REQUIRED", "Please sign in again."))
         }
+        EconomyApi.shopCatalog(token).onSuccess { payload ->
+            com.ffsensitivity.app.data.ShopCatalogCache.applyRemote(
+                payload.items,
+                payload.categories
+            )
+        }
         return EconomyApi.getWallet(token).map { wallet ->
             lastFrozen = wallet.frozen
             if (wallet.frozen) {

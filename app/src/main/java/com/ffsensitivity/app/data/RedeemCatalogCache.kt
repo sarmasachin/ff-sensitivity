@@ -2,7 +2,7 @@ package com.ffsensitivity.app.data
 
 /**
  * In-memory catalog keyed by live redeem id (cuid).
- * Filled on catalog fetch / claim so comments can resolve without sampleRedeemCodes.
+ * Filled on catalog fetch / claim so comments can resolve a live code id.
  */
 // --- Start: Redeem live wire (Sachin) ---
 object RedeemCatalogCache {

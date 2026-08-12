@@ -116,6 +116,7 @@ object PushRepository {
         }
         return PushApi.getInbox(access).map { list ->
             PushInboxCache.set(list)
+            PushInboxBadge.recount(context, list)
             list
         }.onFailure {
             AppLog.e("PushRepository.refreshInbox failed", it)

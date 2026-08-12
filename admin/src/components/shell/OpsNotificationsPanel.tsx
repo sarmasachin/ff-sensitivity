@@ -8,6 +8,7 @@ import {
 
 type Props = {
   items: OpsNotification[];
+  busy?: boolean;
   onMarkRead: (id: string) => void;
   onMarkAllRead: () => void;
   onClose: () => void;
@@ -15,6 +16,7 @@ type Props = {
 
 export function OpsNotificationsPanel({
   items,
+  busy = false,
   onMarkRead,
   onMarkAllRead,
   onClose,
@@ -39,10 +41,10 @@ export function OpsNotificationsPanel({
         <button
           type="button"
           onClick={onMarkAllRead}
-          disabled={unread === 0}
+          disabled={unread === 0 || busy}
           className="text-[12px] font-semibold text-sky-700 hover:text-sky-900 disabled:cursor-default disabled:text-slate-300"
         >
-          Mark all read
+          {busy ? "Saving…" : "Mark all read"}
         </button>
       </div>
 

@@ -21,10 +21,13 @@ object SafeOps {
     }
 
     fun copyText(context: Context, label: String, text: String): Boolean {
+        val body = text.trim()
+        if (body.isEmpty()) return false
         return runCatching {
-            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val app = context.applicationContext
+            val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 ?: return false
-            cm.setPrimaryClip(ClipData.newPlainText(label, text))
+            cm.setPrimaryClip(ClipData.newPlainText(label, body))
             true
         }.getOrElse {
             AppLog.e("Clipboard copy failed", it)

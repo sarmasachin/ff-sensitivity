@@ -38,6 +38,7 @@ import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -227,6 +228,29 @@ fun RedeemScreen(
         }
     }
 
+    fun writeRedeemClipboard(secret: String): Boolean {
+        return runCatching {
+            SafeOps.copyText(context, "redeem_code", secret)
+        }.getOrElse {
+            AppLog.e("Redeem copy failed", it)
+            false
+        }
+    }
+
+    fun finishCopy(secret: String, itemId: String) {
+        if (writeRedeemClipboard(secret)) {
+            SafeOps.toast(context, "Code Copied Successfully!")
+        } else {
+            showError(
+                code = "REDEEM_COPY_FAILED",
+                title = "Copy failed",
+                message = "Could not copy this code to the clipboard. Try again.",
+                retryKind = RedeemRetryKind.COPY,
+                retryItemId = itemId
+            )
+        }
+    }
+
     fun copyUnlocked(item: RedeemCodeItem) {
         clearError()
         if (unlocked[item.id] != true) {
@@ -237,29 +261,48 @@ fun RedeemScreen(
             )
             return
         }
-        if (item.code.isBlank()) {
-            showError(
-                code = "REDEEM_CODE_INVALID",
-                title = "Invalid code",
-                message = "This reward has no usable code. Try another one."
-            )
+        val latest = findCode(item.id) ?: item
+        val ready = copyableRedeemSecret(latest.code)
+        if (ready != null) {
+            finishCopy(ready, latest.id)
             return
         }
-        val ok = runCatching {
-            SafeOps.copyText(context, "redeem_code", item.code)
-        }.getOrElse {
-            AppLog.e("Redeem copy failed", it)
-            false
+        if (isBusy) {
+            showBusy()
+            return
         }
-        if (ok) {
-            SafeOps.toast(context, "Code Copied Successfully!")
-        } else {
-            showError(
-                code = "REDEEM_COPY_FAILED",
-                title = "Copy failed",
-                message = "Could not copy this code to the clipboard. Try again.",
-                retryKind = RedeemRetryKind.COPY,
-                retryItemId = item.id
+        isBusy = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                RedeemRepository.claimCode(context, latest)
+            }
+            isBusy = false
+            result.fold(
+                onSuccess = { claim ->
+                    val secret = copyableRedeemSecret(claim.code)
+                    if (secret == null) {
+                        showError(
+                            code = "REDEEM_CODE_INVALID",
+                            title = "Invalid code",
+                            message = "This reward has no usable code. Try another one."
+                        )
+                        return@fold
+                    }
+                    codes = codes.map { row ->
+                        if (row.id == latest.id) row.copy(code = secret) else row
+                    }
+                    finishCopy(secret, latest.id)
+                },
+                onFailure = { err ->
+                    AppLog.e("Redeem copy refetch failed", err)
+                    showError(
+                        code = "REDEEM_COPY_FAILED",
+                        title = "Copy failed",
+                        message = "Could not copy this code to the clipboard. Try again.",
+                        retryKind = RedeemRetryKind.COPY,
+                        retryItemId = latest.id
+                    )
+                }
             )
         }
     }

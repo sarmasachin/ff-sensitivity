@@ -57,8 +57,8 @@ export function ShopEmptyState({ kind, onAdd, onClearFilter }: Props) {
         No shop items yet
       </h3>
       <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-slate-500">
-        Add your first coin-shop product — boosts, prizes, packs, or cosmetics
-        for the Android Coin Shop tab.
+        Add your first coin-shop product — boosts, prizes, packs, or cosmetics.
+        It saves to the live catalog immediately.
       </p>
       <button
         type="button"

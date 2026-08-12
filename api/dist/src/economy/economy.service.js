@@ -14,11 +14,14 @@ const common_1 = require("@nestjs/common");
 const crypto_1 = require("crypto");
 const prisma_service_1 = require("../prisma/prisma.service");
 const app_error_1 = require("../common/errors/app-error");
+const shop_admin_service_1 = require("../shop/shop-admin.service");
 const economy_catalog_1 = require("./economy-catalog");
 let EconomyService = class EconomyService {
     prisma;
-    constructor(prisma) {
+    shop;
+    constructor(prisma, shop) {
         this.prisma = prisma;
+        this.shop = shop;
     }
     async getWallet(userId) {
         const user = await this.requireUser(userId);
@@ -36,7 +39,8 @@ let EconomyService = class EconomyService {
                 continue;
             shopBuyCounts[id] = (shopBuyCounts[id] ?? 0) + 1;
         }
-        const ownedShopIds = Object.values(economy_catalog_1.SHOP_CATALOG)
+        const catalog = await this.shop.listPurchaseCatalog();
+        const ownedShopIds = catalog
             .filter((item) => item.oneTime && (shopBuyCounts[item.id] ?? 0) > 0)
             .map((item) => item.id);
         return {
@@ -46,6 +50,9 @@ let EconomyService = class EconomyService {
             ownedShopIds,
             shopBuyCounts,
         };
+    }
+    async shopCatalog() {
+        return this.shop.appCatalog();
     }
     async earnChallenge(userId, kind, opts) {
         const user = await this.requireUser(userId);
@@ -67,7 +74,7 @@ let EconomyService = class EconomyService {
     async purchaseShop(userId, itemId, requestId) {
         const user = await this.requireUser(userId);
         this.assertNotFrozen(user);
-        const item = economy_catalog_1.SHOP_CATALOG[itemId];
+        const item = await this.shop.findPurchaseItem(itemId);
         if (!item || !item.enabled) {
             throw new app_error_1.AppError('SHOP_ITEM_NOT_FOUND', 'Item not found.', 404);
         }
@@ -75,10 +82,10 @@ let EconomyService = class EconomyService {
         if (safeReq.length < 8 || safeReq.length > 80) {
             throw new app_error_1.AppError('SHOP_BAD_REQUEST', 'Invalid request id.', 400);
         }
-        const buyKeyBase = `shop:${userId}:${itemId}`;
+        const buyKeyBase = `shop:${userId}:${item.id}`;
         if (item.oneTime) {
             const prior = await this.prisma.walletLedger.findFirst({
-                where: { userId, reason: `shop:${itemId}` },
+                where: { userId, reason: `shop:${item.id}` },
             });
             if (prior) {
                 throw new app_error_1.AppError('SHOP_ALREADY_OWNED', 'Already owned.', 409);
@@ -86,7 +93,7 @@ let EconomyService = class EconomyService {
         }
         if (item.stockLimit != null) {
             const buys = await this.prisma.walletLedger.count({
-                where: { userId, reason: `shop:${itemId}` },
+                where: { userId, reason: `shop:${item.id}` },
             });
             if (buys >= item.stockLimit) {
                 throw new app_error_1.AppError('SHOP_OUT_OF_STOCK', 'Out of stock.', 409);
@@ -102,7 +109,7 @@ let EconomyService = class EconomyService {
             if (existing) {
                 return {
                     coins: existing.balanceAfter,
-                    itemId,
+                    itemId: item.id,
                     alreadyApplied: true,
                 };
             }
@@ -113,26 +120,26 @@ let EconomyService = class EconomyService {
             if (paid.count !== 1) {
                 throw new app_error_1.AppError('NOT_ENOUGH_COINS', `You need ${item.priceCoins} coins.`, 409);
             }
-            const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+            const paidUser = await tx.user.findUniqueOrThrow({ where: { id: userId } });
             await tx.walletLedger.create({
                 data: {
                     userId,
                     delta: -item.priceCoins,
-                    balanceAfter: user.coins,
-                    reason: `shop:${itemId}`,
+                    balanceAfter: paidUser.coins,
+                    reason: `shop:${item.id}`,
                     idempotencyKey,
                 },
             });
             if (item.isBoost) {
                 await tx.userBoostCharge.upsert({
                     where: {
-                        userId_boostId: { userId, boostId: itemId },
+                        userId_boostId: { userId, boostId: item.id },
                     },
-                    create: { userId, boostId: itemId, charges: 1 },
+                    create: { userId, boostId: item.id, charges: 1 },
                     update: { charges: { increment: 1 } },
                 });
             }
-            return { coins: user.coins, itemId, alreadyApplied: false };
+            return { coins: paidUser.coins, itemId: item.id, alreadyApplied: false };
         });
     }
     async earnQuizGraded(userId, correct, amounts) {
@@ -366,6 +373,7 @@ let EconomyService = class EconomyService {
 exports.EconomyService = EconomyService;
 exports.EconomyService = EconomyService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        shop_admin_service_1.ShopAdminService])
 ], EconomyService);
 //# sourceMappingURL=economy.service.js.map

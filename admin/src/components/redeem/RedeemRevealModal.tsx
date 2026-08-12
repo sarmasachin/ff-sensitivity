@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 type Props = {
   open: boolean;
   title: string;
@@ -8,14 +10,36 @@ type Props = {
 };
 
 export function RedeemRevealModal({ open, title, code, onClose }: Props) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (open) setCopied(false);
+  }, [open, code]);
   if (!open) return null;
 
   async function copy() {
+    const text = code.trim();
+    if (!text) return;
+    let ok = false;
     try {
-      await navigator.clipboard.writeText(code);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
     } catch {
-      // ignore
+      ok = false;
     }
+    if (!ok) {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.left = "-9999px";
+      document.body.appendChild(area);
+      area.select();
+      ok = document.execCommand("copy");
+      document.body.removeChild(area);
+    }
+    setCopied(ok);
   }
 
   return (
@@ -35,7 +59,7 @@ export function RedeemRevealModal({ open, title, code, onClose }: Props) {
           {code}
         </p>
         <p className="mt-2 text-[11px] text-[#94a3b8]">
-          Local reveal only — audit log comes with API.
+          Reveal is audited. The table stays masked.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button
@@ -43,7 +67,7 @@ export function RedeemRevealModal({ open, title, code, onClose }: Props) {
             onClick={copy}
             className="h-10 rounded-xl border border-violet-200 bg-violet-50 px-4 text-[13px] font-semibold text-violet-700"
           >
-            Copy
+            {copied ? "Copied" : "Copy"}
           </button>
           <button
             type="button"

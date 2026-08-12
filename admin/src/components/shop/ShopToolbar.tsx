@@ -1,38 +1,52 @@
 "use client";
 
-export type ShopFilterKey =
-  | "all"
-  | "live"
-  | "disabled"
-  | "PRIZE"
-  | "BOOST"
-  | "UNLOCK"
-  | "PACK"
-  | "COSMETIC";
+export type ShopFilterKey = "all" | "live" | "disabled" | string;
+
+type Cat = { id: string; label: string };
 
 type Props = {
   query: string;
   filter: ShopFilterKey;
+  categories: Cat[];
   onQuery: (v: string) => void;
   onFilter: (v: ShopFilterKey) => void;
 };
 
-const FILTERS: { id: ShopFilterKey; label: string; active: string }[] = [
+const BASE: { id: ShopFilterKey; label: string; active: string }[] = [
   { id: "all", label: "All", active: "bg-slate-900 text-white" },
   { id: "live", label: "Live", active: "bg-emerald-600 text-white" },
   { id: "disabled", label: "Disabled", active: "bg-slate-500 text-white" },
-  { id: "PRIZE", label: "Prizes", active: "bg-rose-600 text-white" },
-  { id: "BOOST", label: "Boosts", active: "bg-amber-500 text-white" },
-  { id: "UNLOCK", label: "Unlocks", active: "bg-violet-600 text-white" },
-  { id: "PACK", label: "Packs", active: "bg-sky-600 text-white" },
-  { id: "COSMETIC", label: "Cosmetics", active: "bg-fuchsia-600 text-white" },
 ];
 
-export function ShopToolbar({ query, filter, onQuery, onFilter }: Props) {
+const CAT_COLORS = [
+  "bg-rose-600 text-white",
+  "bg-amber-500 text-white",
+  "bg-violet-600 text-white",
+  "bg-sky-600 text-white",
+  "bg-fuchsia-600 text-white",
+  "bg-teal-600 text-white",
+];
+
+export function ShopToolbar({
+  query,
+  filter,
+  categories,
+  onQuery,
+  onFilter,
+}: Props) {
+  const filters = [
+    ...BASE,
+    ...categories.map((c, i) => ({
+      id: c.id,
+      label: c.label,
+      active: CAT_COLORS[i % CAT_COLORS.length],
+    })),
+  ];
+
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex flex-wrap gap-1.5">
-        {FILTERS.map((f) => {
+        {filters.map((f) => {
           const active = filter === f.id;
           return (
             <button

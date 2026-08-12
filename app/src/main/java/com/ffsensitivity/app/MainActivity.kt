@@ -30,6 +30,7 @@ import com.ffsensitivity.app.data.UserSessionStore
 import com.ffsensitivity.app.data.remote.AnalyticsRepository
 import com.ffsensitivity.app.data.remote.AppConfigRepository
 import com.ffsensitivity.app.data.remote.AppRemoteGate
+import com.ffsensitivity.app.data.remote.PushInboxBadge
 import com.ffsensitivity.app.data.remote.PushRepository
 import com.ffsensitivity.app.data.remote.ScreenSessionTracker
 import com.ffsensitivity.app.presentation.components.AppDrawerContent
@@ -219,6 +220,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                     if (revoked) {
                                         sessionStore.signOut()
+                                        PushInboxBadge.clear()
                                         CrashReporting.clearUser()
                                         signedIn = false
                                         goLogin()

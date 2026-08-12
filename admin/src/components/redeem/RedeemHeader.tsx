@@ -1,10 +1,9 @@
 type Props = {
   onAdd?: () => void;
-  onImport?: () => void;
   onClaimLog?: () => void;
 };
 
-export function RedeemHeader({ onAdd, onImport, onClaimLog }: Props) {
+export function RedeemHeader({ onAdd, onClaimLog }: Props) {
   return (
     <header className="relative overflow-hidden rounded-2xl border border-indigo-200/70 bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 px-5 py-5 text-white sm:px-6">
       <div
@@ -25,8 +24,7 @@ export function RedeemHeader({ onAdd, onImport, onClaimLog }: Props) {
             Redeem
           </h1>
           <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-white/85">
-            Gift-code inventory for the Android app — masked in list, stock-safe
-            claims, daily and weekly pools.
+            Live gift-code inventory. Same rows the Android redeem tab loads.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -36,13 +34,6 @@ export function RedeemHeader({ onAdd, onImport, onClaimLog }: Props) {
             className="h-10 rounded-xl border border-white/30 bg-white/10 px-3.5 text-[13px] font-medium text-white backdrop-blur-sm hover:bg-white/20"
           >
             Claim log
-          </button>
-          <button
-            type="button"
-            onClick={onImport}
-            className="h-10 rounded-xl border border-white/30 bg-white/10 px-3.5 text-[13px] font-medium text-white backdrop-blur-sm hover:bg-white/20"
-          >
-            Import CSV
           </button>
           <button
             type="button"

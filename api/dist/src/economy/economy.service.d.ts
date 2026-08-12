@@ -1,7 +1,9 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { ShopAdminService } from '../shop/shop-admin.service';
 export declare class EconomyService {
     private readonly prisma;
-    constructor(prisma: PrismaService);
+    private readonly shop;
+    constructor(prisma: PrismaService, shop: ShopAdminService);
     getWallet(userId: string): Promise<{
         coins: number;
         frozen: boolean;
@@ -10,6 +12,25 @@ export declare class EconomyService {
         };
         ownedShopIds: string[];
         shopBuyCounts: Record<string, number>;
+    }>;
+    shopCatalog(): Promise<{
+        categories: {
+            id: string;
+            label: string;
+            isBoost: boolean;
+        }[];
+        items: {
+            id: string;
+            title: string;
+            subtitle: string;
+            category: string;
+            categoryLabel: string;
+            priceCoins: number;
+            enabled: boolean;
+            oneTime: boolean;
+            stockLimit: number | null;
+            rewardTag: string;
+        }[];
     }>;
     earnChallenge(userId: string, kind: 'CHECKIN' | 'QUIZ' | 'AD' | 'MILESTONE', opts: {
         correct?: boolean;

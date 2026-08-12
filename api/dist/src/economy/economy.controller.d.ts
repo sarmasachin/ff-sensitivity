@@ -24,4 +24,23 @@ export declare class EconomyController {
         itemId: string;
         alreadyApplied: boolean;
     }>;
+    shopCatalog(): Promise<{
+        categories: {
+            id: string;
+            label: string;
+            isBoost: boolean;
+        }[];
+        items: {
+            id: string;
+            title: string;
+            subtitle: string;
+            category: string;
+            categoryLabel: string;
+            priceCoins: number;
+            enabled: boolean;
+            oneTime: boolean;
+            stockLimit: number | null;
+            rewardTag: string;
+        }[];
+    }>;
 }

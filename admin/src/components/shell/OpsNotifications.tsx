@@ -1,20 +1,40 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  OPS_NOTIFICATION_SEED,
-  countUnread,
-  type OpsNotification,
-} from "./notifications-data";
+  fetchSupportThreads,
+  markSupportRead,
+} from "@/components/support/support-api";
+import { countUnread, type OpsNotification } from "./notifications-data";
+import {
+  notificationsFromSupport,
+  supportThreadIdFromNotification,
+} from "./notifications-live";
 import { OpsNotificationsPanel } from "./OpsNotificationsPanel";
 
 export function OpsNotifications() {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<OpsNotification[]>(() =>
-    OPS_NOTIFICATION_SEED.map((n) => ({ ...n })),
-  );
+  const [items, setItems] = useState<OpsNotification[]>([]);
+  const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const unread = countUnread(items);
+
+  const reload = useCallback(async () => {
+    try {
+      const threads = await fetchSupportThreads();
+      setItems(notificationsFromSupport(threads));
+    } catch {
+      setItems([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  useEffect(() => {
+    if (open) void reload();
+  }, [open, reload]);
 
   useEffect(() => {
     if (!open) return;
@@ -39,14 +59,38 @@ export function OpsNotifications() {
     };
   }, [open]);
 
-  function markRead(id: string) {
+  async function markRead(id: string) {
+    const threadId = supportThreadIdFromNotification(id);
     setItems((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
+    if (!threadId) return;
+    try {
+      await markSupportRead(threadId);
+    } catch {
+      await reload();
+    }
   }
 
-  function markAllRead() {
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+  async function markAllRead() {
+    const ids = items
+      .filter((n) => !n.read)
+      .map((n) => supportThreadIdFromNotification(n.id))
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) {
+      setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+      return;
+    }
+    setBusy(true);
+    try {
+      await Promise.all(ids.map((id) => markSupportRead(id)));
+      setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+      await reload();
+    } catch {
+      await reload();
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -86,8 +130,13 @@ export function OpsNotifications() {
       {open ? (
         <OpsNotificationsPanel
           items={items}
-          onMarkRead={markRead}
-          onMarkAllRead={markAllRead}
+          busy={busy}
+          onMarkRead={(id) => {
+            void markRead(id);
+          }}
+          onMarkAllRead={() => {
+            void markAllRead();
+          }}
           onClose={() => setOpen(false)}
         />
       ) : null}

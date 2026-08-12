@@ -17,3 +17,14 @@ internal fun maskCode(code: String): String {
     if (parts.size < 4) return "****-****-****-****"
     return "${parts[0]}-****-****-${parts.last()}"
 }
+
+internal fun isMaskedRedeemCode(code: String): Boolean {
+    val c = code.trim()
+    if (c.isBlank()) return true
+    return c.contains('•') || c.contains("****") || c.contains('…')
+}
+
+internal fun copyableRedeemSecret(code: String): String? {
+    val secret = code.trim()
+    return secret.takeIf { it.isNotBlank() && !isMaskedRedeemCode(it) }
+}

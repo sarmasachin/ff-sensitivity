@@ -17,6 +17,7 @@ const request_id_middleware_1 = require("./common/middleware/request-id.middlewa
 const user_auth_module_1 = require("./user-auth/user-auth.module");
 const redeem_module_1 = require("./redeem/redeem.module");
 const economy_module_1 = require("./economy/economy.module");
+const shop_module_1 = require("./shop/shop.module");
 const community_module_1 = require("./community/community.module");
 const challenge_module_1 = require("./challenge/challenge.module");
 const scratch_module_1 = require("./scratch/scratch.module");
@@ -56,6 +57,7 @@ exports.AppModule = AppModule = __decorate([
             user_auth_module_1.UserAuthModule,
             redeem_module_1.RedeemModule,
             economy_module_1.EconomyModule,
+            shop_module_1.ShopModule,
             community_module_1.CommunityModule,
             challenge_module_1.ChallengeModule,
             scratch_module_1.ScratchModule,

@@ -1,9 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  SHOP_CATEGORY_LABEL,
-  type ShopCategory,
-  type ShopListRow,
-} from "./shop-data";
+import type { ShopListRow } from "./shop-data";
 import { IconEdit, IconTrash, actionBtn } from "@/components/redeem/RedeemActionIcons";
 
 type Props = {
@@ -15,19 +11,16 @@ type Props = {
   onToggle?: (id: string) => void;
 };
 
-function CategoryPill({ category }: { category: ShopCategory }) {
-  const map: Record<ShopCategory, string> = {
-    PRIZE: "bg-rose-100 text-rose-800 ring-rose-200",
-    BOOST: "bg-amber-100 text-amber-900 ring-amber-200",
-    UNLOCK: "bg-violet-100 text-violet-800 ring-violet-200",
-    PACK: "bg-sky-100 text-sky-800 ring-sky-200",
-    COSMETIC: "bg-fuchsia-100 text-fuchsia-800 ring-fuchsia-200",
-  };
+function CategoryPill({
+  category,
+  label,
+}: {
+  category: string;
+  label?: string;
+}) {
   return (
-    <span
-      className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1 ${map[category]}`}
-    >
-      {SHOP_CATEGORY_LABEL[category]}
+    <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+      {label || category}
     </span>
   );
 }
@@ -75,7 +68,10 @@ export function ShopTable({
                   <p className="mt-1 font-mono text-[10px] text-slate-400">{row.id}</p>
                 </td>
                 <td className="px-4 py-3.5">
-                  <CategoryPill category={row.category} />
+                  <CategoryPill
+                    category={row.category}
+                    label={row.categoryLabel}
+                  />
                 </td>
                 <td className="px-4 py-3.5 text-[13px] font-semibold whitespace-nowrap text-amber-700 tabular-nums">
                   {row.priceCoins.toLocaleString()} coins

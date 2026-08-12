@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.remote.AppConfigRepository
+import com.ffsensitivity.app.data.remote.PushInboxBadge
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
 import com.ffsensitivity.app.presentation.theme.AmberSoft
@@ -96,6 +98,7 @@ fun AppDrawerContent(
     val showSupport =
         cfg.features["support"] != false && cfg.navigation["navSupport"] != false
     val showAbout = cfg.navigation["navAbout"] != false
+    val unread = PushInboxBadge.unread
     val versionNumber = if (appVersion.startsWith("v", ignoreCase = true)) {
         appVersion.removePrefix("v").removePrefix("V")
     } else {
@@ -129,24 +132,32 @@ fun AppDrawerContent(
                     letterSpacing = 0.6.sp,
                     modifier = Modifier.weight(1f)
                 )
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (selectedRoute == "push_inbox") Amber.copy(alpha = 0.18f) else SurfaceCard)
-                        .border(
-                            1.dp,
-                            if (selectedRoute == "push_inbox") Amber.copy(alpha = 0.45f) else HairlineStrong,
-                            RoundedCornerShape(10.dp)
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selectedRoute == "push_inbox") Amber.copy(alpha = 0.18f) else SurfaceCard)
+                            .border(
+                                1.dp,
+                                if (selectedRoute == "push_inbox") Amber.copy(alpha = 0.45f) else HairlineStrong,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .clickable { onAction(AppDrawerAction.NOTIFICATIONS) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.Notifications,
+                            contentDescription = "Notifications",
+                            tint = if (selectedRoute == "push_inbox") AmberHot else Amber,
+                            modifier = Modifier.size(18.dp)
                         )
-                        .clickable { onAction(AppDrawerAction.NOTIFICATIONS) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Outlined.Notifications,
-                        contentDescription = "Notifications",
-                        tint = if (selectedRoute == "push_inbox") AmberHot else Amber,
-                        modifier = Modifier.size(18.dp)
+                    }
+                    NotificationCountBadge(
+                        count = unread,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 3.dp, y = (-3).dp)
                     )
                 }
             }
@@ -187,7 +198,8 @@ fun AppDrawerContent(
                 DrawerItem(
                     label = "Notifications",
                     icon = Icons.Outlined.Notifications,
-                    selected = selectedRoute == "push_inbox"
+                    selected = selectedRoute == "push_inbox",
+                    badgeCount = unread
                 ) { onAction(AppDrawerAction.NOTIFICATIONS) }
                 if (showScratch) {
                     DrawerItem(
@@ -281,6 +293,7 @@ private fun DrawerItem(
     label: String,
     icon: ImageVector,
     selected: Boolean,
+    badgeCount: Int = 0,
     onClick: () -> Unit
 ) {
     Row(
@@ -298,23 +311,31 @@ private fun DrawerItem(
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (selected) Amber.copy(alpha = 0.18f) else SurfaceCard)
-                .border(
-                    1.dp,
-                    if (selected) Amber.copy(alpha = 0.45f) else HairlineStrong,
-                    RoundedCornerShape(10.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = if (selected) AmberHot else Amber,
-                modifier = Modifier.size(18.dp)
+        Box {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (selected) Amber.copy(alpha = 0.18f) else SurfaceCard)
+                    .border(
+                        1.dp,
+                        if (selected) Amber.copy(alpha = 0.45f) else HairlineStrong,
+                        RoundedCornerShape(10.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = if (selected) AmberHot else Amber,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            NotificationCountBadge(
+                count = badgeCount,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 3.dp, y = (-3).dp)
             )
         }
         Spacer(modifier = Modifier.width(12.dp))

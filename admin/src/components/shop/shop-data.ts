@@ -1,54 +1,64 @@
-export type ShopCategory =
-  | "PRIZE"
-  | "BOOST"
-  | "UNLOCK"
-  | "PACK"
-  | "COSMETIC";
+export type ShopCategoryRow = {
+  id: string;
+  label: string;
+  sortOrder: number;
+  enabled: boolean;
+  isBoost: boolean;
+};
 
 export type ShopListRow = {
   id: string;
   title: string;
   subtitle: string;
-  category: ShopCategory;
+  category: string;
+  categoryLabel?: string;
   priceCoins: number;
   enabled: boolean;
   oneTime: boolean;
   stockLimit: number | null;
   rewardTag: string;
+  sortOrder: number;
 };
 
 export type ShopFormValues = {
   id: string;
   title: string;
   subtitle: string;
-  category: ShopCategory;
+  category: string;
   priceCoins: string;
   enabled: boolean;
   oneTime: boolean;
   stockLimit: string;
   rewardTag: string;
+  sortOrder: string;
 };
 
-export const SHOP_CATEGORY_LABEL: Record<ShopCategory, string> = {
-  PRIZE: "Prizes",
-  BOOST: "Boosts",
-  UNLOCK: "Unlocks",
-  PACK: "Packs",
-  COSMETIC: "Cosmetics",
-};
-
-export function emptyShopForm(): ShopFormValues {
+export function emptyShopForm(defaultCategory = ""): ShopFormValues {
   return {
     id: "",
     title: "",
     subtitle: "",
-    category: "BOOST",
-    priceCoins: "100",
+    category: defaultCategory,
+    priceCoins: "",
     enabled: true,
-    oneTime: true,
+    oneTime: false,
     stockLimit: "",
     rewardTag: "",
+    sortOrder: "0",
   };
+}
+
+/** Build shop item id from title — lowercase a-z0-9_, max 64. */
+export function titleToShopItemId(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 64)
+    .replace(/_+$/g, "");
+  return slug;
 }
 
 export function rowToForm(row: ShopListRow): ShopFormValues {
@@ -62,24 +72,37 @@ export function rowToForm(row: ShopListRow): ShopFormValues {
     oneTime: row.oneTime,
     stockLimit: row.stockLimit == null ? "" : String(row.stockLimit),
     rewardTag: row.rewardTag,
+    sortOrder: String(row.sortOrder ?? 0),
   };
 }
 
-export function formToRow(
+export function formToApiBody(
   values: ShopFormValues,
-  fallbackId: string,
-): ShopListRow | { error: string } {
+  mode: "add" | "edit",
+): Record<string, unknown> | { error: string } {
   const title = values.title.trim();
   const subtitle = values.subtitle.trim();
   const rewardTag = values.rewardTag.trim().toUpperCase();
-  const idRaw = values.id.trim().toLowerCase().replace(/\s+/g, "_");
-  const id = idRaw || fallbackId;
+  const category = values.category.trim().toUpperCase();
+  const idRaw =
+    mode === "add" ? titleToShopItemId(title) : values.id.trim().toLowerCase();
 
   if (!title) return { error: "Title is required." };
   if (!subtitle) return { error: "Subtitle is required." };
   if (!rewardTag) return { error: "Reward tag is required." };
-  if (!/^[a-z0-9_]+$/.test(id)) {
-    return { error: "ID must use lowercase letters, numbers, and underscores." };
+  if (!category) return { error: "Category is required." };
+  if (mode === "add") {
+    if (idRaw.length < 2) {
+      return {
+        error:
+          "Title must include at least 2 letters or numbers so an ID can be created.",
+      };
+    }
+    if (!/^[a-z0-9_]+$/.test(idRaw)) {
+      return {
+        error: "ID must use lowercase letters, numbers, and underscores.",
+      };
+    }
   }
 
   const priceCoins = Number(values.priceCoins);
@@ -93,142 +116,31 @@ export function formToRow(
     return { error: "Stock limit must be empty (unlimited) or ≥ 0." };
   }
 
-  return {
-    id,
+  const sortOrder = Number(values.sortOrder.trim() || "0");
+  if (!Number.isFinite(sortOrder) || sortOrder < 0 || sortOrder > 9999) {
+    return { error: "Sort order must be 0–9999." };
+  }
+
+  const body: Record<string, unknown> = {
     title,
     subtitle,
-    category: values.category,
+    category,
     priceCoins: Math.floor(priceCoins),
     enabled: values.enabled,
     oneTime: values.oneTime,
     stockLimit: stockLimit == null ? null : Math.floor(stockLimit),
     rewardTag,
+    sortOrder: Math.floor(sortOrder),
   };
+  if (mode === "add") body.id = idRaw;
+  return body;
 }
 
 export function computeShopStats(rows: ShopListRow[]) {
-  const live = rows.filter((r) => r.enabled && r.priceCoins > 0).length;
-  const disabled = rows.filter((r) => !r.enabled).length;
-  const oneTime = rows.filter((r) => r.oneTime).length;
-  const limited = rows.filter((r) => r.stockLimit != null).length;
-  return { live, disabled, oneTime, limited };
+  return {
+    live: rows.filter((r) => r.enabled && r.priceCoins > 0).length,
+    disabled: rows.filter((r) => !r.enabled).length,
+    oneTime: rows.filter((r) => r.oneTime).length,
+    limited: rows.filter((r) => r.stockLimit != null).length,
+  };
 }
-
-/** Demo catalog — mirrors Android ShopAdminTable (local until Nest API). */
-export const SHOP_DEMO_ROWS: ShopListRow[] = [
-  {
-    id: "prize_google_play_gift",
-    title: "Google Play Gift Card",
-    subtitle: "In-app vault entry only · not a real Google Play code yet.",
-    category: "PRIZE",
-    priceCoins: 500,
-    enabled: true,
-    oneTime: false,
-    stockLimit: 20,
-    rewardTag: "VAULT",
-  },
-  {
-    id: "prize_ff_diamonds",
-    title: "Free Fire Diamonds",
-    subtitle: "In-app vault entry only · diamonds are not delivered in-game yet.",
-    category: "PRIZE",
-    priceCoins: 400,
-    enabled: true,
-    oneTime: false,
-    stockLimit: 40,
-    rewardTag: "VAULT",
-  },
-  {
-    id: "boost_quiz_double",
-    title: "Quiz Double Coins",
-    subtitle: "Next correct daily quiz pays 2× coins.",
-    category: "BOOST",
-    priceCoins: 80,
-    enabled: true,
-    oneTime: false,
-    stockLimit: 30,
-    rewardTag: "2× QUIZ",
-  },
-  {
-    id: "boost_checkin_plus",
-    title: "Check-in Plus",
-    subtitle: "Next daily check-in pays +20 extra coins.",
-    category: "BOOST",
-    priceCoins: 60,
-    enabled: true,
-    oneTime: false,
-    stockLimit: 30,
-    rewardTag: "STREAK+",
-  },
-  {
-    id: "unlock_premium_badge",
-    title: "Pro Player Badge",
-    subtitle: "Unlock a Pro Player badge for your profile & archive.",
-    category: "UNLOCK",
-    priceCoins: 200,
-    enabled: false,
-    oneTime: true,
-    stockLimit: null,
-    rewardTag: "BADGE",
-  },
-  {
-    id: "pack_scratch_bonus",
-    title: "Bonus Scratch Token",
-    subtitle: "Adds a shop win token to your scratch archive history.",
-    category: "PACK",
-    priceCoins: 120,
-    enabled: true,
-    oneTime: false,
-    stockLimit: 50,
-    rewardTag: "TOKEN",
-  },
-  {
-    id: "cosmetic_gold_wallet",
-    title: "Gold Wallet Chip",
-    subtitle: "Premium gold accent on your in-app coin wallet chip.",
-    category: "COSMETIC",
-    priceCoins: 100,
-    enabled: true,
-    oneTime: true,
-    stockLimit: null,
-    rewardTag: "STYLE",
-  },
-  {
-    id: "cosmetic_foil_obsidian",
-    title: "Obsidian Foil Skin",
-    subtitle: "Dark premium foil look on scratch cards.",
-    category: "COSMETIC",
-    priceCoins: 180,
-    enabled: true,
-    oneTime: true,
-    stockLimit: null,
-    rewardTag: "FOIL",
-  },
-];
-
-export const SHOP_CAPABILITIES = [
-  {
-    title: "Catalog CRUD",
-    body: "Add / edit / disable items — title, subtitle, category, price, stock, reward tag.",
-  },
-  {
-    title: "Category filters",
-    body: "Prizes, Boosts, Unlocks, Packs, Cosmetics — matches Android Coin Shop tabs.",
-  },
-  {
-    title: "Live enable toggle",
-    body: "Hide from the app without deleting the row (enabled flag).",
-  },
-  {
-    title: "One-time & stock",
-    body: "Per-user one-time buys and optional global stock limits.",
-  },
-  {
-    title: "Remote sync",
-    body: "Nest API will replace the local Android ShopAdminTable seed.",
-  },
-  {
-    title: "Purchase log",
-    body: "Who bought what, coin debit, device id — wire after economy API.",
-  },
-];

@@ -13,10 +13,10 @@ export function RedeemCapabilities() {
   return (
     <section className="rounded-2xl border border-[#e8eaee] bg-white p-5">
       <h2 className="text-[14px] font-semibold text-[#0f172a]">
-        What this module will include
+        Live redeem desk
       </h2>
       <p className="mt-1 text-[12px] text-[#94a3b8]">
-        UI shell now — NestJS CRUD / CSV / claims wire up next.
+        Inventory is stored in Postgres and served to the Android app.
       </p>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {REDEEM_CAPABILITIES.map((item, i) => (

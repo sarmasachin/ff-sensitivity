@@ -36,6 +36,9 @@ let EconomyController = class EconomyController {
     purchase(user, dto) {
         return this.economy.purchaseShop(user.id, dto.itemId, dto.requestId);
     }
+    shopCatalog() {
+        return this.economy.shopCatalog();
+    }
 };
 exports.EconomyController = EconomyController;
 __decorate([
@@ -64,6 +67,13 @@ __decorate([
     __metadata("design:paramtypes", [Object, economy_dto_1.ShopPurchaseDto]),
     __metadata("design:returntype", void 0)
 ], EconomyController.prototype, "purchase", null);
+__decorate([
+    (0, common_1.Get)('shop/catalog'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], EconomyController.prototype, "shopCatalog", null);
 exports.EconomyController = EconomyController = __decorate([
     (0, common_1.Controller)('api/v1/economy'),
     (0, common_1.UseGuards)(user_jwt_auth_guard_1.UserJwtAuthGuard),

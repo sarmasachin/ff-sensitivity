@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ffsensitivity.app.data.remote.PushInboxBadge
 import com.ffsensitivity.app.data.remote.PushInboxCache
 import com.ffsensitivity.app.data.remote.PushInboxMessage
 import com.ffsensitivity.app.data.remote.PushRepository
@@ -117,6 +118,12 @@ fun PushInboxScreen(
 
     LaunchedEffect(Unit) {
         loadInbox(fromPull = false)
+    }
+
+    LaunchedEffect(messages) {
+        val ids = messages.map { it.id }.filter { it.isNotBlank() }
+        if (ids.isEmpty()) return@LaunchedEffect
+        PushInboxBadge.markSeen(context, ids, messages)
     }
 
     fun backSafe() {

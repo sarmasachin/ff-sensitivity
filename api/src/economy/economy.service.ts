@@ -3,19 +3,22 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/errors/app-error';
+import { ShopAdminService } from '../shop/shop-admin.service';
 import {
   BOOST_CHECKIN,
   BOOST_QUIZ,
   ECONOMY_AMOUNTS,
   MILESTONE_REWARDS,
-  SHOP_CATALOG,
   utcDateKey,
 } from './economy-catalog';
 
 // --- Start: Economy live wire (Sachin) ---
 @Injectable()
 export class EconomyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly shop: ShopAdminService,
+  ) {}
 
   async getWallet(userId: string) {
     const user = await this.requireUser(userId);
@@ -32,7 +35,8 @@ export class EconomyService {
       if (!id) continue;
       shopBuyCounts[id] = (shopBuyCounts[id] ?? 0) + 1;
     }
-    const ownedShopIds = Object.values(SHOP_CATALOG)
+    const catalog = await this.shop.listPurchaseCatalog();
+    const ownedShopIds = catalog
       .filter((item) => item.oneTime && (shopBuyCounts[item.id] ?? 0) > 0)
       .map((item) => item.id);
     return {
@@ -42,6 +46,10 @@ export class EconomyService {
       ownedShopIds,
       shopBuyCounts,
     };
+  }
+
+  async shopCatalog() {
+    return this.shop.appCatalog();
   }
 
   async earnChallenge(
@@ -75,7 +83,7 @@ export class EconomyService {
   async purchaseShop(userId: string, itemId: string, requestId: string) {
     const user = await this.requireUser(userId);
     this.assertNotFrozen(user);
-    const item = SHOP_CATALOG[itemId];
+    const item = await this.shop.findPurchaseItem(itemId);
     if (!item || !item.enabled) {
       throw new AppError('SHOP_ITEM_NOT_FOUND', 'Item not found.', 404);
     }
@@ -84,10 +92,10 @@ export class EconomyService {
       throw new AppError('SHOP_BAD_REQUEST', 'Invalid request id.', 400);
     }
 
-    const buyKeyBase = `shop:${userId}:${itemId}`;
+    const buyKeyBase = `shop:${userId}:${item.id}`;
     if (item.oneTime) {
       const prior = await this.prisma.walletLedger.findFirst({
-        where: { userId, reason: `shop:${itemId}` },
+        where: { userId, reason: `shop:${item.id}` },
       });
       if (prior) {
         throw new AppError('SHOP_ALREADY_OWNED', 'Already owned.', 409);
@@ -96,7 +104,7 @@ export class EconomyService {
 
     if (item.stockLimit != null) {
       const buys = await this.prisma.walletLedger.count({
-        where: { userId, reason: `shop:${itemId}` },
+        where: { userId, reason: `shop:${item.id}` },
       });
       if (buys >= item.stockLimit) {
         throw new AppError('SHOP_OUT_OF_STOCK', 'Out of stock.', 409);
@@ -114,7 +122,7 @@ export class EconomyService {
       if (existing) {
         return {
           coins: existing.balanceAfter,
-          itemId,
+          itemId: item.id,
           alreadyApplied: true,
         };
       }
@@ -131,13 +139,13 @@ export class EconomyService {
         );
       }
 
-      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      const paidUser = await tx.user.findUniqueOrThrow({ where: { id: userId } });
       await tx.walletLedger.create({
         data: {
           userId,
           delta: -item.priceCoins,
-          balanceAfter: user.coins,
-          reason: `shop:${itemId}`,
+          balanceAfter: paidUser.coins,
+          reason: `shop:${item.id}`,
           idempotencyKey,
         },
       });
@@ -145,14 +153,14 @@ export class EconomyService {
       if (item.isBoost) {
         await tx.userBoostCharge.upsert({
           where: {
-            userId_boostId: { userId, boostId: itemId },
+            userId_boostId: { userId, boostId: item.id },
           },
-          create: { userId, boostId: itemId, charges: 1 },
+          create: { userId, boostId: item.id, charges: 1 },
           update: { charges: { increment: 1 } },
         });
       }
 
-      return { coins: user.coins, itemId, alreadyApplied: false };
+      return { coins: paidUser.coins, itemId: item.id, alreadyApplied: false };
     });
   }
 

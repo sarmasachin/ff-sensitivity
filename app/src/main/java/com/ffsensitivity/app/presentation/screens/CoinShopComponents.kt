@@ -34,7 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ffsensitivity.app.data.ShopCategory
+import com.ffsensitivity.app.data.ShopCategoryRef
 import com.ffsensitivity.app.data.ShopItem
 import com.ffsensitivity.app.data.ShopStore
 import com.ffsensitivity.app.presentation.theme.Amber
@@ -215,47 +215,6 @@ private fun ShopTabPill(
 }
 
 @Composable
-internal fun CategoryChips(
-    selected: ShopCategory?,
-    onSelect: (ShopCategory?) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        FilterChip("All", selected == null) { onSelect(null) }
-        ShopCategory.entries.forEach { cat ->
-            FilterChip(cat.label, selected == cat) { onSelect(cat) }
-        }
-    }
-}
-
-@Composable
-private fun FilterChip(label: String, on: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (on) AmberSoft else SurfaceLift)
-            .border(
-                1.dp,
-                if (on) Amber.copy(alpha = 0.55f) else HairlineStrong,
-                RoundedCornerShape(12.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp)
-    ) {
-        Text(
-            text = label,
-            color = if (on) AmberHot else InkSecondary,
-            fontSize = 12.sp,
-            fontWeight = if (on) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
-
-@Composable
 internal fun ShopProductCard(
     item: ShopItem,
     ownedOnce: Boolean,
@@ -265,7 +224,7 @@ internal fun ShopProductCard(
     busy: Boolean,
     onBuy: () -> Unit
 ) {
-    val isPrize = item.category == ShopCategory.PRIZE
+    val isPrize = item.categoryId.equals("PRIZE", ignoreCase = true)
     val cardBorder = if (isPrize) AmberHot.copy(alpha = 0.48f) else Amber.copy(alpha = 0.38f)
     val cardBg = if (isPrize) {
         listOf(Color(0xFF241C12), Color(0xFF1C2330), SurfaceCard)
@@ -298,7 +257,7 @@ internal fun ShopProductCard(
             }
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = item.category.label.uppercase(Locale.US),
+                text = item.categoryLabel.uppercase(Locale.US),
                 color = if (isPrize) Amber else InkMuted,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
@@ -405,66 +364,3 @@ internal fun ShopProductCard(
     }
 }
 
-@Composable
-internal fun OwnedProductCard(row: ShopStore.OwnedItem) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.horizontalGradient(listOf(SurfaceLift, SurfaceCard)))
-            .border(1.dp, HairlineStrong, RoundedCornerShape(18.dp))
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Success.copy(alpha = 0.15f))
-                .border(1.dp, Success.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Outlined.CheckCircle,
-                contentDescription = null,
-                tint = Success,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = row.title,
-                color = InkPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "${row.category.label} · ${row.rewardTag}" +
-                    if (row.qty > 1) " · ×${row.qty}" else "",
-                color = InkSecondary,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-internal fun EmptyShopBlock(message: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(SurfaceDeep.copy(alpha = 0.7f))
-            .border(1.dp, HairlineStrong, RoundedCornerShape(18.dp))
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = message, color = InkMuted, fontSize = 13.sp)
-    }
-}

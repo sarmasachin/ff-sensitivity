@@ -13,7 +13,7 @@ type Props = {
   mode: "add" | "edit";
   initial: RedeemFormValues;
   onClose: () => void;
-  onSubmit: (values: RedeemFormValues) => string | null;
+  onSubmit: (values: RedeemFormValues) => string | null | Promise<string | null>;
 };
 
 const fieldClass =
@@ -30,11 +30,13 @@ export function RedeemFormModal({
 }: Props) {
   const [values, setValues] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setValues(initial);
       setError(null);
+      setSubmitting(false);
     }
   }, [open, initial]);
 
@@ -47,14 +49,21 @@ export function RedeemFormModal({
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const err = onSubmit(values);
-    if (err) {
-      setError(err);
-      return;
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const err = await onSubmit(values);
+      if (err) {
+        setError(err);
+        return;
+      }
+      onClose();
+    } finally {
+      setSubmitting(false);
     }
-    onClose();
   }
 
   return (
@@ -82,7 +91,7 @@ export function RedeemFormModal({
             {mode === "add" ? "Add redeem code" : "Edit redeem code"}
           </h2>
           <p className="mt-0.5 text-[11px] text-white/80">
-            Local draft until Redeem API is connected.
+            Saved to live inventory — same rows the Android redeem tab loads.
           </p>
           <button
             type="button"
@@ -138,8 +147,12 @@ export function RedeemFormModal({
                 className={`${fieldClass} font-mono tracking-wide`}
                 value={values.codeSecret}
                 onChange={(e) => patch("codeSecret", e.target.value)}
-                placeholder="XXXX-XXXX-XXXX-XXXX"
-                required
+                placeholder={
+                  mode === "edit"
+                    ? "Leave blank to keep current code"
+                    : "XXXX-XXXX-XXXX-XXXX"
+                }
+                required={mode === "add"}
               />
             </label>
           </div>
@@ -189,13 +202,14 @@ export function RedeemFormModal({
             </label>
             <label className={labelClass}>
               Stock
-              <input
-                type="number"
-                min={0}
+              <select
                 className={fieldClass}
                 value={values.stockLeft}
                 onChange={(e) => patch("stockLeft", Number(e.target.value))}
-              />
+              >
+                <option value={1}>1 — available</option>
+                <option value={0}>0 — claimed / empty</option>
+              </select>
             </label>
             <label className={labelClass}>
               Coin cost
@@ -250,9 +264,14 @@ export function RedeemFormModal({
           </button>
           <button
             type="submit"
-            className="h-9 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 px-5 text-[13px] font-semibold text-white shadow-sm hover:from-indigo-500 hover:to-blue-500"
+            disabled={submitting}
+            className="h-9 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 px-5 text-[13px] font-semibold text-white shadow-sm hover:from-indigo-500 hover:to-blue-500 disabled:opacity-60"
           >
-            {mode === "add" ? "Add code" : "Save changes"}
+            {submitting
+              ? "Saving…"
+              : mode === "add"
+                ? "Add code"
+                : "Save changes"}
           </button>
         </footer>
       </form>

@@ -66,23 +66,18 @@ function initFirebaseAdmin() {
     return true;
 }
 function buildAndroidMessage(input) {
+    const campaignId = input.campaignId?.trim() ?? '';
     return {
-        notification: { title: input.title, body: input.body },
         data: {
             title: input.title,
             body: input.body,
             deepLink: input.deepLink,
+            ...(campaignId ? { campaignId } : {}),
         },
         android: {
             priority: 'high',
             ttl: 86400000,
-            notification: {
-                channelId: 'ff_ops_push',
-                icon: 'ic_stat_ff_notification',
-                color: '#E8A838',
-                priority: 'high',
-                defaultSound: true,
-            },
+            ...(campaignId ? { collapseKey: campaignId.slice(0, 64) } : {}),
         },
     };
 }
@@ -95,7 +90,6 @@ async function sendFcmCampaign(input) {
         try {
             await admin.messaging().send({
                 topic: input.topic,
-                notification: msg.notification,
                 data: msg.data,
                 android: msg.android,
             });
@@ -119,6 +113,24 @@ async function sendFcmCampaign(input) {
     let delivered = 0;
     let failed = 0;
     const unregisteredTokens = [];
+    if (input.audience === 'ALL') {
+        try {
+            await admin.messaging().send({
+                topic: 'all_users',
+                data: msg.data,
+                android: msg.android,
+            });
+            return {
+                mode: 'fcm',
+                delivered: tokens.length > 0 ? tokens.length : 1,
+                failed: 0,
+                unregisteredTokens: [],
+            };
+        }
+        catch (e) {
+            console.error('[push-fcm] all_users topic send failed', e);
+        }
+    }
     if (tokens.length === 0) {
         return {
             mode: 'fcm',
@@ -132,7 +144,6 @@ async function sendFcmCampaign(input) {
         const chunk = tokens.slice(i, i + chunkSize);
         const res = await admin.messaging().sendEachForMulticast({
             tokens: chunk,
-            notification: msg.notification,
             data: msg.data,
             android: msg.android,
         });

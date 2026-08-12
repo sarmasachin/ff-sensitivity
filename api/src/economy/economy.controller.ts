@@ -32,5 +32,11 @@ export class EconomyController {
   purchase(@CurrentUser() user: AuthUser, @Body() dto: ShopPurchaseDto) {
     return this.economy.purchaseShop(user.id, dto.itemId, dto.requestId);
   }
+
+  @Get('shop/catalog')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  shopCatalog() {
+    return this.economy.shopCatalog();
+  }
 }
 // --- End: Economy live wire (Sachin) ---

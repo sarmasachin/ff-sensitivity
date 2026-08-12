@@ -57,8 +57,8 @@ export function RedeemEmptyState({ kind, onAdd, onClearFilter }: Props) {
         No redeem codes yet
       </h3>
       <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-slate-500">
-        Add your first Google Play gift code to start stocking the Android redeem
-        tab. You can import CSV later when the API is live.
+        Add a real gift code. It is saved to the database and shows on the
+        Android redeem tab after the next catalog load.
       </p>
       <button
         type="button"
