@@ -90,6 +90,12 @@ export class UserAuthService {
       throw new AppError('AUTH_SUSPENDED', 'This account is suspended.', 403);
     }
 
+    // Server-owned login ping for Users drawer activity feed (not client-postable).
+    this.analytics.trackSafe({
+      name: 'login',
+      userId: user.id,
+    });
+
     const accessToken = await this.jwt.signAsync(
       {
         sub: user.id,

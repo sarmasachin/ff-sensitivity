@@ -8,6 +8,7 @@ export const ALLOWED_EVENT_NAMES = [
   'app_open',
   'home_open',
   'screen_session',
+  'login',
   'logout',
   'redeem_claim',
   'scratch_roll',

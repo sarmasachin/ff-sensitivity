@@ -2,6 +2,8 @@ import {
   USER_STATUS_LABEL,
   type UserListRow,
 } from "./users-data";
+import { UsersScreenJourney } from "./UsersScreenJourney";
+import { UsersActivityFeed } from "./UsersActivityFeed";
 
 type Props = {
   open: boolean;
@@ -116,6 +118,10 @@ export function UsersDetailDrawer({
               <Metric label="Unlocks" value={String(row.redeemUnlocks)} />
             </div>
           </section>
+
+          <UsersScreenJourney userId={row.id} />
+
+          <UsersActivityFeed userId={row.id} />
 
           <section className="mt-5">
             <h3 className="text-[11px] font-semibold tracking-[0.1em] text-slate-400 uppercase">
