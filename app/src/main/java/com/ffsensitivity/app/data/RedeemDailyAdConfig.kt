@@ -3,10 +3,12 @@ package com.ffsensitivity.app.data
 /**
  * Remote Redeem Daily scratch gate
  * (GET /api/v1/app/config → ads.redeemDaily).
+ *
+ * Safe defaults: ad unlocks another scratch / coins — not “watch ad to get gift code”.
  */
 object RedeemDailyAdConfig {
-    const val DEFAULT_INCOMPLETE = "Watch the ad to open today’s redeem card."
-    const val DEFAULT_BUTTON = "Redeem Now · Watch Ad"
+    const val DEFAULT_INCOMPLETE = "Watch the ad to scratch again and earn coins."
+    const val DEFAULT_BUTTON = "Scratch again · Watch Ad"
 
     @Volatile
     var enabled: Boolean = true

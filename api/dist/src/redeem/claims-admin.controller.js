@@ -20,35 +20,35 @@ const current_admin_decorator_1 = require("../auth/current-admin.decorator");
 const app_error_1 = require("../common/errors/app-error");
 const claims_module_guard_1 = require("./claims-module.guard");
 const claims_admin_dto_1 = require("./dto/claims-admin.dto");
-const redeem_service_1 = require("./redeem.service");
+const redeem_claims_service_1 = require("./redeem-claims.service");
 let ClaimsAdminController = class ClaimsAdminController {
-    redeem;
-    constructor(redeem) {
-        this.redeem = redeem;
+    claims;
+    constructor(claims) {
+        this.claims = claims;
     }
     list(q) {
-        return this.redeem.adminListClaims(q);
+        return this.claims.adminListClaims(q);
     }
     stats() {
-        return this.redeem.adminClaimsStats();
+        return this.claims.adminClaimsStats();
     }
     reveal(admin, id, dto) {
         if (!id?.trim() || id.includes('/')) {
             throw new app_error_1.AppError('CLAIM_BAD_ID', 'Invalid claim id.', 400);
         }
-        return this.redeem.adminRevealClaim(admin.id, id.trim(), dto.currentPassword);
+        return this.claims.adminRevealClaim(admin.id, id.trim(), dto.currentPassword);
     }
     flag(admin, id, dto) {
         if (!id?.trim() || id.includes('/')) {
             throw new app_error_1.AppError('CLAIM_BAD_ID', 'Invalid claim id.', 400);
         }
-        return this.redeem.adminFlagClaim(admin.id, id.trim(), dto.flagged, dto.note);
+        return this.claims.adminFlagClaim(admin.id, id.trim(), dto.flagged, dto.note);
     }
     remove(admin, id) {
         if (!id?.trim() || id.includes('/')) {
             throw new app_error_1.AppError('CLAIM_BAD_ID', 'Invalid claim id.', 400);
         }
-        return this.redeem.adminDeleteClaim(admin.id, id.trim());
+        return this.claims.adminDeleteClaim(admin.id, id.trim());
     }
 };
 exports.ClaimsAdminController = ClaimsAdminController;
@@ -99,6 +99,6 @@ __decorate([
 exports.ClaimsAdminController = ClaimsAdminController = __decorate([
     (0, common_1.Controller)('api/v1/admin/claims'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, claims_module_guard_1.ClaimsModuleGuard),
-    __metadata("design:paramtypes", [redeem_service_1.RedeemService])
+    __metadata("design:paramtypes", [redeem_claims_service_1.RedeemClaimsService])
 ], ClaimsAdminController);
 //# sourceMappingURL=claims-admin.controller.js.map

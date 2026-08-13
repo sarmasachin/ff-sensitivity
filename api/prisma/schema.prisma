@@ -115,11 +115,6 @@ model AuditLog {
 }
 
 // --- Start: Redeem live wire (Sachin) ---
-enum RedeemType {
-  GOOGLE_PLAY
-  FF_DIAMONDS
-}
-
 enum RedeemCodeStatus {
   ACTIVE
   PAUSED
@@ -127,9 +122,40 @@ enum RedeemCodeStatus {
   EXPIRED
 }
 
-enum RedeemCadence {
-  DAILY
-  WEEKLY
+enum RedeemMode {
+  SINGLE
+  SCRATCH_REWARD
+}
+
+model RedeemTypeDef {
+  id        String   @id
+  label     String
+  sortOrder Int      @default(0) @map("sort_order")
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, sortOrder])
+  @@map("redeem_types")
+}
+
+model RedeemCadenceDef {
+  id          String   @id
+  label       String
+  claimLimit  Int      @default(3) @map("claim_limit")
+  windowHours Int      @default(24) @map("window_hours")
+  sortOrder   Int      @default(0) @map("sort_order")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled, sortOrder])
+  @@map("redeem_cadences")
+}
+
+enum RedeemSecretStatus {
+  UNUSED
+  ASSIGNED
 }
 
 model User {
@@ -160,6 +186,8 @@ model User {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   claims           RedeemClaim[]
+  redeemScratchRolls RedeemScratchRoll[]
+  redeemScratchPasses RedeemScratchPass[]
   // --- Start: Economy live wire (Sachin) ---
   ledger           WalletLedger[]
   boostCharges     UserBoostCharge[]
@@ -250,26 +278,87 @@ model ShopItem {
 // --- End: Shop live wire (Sachin) ---
 
 model RedeemCode {
-  id           String           @id @default(cuid())
-  title        String
-  type         RedeemType
-  valueLabel   String           @map("value_label")
-  codeSecret   String           @map("code_secret")
-  status       RedeemCodeStatus @default(ACTIVE)
-  cadence      RedeemCadence    @default(DAILY)
-  stockLeft    Int              @map("stock_left")
-  coinCost     Int?             @map("coin_cost")
-  expiresLabel String           @map("expires_label")
-  expiresAt    DateTime?        @map("expires_at")
-  tip          String           @default("First Come, First Serve!")
-  redeemUrl    String           @map("redeem_url")
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @updatedAt @map("updated_at")
+  id             String           @id @default(cuid())
+  title          String
+  type           String
+  valueLabel     String           @map("value_label")
+  codeSecret     String           @map("code_secret")
+  status         RedeemCodeStatus @default(ACTIVE)
+  cadence        String           @default("DAILY")
+  mode           RedeemMode       @default(SINGLE)
+  stockLeft      Int              @map("stock_left")
+  coinCost       Int?             @map("coin_cost")
+  coinRewardMin  Int?             @map("coin_reward_min")
+  coinRewardMax  Int?             @map("coin_reward_max")
+  startsAt       DateTime?        @map("starts_at")
+  endsAt         DateTime?        @map("ends_at")
+  windowMinutes  Int              @default(30) @map("window_minutes")
+  codesPerWindow Int              @default(1) @map("codes_per_window")
+  expiresLabel   String           @map("expires_label")
+  expiresAt      DateTime?        @map("expires_at")
+  tip            String           @default("First Come, First Serve!")
+  redeemUrl      String           @map("redeem_url")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
 
-  claims RedeemClaim[]
+  claims        RedeemClaim[]
+  secrets       RedeemCodeSecret[]
+  scratchRolls  RedeemScratchRoll[]
+  scratchPasses RedeemScratchPass[]
 
   @@unique([codeSecret])
+  @@index([mode, status])
   @@map("redeem_codes")
+}
+
+model RedeemCodeSecret {
+  id             String             @id @default(cuid())
+  redeemCodeId   String             @map("redeem_code_id")
+  codeSecret     String             @unique @map("code_secret")
+  status         RedeemSecretStatus @default(UNUSED)
+  assignedUserId String?            @map("assigned_user_id")
+  assignedAt     DateTime?          @map("assigned_at")
+  awardWindow    Int?               @map("award_window")
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  redeemCode RedeemCode @relation(fields: [redeemCodeId], references: [id], onDelete: Cascade)
+
+  @@index([redeemCodeId, status])
+  @@index([redeemCodeId, awardWindow])
+  @@map("redeem_code_secrets")
+}
+
+model RedeemScratchRoll {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  redeemCodeId String   @map("redeem_code_id")
+  attemptKey   String   @map("attempt_key")
+  coinsGranted Int      @map("coins_granted")
+  codeSecret   String?  @map("code_secret")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redeemCode RedeemCode @relation(fields: [redeemCodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, redeemCodeId, attemptKey])
+  @@index([redeemCodeId, createdAt])
+  @@index([userId, redeemCodeId])
+  @@map("redeem_scratch_rolls")
+}
+
+model RedeemScratchPass {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  redeemCodeId     String   @map("redeem_code_id")
+  allowedAttempts  Int      @default(1) @map("allowed_attempts")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redeemCode RedeemCode @relation(fields: [redeemCodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, redeemCodeId])
+  @@map("redeem_scratch_passes")
 }
 
 model RedeemClaim {

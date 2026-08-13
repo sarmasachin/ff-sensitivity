@@ -1,9 +1,8 @@
-import { RedeemCadence, RedeemCodeStatus, RedeemType } from '@prisma/client';
+import { RedeemCodeStatus } from '@prisma/client';
 import { AppError } from '../common/errors/app-error';
 
-const TYPES = new Set<string>(Object.values(RedeemType));
 const STATUSES = new Set<string>(Object.values(RedeemCodeStatus));
-const CADENCES = new Set<string>(Object.values(RedeemCadence));
+const DEF_ID_RE = /^[A-Z][A-Z0-9_]{1,31}$/;
 
 export function sanitizeRedeemText(raw: string, max: number): string {
   return [...(raw ?? '')]
@@ -26,11 +25,27 @@ export function assertRedeemAdminId(raw: string): string {
   return id;
 }
 
-export function assertRedeemType(raw: string): RedeemType {
-  if (!TYPES.has(raw)) {
-    throw new AppError('REDEEM_BAD_TYPE', 'Invalid redeem type.', 400);
+/** Type / cadence option id (UPPER_SNAKE). */
+export function assertRedeemDefId(raw: string): string {
+  const id = String(raw ?? '')
+    .trim()
+    .toUpperCase();
+  if (!DEF_ID_RE.test(id)) {
+    throw new AppError(
+      'REDEEM_BAD_DEF_ID',
+      'Id must be UPPER_SNAKE (2–32), e.g. GOOGLE_PLAY or DAILY.',
+      400,
+    );
   }
-  return raw as RedeemType;
+  return id;
+}
+
+export function assertRedeemType(raw: string): string {
+  return assertRedeemDefId(raw);
+}
+
+export function assertRedeemCadence(raw: string): string {
+  return assertRedeemDefId(raw);
 }
 
 export function assertRedeemStatus(raw: string): RedeemCodeStatus {
@@ -38,13 +53,6 @@ export function assertRedeemStatus(raw: string): RedeemCodeStatus {
     throw new AppError('REDEEM_BAD_STATUS', 'Invalid redeem status.', 400);
   }
   return raw as RedeemCodeStatus;
-}
-
-export function assertRedeemCadence(raw: string): RedeemCadence {
-  if (!CADENCES.has(raw)) {
-    throw new AppError('REDEEM_BAD_CADENCE', 'Invalid cadence.', 400);
-  }
-  return raw as RedeemCadence;
 }
 
 export function assertStockLeft(n: number): number {
@@ -68,4 +76,43 @@ export function assertCodeSecret(raw: string): string {
     );
   }
   return secret;
+}
+
+export function assertSortOrder(n: unknown, fallback = 0): number {
+  if (n == null || n === '') return fallback;
+  const v = Number(n);
+  if (!Number.isInteger(v) || v < 0 || v > 9999) {
+    throw new AppError(
+      'REDEEM_BAD_SORT',
+      'Sort order must be 0–9999.',
+      400,
+    );
+  }
+  return v;
+}
+
+export function assertClaimLimit(n: unknown, fallback = 3): number {
+  if (n == null || n === '') return fallback;
+  const v = Number(n);
+  if (!Number.isInteger(v) || v < 1 || v > 100) {
+    throw new AppError(
+      'REDEEM_BAD_CLAIM_LIMIT',
+      'Claim limit must be 1–100.',
+      400,
+    );
+  }
+  return v;
+}
+
+export function assertWindowHours(n: unknown, fallback = 24): number {
+  if (n == null || n === '') return fallback;
+  const v = Number(n);
+  if (!Number.isInteger(v) || v < 1 || v > 8760) {
+    throw new AppError(
+      'REDEEM_BAD_WINDOW_HOURS',
+      'Window hours must be 1–8760.',
+      400,
+    );
+  }
+  return v;
 }

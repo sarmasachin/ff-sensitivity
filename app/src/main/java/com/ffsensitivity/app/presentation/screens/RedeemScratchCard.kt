@@ -123,7 +123,11 @@ fun RedeemScratchCardDialog(
                     AppLog.e("Redeem scratch claim callback failed", it)
                     ScratchClaimUiResult(
                         ok = false,
-                        message = "Couldn't unlock this code. Try again."
+                        message = if (item.isScratchReward) {
+                            "Couldn't secure coins. Try again."
+                        } else {
+                            "Couldn't unlock this code. Try again."
+                        }
                     )
                 }
                 if (result.ok) {
@@ -184,9 +188,12 @@ fun RedeemScratchCardDialog(
         ) {
             RedeemScratchHeader(
                 title = when {
+                    claimOk && item.isScratchReward && unlockedCode.isNullOrBlank() -> "COINS EARNED"
+                    claimOk && item.isScratchReward -> "COINS + CODE"
                     claimOk -> "CODE UNLOCKED"
                     claimError != null -> "CLAIM PENDING"
                     revealed -> "PRIZE REVEALED"
+                    item.isScratchReward -> "SCRATCH FOR COINS"
                     else -> "SCRATCH TO UNLOCK"
                 },
                 subtitle = item.title,
@@ -197,9 +204,21 @@ fun RedeemScratchCardDialog(
             Text(
                 text = when {
                     unlockInFlight && !revealed -> "Revealing…"
-                    unlockInFlight -> "Unlocking code…"
+                    unlockInFlight -> if (item.isScratchReward) "Securing coins…" else "Unlocking code…"
+                    claimOk && item.isScratchReward && unlockedCode.isNullOrBlank() ->
+                        "Coins secured · watch ad to scratch again"
+                    claimOk && item.isScratchReward ->
+                        "Coins secured · bonus code ready to copy"
                     claimOk -> "You won · copy code, then close"
-                    claimError != null -> "Foil open · retry to unlock the real code"
+                    claimError != null -> if (item.isScratchReward) {
+                        "Foil open · retry to secure coins"
+                    } else {
+                        "Foil open · retry to unlock the real code"
+                    }
+                    item.isScratchReward ->
+                        item.tip.ifBlank {
+                            "Scratch to earn Coins. Limited reward codes via schedule."
+                        }
                     else -> "Scratch the foil · unlocks at 40%"
                 },
                 color = when {
@@ -286,59 +305,69 @@ fun RedeemScratchCardDialog(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Foil stays open · real code only after unlock succeeds",
+                    text = if (item.isScratchReward) {
+                        "Foil stays open · coins only after server confirms"
+                    } else {
+                        "Foil stays open · real code only after unlock succeeds"
+                    },
                     color = InkMuted,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
             } else if (claimOk) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Brush.horizontalGradient(listOf(Amber, AmberHot)))
-                        .clickable {
-                            runCatching {
-                                val code = unlockedCode.orEmpty()
-                                val ok = code.isNotBlank() &&
-                                    SafeOps.copyText(context, "redeem_code", code)
-                                SafeOps.toast(
-                                    context,
-                                    if (ok) {
-                                        "Code Copied Successfully!"
-                                    } else {
-                                        "Could not copy code. Try again."
-                                    }
-                                )
-                            }.onFailure {
-                                AppLog.e("Redeem scratch copy failed", it)
-                                SafeOps.toast(context, "Could not copy code. Try again.")
+                if (!unlockedCode.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Brush.horizontalGradient(listOf(Amber, AmberHot)))
+                            .clickable {
+                                runCatching {
+                                    val code = unlockedCode.orEmpty()
+                                    val ok = code.isNotBlank() &&
+                                        SafeOps.copyText(context, "redeem_code", code)
+                                    SafeOps.toast(
+                                        context,
+                                        if (ok) {
+                                            "Code Copied Successfully!"
+                                        } else {
+                                            "Could not copy code. Try again."
+                                        }
+                                    )
+                                }.onFailure {
+                                    AppLog.e("Redeem scratch copy failed", it)
+                                    SafeOps.toast(context, "Could not copy code. Try again.")
+                                }
                             }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Outlined.ContentCopy,
+                                contentDescription = null,
+                                tint = VoidBlack,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "COPY CODE",
+                                color = VoidBlack,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 0.8.sp
+                            )
                         }
-                        .padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Outlined.ContentCopy,
-                            contentDescription = null,
-                            tint = VoidBlack,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "COPY CODE",
-                            color = VoidBlack,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.8.sp
-                        )
                     }
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
-                Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Tap ✕ to close",
+                    text = if (item.isScratchReward) {
+                        "Tap ✕ to close · watch ad on card to scratch again"
+                    } else {
+                        "Tap ✕ to close"
+                    },
                     color = Success,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -348,8 +377,11 @@ fun RedeemScratchCardDialog(
             } else {
                 Text(
                     text = when {
+                        unlockInFlight && revealed && item.isScratchReward -> "Securing coins on server…"
                         unlockInFlight && revealed -> "Securing code on server…"
                         unlockInFlight -> "Almost there…"
+                        item.isScratchReward ->
+                            "Finger scratch · coins every time · limited codes by schedule"
                         else -> "Finger scratch · foil clears at 40%"
                     },
                     color = InkMuted,
@@ -607,7 +639,7 @@ private fun RedeemScratchFoil(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = if (obsidian) "Obsidian foil · uncover code" else "Reveal redeem code",
+                    text = if (obsidian) "Obsidian foil · uncover reward" else "Scratch to reveal reward",
                     color = hintColor.copy(alpha = 0.75f),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold

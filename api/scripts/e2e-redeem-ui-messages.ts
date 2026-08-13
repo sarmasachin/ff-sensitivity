@@ -79,37 +79,46 @@ async function main() {
   const page = readRepo('admin/src/app/(ops)/redeem/page.tsx');
   const form = readRepo('admin/src/components/redeem/RedeemFormModal.tsx');
 
-  // Success / notice / error / warning surface in UI source
-  /setNotice\(`Added/.test(page) &&
-  /setNotice\(`Updated/.test(page) &&
-  /setNotice\(`Deleted/.test(page) &&
-  /setNotice\(`Revealed/.test(page)
-    ? pass('success_notice_wired')
-    : fail('success_notice_wired');
+  // Toast host (bottom-right): success / caution / error
+  page.includes('RedeemToastHost') &&
+  page.includes('useRedeemToasts') &&
+  /push\(\s*"success"/.test(page) &&
+  /push\(\s*"error"/.test(page) &&
+  /push\(\s*"caution"/.test(page)
+    ? pass('toast_host_wired')
+    : fail('toast_host_wired');
 
-  page.includes('border-rose-200 bg-rose-50') &&
-  page.includes('{error ?')
-    ? pass('error_banner_wired')
-    : fail('error_banner_wired');
+  page.includes('REDEEM_TOAST_TITLES.added') &&
+  page.includes('REDEEM_TOAST_TITLES.updated') &&
+  page.includes('REDEEM_TOAST_TITLES.deleted') &&
+  page.includes('REDEEM_TOAST_TITLES.revealed')
+    ? pass('success_toast_wired')
+    : fail('success_toast_wired');
 
-  page.includes('border-amber-100 bg-amber-50') &&
-  page.includes('{notice ?')
-    ? pass('notice_banner_wired_amber')
-    : fail('notice_banner_wired_amber');
+  page.includes('actionLabel: "Retry"') &&
+  page.includes('REDEEM_TOAST_TITLES.loadError')
+    ? pass('error_toast_retry_wired')
+    : fail('error_toast_retry_wired');
+
+  page.includes('fixed right-') === false &&
+  /fixed right-\d+ bottom-\d+/.test(
+    readRepo('admin/src/components/redeem/RedeemToastHost.tsx'),
+  )
+    ? pass('toast_bottom_right_host')
+    : fail('toast_bottom_right_host');
 
   form.includes('border-rose-200 bg-rose-50') &&
   form.includes('{error ?')
     ? pass('form_error_banner_wired')
     : fail('form_error_banner_wired');
 
-  // No dedicated green success / separate warning channel
   !page.includes('bg-emerald') && !page.includes('bg-green')
-    ? pass('no_green_success_banner')
-    : fail('no_green_success_banner');
+    ? pass('no_green_page_banner')
+    : fail('no_green_page_banner');
 
-  !page.includes('setWarning') && !page.includes('warning')
-    ? pass('no_separate_warning_state')
-    : fail('no_separate_warning_state');
+  !page.includes('setWarning')
+    ? pass('no_legacy_warning_state')
+    : fail('no_legacy_warning_state');
 
   const admin = await prisma.admin.findFirst({
     where: {

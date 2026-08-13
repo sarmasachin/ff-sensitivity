@@ -1,10 +1,14 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
-import type { CreateRedeemCodeDto, UpdateRedeemCodeDto } from './dto/redeem-admin.dto';
+import { RedeemAdminPoolService } from './redeem-admin-pool.service';
+import { RedeemAdminDefsService } from './redeem-admin-defs.service';
+import type { AppendRedeemPoolDto, CreateRedeemCodeDto, UpdateRedeemCodeDto } from './dto/redeem-admin.dto';
 export declare class RedeemAdminService {
     private readonly prisma;
     private readonly settings;
-    constructor(prisma: PrismaService, settings: SettingsService);
+    private readonly pool;
+    private readonly defs;
+    constructor(prisma: PrismaService, settings: SettingsService, pool: RedeemAdminPoolService, defs: RedeemAdminDefsService);
     list(): Promise<{
         codes: {
             id: string;
@@ -15,11 +19,37 @@ export declare class RedeemAdminService {
             codeMasked: string;
             status: string;
             cadence: string;
+            mode: string;
             stockLeft: number;
+            poolLeft: number | null;
             coinCost: number | null;
+            coinRewardMin: number | null;
+            coinRewardMax: number | null;
+            startsAt: string | null;
+            endsAt: string | null;
+            windowMinutes: number;
+            codesPerWindow: number;
             expiresLabel: string;
             tip: string;
             redeemUrl: string;
+        }[];
+        types: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            label: string;
+            sortOrder: number;
+            enabled: boolean;
+        }[];
+        cadences: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            label: string;
+            sortOrder: number;
+            enabled: boolean;
+            claimLimit: number;
+            windowHours: number;
         }[];
     }>;
     create(adminId: string, dto: CreateRedeemCodeDto): Promise<{
@@ -31,8 +61,16 @@ export declare class RedeemAdminService {
         codeMasked: string;
         status: string;
         cadence: string;
+        mode: string;
         stockLeft: number;
+        poolLeft: number | null;
         coinCost: number | null;
+        coinRewardMin: number | null;
+        coinRewardMax: number | null;
+        startsAt: string | null;
+        endsAt: string | null;
+        windowMinutes: number;
+        codesPerWindow: number;
         expiresLabel: string;
         tip: string;
         redeemUrl: string;
@@ -46,8 +84,40 @@ export declare class RedeemAdminService {
         codeMasked: string;
         status: string;
         cadence: string;
+        mode: string;
         stockLeft: number;
+        poolLeft: number | null;
         coinCost: number | null;
+        coinRewardMin: number | null;
+        coinRewardMax: number | null;
+        startsAt: string | null;
+        endsAt: string | null;
+        windowMinutes: number;
+        codesPerWindow: number;
+        expiresLabel: string;
+        tip: string;
+        redeemUrl: string;
+    }>;
+    appendPool(adminId: string, id: string, dto: AppendRedeemPoolDto): Promise<{
+        added: number;
+        id: string;
+        title: string;
+        type: string;
+        valueLabel: string;
+        codeSecret: string;
+        codeMasked: string;
+        status: string;
+        cadence: string;
+        mode: string;
+        stockLeft: number;
+        poolLeft: number | null;
+        coinCost: number | null;
+        coinRewardMin: number | null;
+        coinRewardMax: number | null;
+        startsAt: string | null;
+        endsAt: string | null;
+        windowMinutes: number;
+        codesPerWindow: number;
         expiresLabel: string;
         tip: string;
         redeemUrl: string;
@@ -59,8 +129,25 @@ export declare class RedeemAdminService {
     reveal(adminId: string, id: string, currentPassword?: string): Promise<{
         id: string;
         title: string;
+        mode: "SCRATCH_REWARD";
+        codeMasked: string;
+        code: string | null;
+        unusedPreview: {
+            id: string;
+            codeMasked: string;
+            code: string;
+        }[];
+    } | {
+        id: string;
+        title: string;
+        mode: "SINGLE";
         codeMasked: string;
         code: string;
+        unusedPreview: {
+            id: string;
+            codeMasked: string;
+            code: string;
+        }[];
     }>;
     private parseWrite;
     private toListRow;

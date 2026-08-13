@@ -14,11 +14,17 @@ import {
   updateRedeemCode,
 } from "@/components/redeem/redeem-api";
 import {
+  addRedeemCadenceDef,
+  addRedeemTypeDef,
+} from "@/components/redeem/redeem-page-defs";
+import {
   computeRedeemStats,
   emptyRedeemForm,
   rowToForm,
+  type RedeemCadenceRow,
   type RedeemFormValues,
   type RedeemListRow,
+  type RedeemTypeRow,
 } from "@/components/redeem/redeem-data";
 import { RedeemFormModal } from "@/components/redeem/RedeemFormModal";
 import { RedeemHeader } from "@/components/redeem/RedeemHeader";
@@ -31,51 +37,35 @@ import {
   type RedeemFilterKey,
 } from "@/components/redeem/RedeemToolbar";
 import { SupportConfirmDialog } from "@/components/support/SupportConfirmDialog";
-
-const PAGE_SIZE = 12;
-
-function canAccessRedeem(): boolean {
-  if (typeof window === "undefined") return false;
-  const raw =
-    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
-  if (!raw) return false;
-  try {
-    const admin = JSON.parse(raw) as {
-      role?: string;
-      allowedModules?: string[];
-    };
-    if (admin.role === "SUPER_ADMIN") return true;
-    return Array.isArray(admin.allowedModules)
-      ? admin.allowedModules.includes("redeem")
-      : false;
-  } catch {
-    return false;
-  }
-}
+import { RedeemToastHost } from "@/components/redeem/RedeemToastHost";
+import { useRedeemToasts } from "@/components/redeem/useRedeemToasts";
+import { REDEEM_TOAST_TITLES } from "@/components/redeem/redeem-toast";
+import {
+  REDEEM_PAGE_SIZE,
+  canAccessRedeem,
+} from "@/components/redeem/redeem-page-access";
 
 export default function RedeemPage() {
   const [allowed, setAllowed] = useState(true);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<RedeemListRow[]>([]);
+  const [types, setTypes] = useState<RedeemTypeRow[]>([]);
+  const [cadences, setCadences] = useState<RedeemCadenceRow[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<RedeemFilterKey>("all");
   const [page, setPage] = useState(1);
-  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryToastId, setRetryToastId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formInitial, setFormInitial] = useState(emptyRedeemForm());
-  const [reveal, setReveal] = useState<{ title: string; code: string } | null>(
-    null,
-  );
-  const [commentsFor, setCommentsFor] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
+  const [reveal, setReveal] = useState<{ title: string; code: string } | null>(null);
+  const [commentsFor, setCommentsFor] = useState<{ id: string; title: string } | null>(null);
   const [claimLogOpen, setClaimLogOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RedeemListRow | null>(null);
+  const { toasts, push, dismiss, clear } = useRedeemToasts();
 
   useEffect(() => {
     setAllowed(canAccessRedeem());
@@ -85,14 +75,53 @@ export default function RedeemPage() {
     setLoading(true);
     setError(null);
     try {
-      setRows(await fetchRedeemCodes());
+      const data = await fetchRedeemCodes();
+      setRows(data.codes);
+      setTypes(data.types);
+      setCadences(data.cadences);
     } catch (e) {
-      setNotice(null);
-      setError(e instanceof Error ? e.message : "Failed to load redeem codes.");
+      const message =
+        e instanceof Error ? e.message : "Failed to load redeem codes.";
+      setError(message);
+      const id = push("error", REDEEM_TOAST_TITLES.loadError, message, {
+        actionLabel: "Retry",
+        durationMs: 0,
+      });
+      setRetryToastId(id);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [push]);
+
+  function openAdd() {
+    setFormMode("add");
+    setEditingId(null);
+    const firstType = types.find((t) => t.enabled)?.id ?? "GOOGLE_PLAY";
+    const firstCadence = cadences.find((c) => c.enabled)?.id ?? "DAILY";
+    setFormInitial({
+      ...emptyRedeemForm(),
+      type: firstType,
+      cadence: firstCadence,
+    });
+    clear();
+    setFormOpen(true);
+  }
+
+  async function handleCreateType(input: {
+    id: string;
+    label: string;
+  }): Promise<string | null> {
+    return addRedeemTypeDef(input, setTypes, push);
+  }
+
+  async function handleCreateCadence(input: {
+    id: string;
+    label: string;
+    claimLimit?: number;
+    windowHours?: number;
+  }): Promise<string | null> {
+    return addRedeemCadenceDef(input, setCadences, push);
+  }
 
   useEffect(() => {
     if (!allowed) {
@@ -122,25 +151,16 @@ export default function RedeemPage() {
       );
     });
   }, [rows, query, filter]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / REDEEM_PAGE_SIZE));
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
   const paged = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
+    const start = (page - 1) * REDEEM_PAGE_SIZE;
+    return filtered.slice(start, start + REDEEM_PAGE_SIZE);
   }, [filtered, page]);
-
-  function openAdd() {
-    setFormMode("add");
-    setEditingId(null);
-    setFormInitial(emptyRedeemForm());
-    setNotice(null);
-    setError(null);
-    setFormOpen(true);
-  }
 
   function openEdit(id: string) {
     const row = rows.find((r) => r.id === id);
@@ -148,8 +168,7 @@ export default function RedeemPage() {
     setFormMode("edit");
     setEditingId(id);
     setFormInitial(rowToForm(row));
-    setNotice(null);
-    setError(null);
+    clear();
     setFormOpen(true);
   }
 
@@ -158,20 +177,18 @@ export default function RedeemPage() {
     if ("error" in body) {
       return typeof body.error === "string" ? body.error : "Invalid form.";
     }
-    setError(null);
     try {
       if (formMode === "edit" && editingId) {
         const saved = await updateRedeemCode(editingId, body);
         setRows((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
-        setNotice(`Updated “${saved.title}”.`);
+        push("success", REDEEM_TOAST_TITLES.updated, `“${saved.title}” saved.`);
       } else {
         const saved = await createRedeemCode(body);
         setRows((prev) => [saved, ...prev]);
-        setNotice(`Added “${saved.title}”.`);
+        push("success", REDEEM_TOAST_TITLES.added, `“${saved.title}” is live.`);
       }
       return null;
     } catch (e) {
-      setNotice(null);
       return e instanceof Error ? e.message : "Save failed.";
     }
   }
@@ -180,20 +197,38 @@ export default function RedeemPage() {
     const row = rows.find((r) => r.id === id);
     if (!row || busyId) return;
     setBusyId(id);
-    setError(null);
     try {
       const revealed = await revealRedeemCode(id);
-      const code = revealed.code?.trim() ?? "";
+      const code =
+        revealed.code?.trim() ||
+        revealed.unusedPreview?.[0]?.code?.trim() ||
+        "";
       if (!code) {
-        setNotice(null);
-        setError("Reveal returned an empty code.");
+        push(
+          "caution",
+          REDEEM_TOAST_TITLES.caution,
+          revealed.unusedPreview?.length
+            ? "Pool preview empty — add codes first."
+            : "Reveal returned an empty code.",
+        );
         return;
       }
-      setReveal({ title: revealed.title, code });
-      setNotice(`Revealed code for “${revealed.title}”.`);
+      const title =
+        revealed.unusedPreview?.length && !revealed.code
+          ? `${revealed.title} (pool sample)`
+          : revealed.title;
+      setReveal({ title, code });
+      push(
+        "success",
+        REDEEM_TOAST_TITLES.revealed,
+        `Code for “${revealed.title}” is ready.`,
+      );
     } catch (e) {
-      setNotice(null);
-      setError(e instanceof Error ? e.message : "Reveal failed.");
+      push(
+        "error",
+        REDEEM_TOAST_TITLES.error,
+        e instanceof Error ? e.message : "Reveal failed.",
+      );
     } finally {
       setBusyId(null);
     }
@@ -202,8 +237,7 @@ export default function RedeemPage() {
   function requestDelete(id: string) {
     const row = rows.find((r) => r.id === id);
     if (!row || busyId) return;
-    setError(null);
-    setNotice(null);
+    clear();
     setDeleteTarget(row);
   }
 
@@ -211,16 +245,18 @@ export default function RedeemPage() {
     const row = deleteTarget;
     if (!row || busyId) return;
     setBusyId(row.id);
-    setError(null);
     try {
       await deleteRedeemCode(row.id);
       setRows((prev) => prev.filter((r) => r.id !== row.id));
-      setNotice(`Deleted “${row.title}”.`);
+      push("success", REDEEM_TOAST_TITLES.deleted, `“${row.title}” removed.`);
       if (commentsFor?.id === row.id) setCommentsFor(null);
       setDeleteTarget(null);
     } catch (e) {
-      setNotice(null);
-      setError(e instanceof Error ? e.message : "Delete failed.");
+      push(
+        "error",
+        REDEEM_TOAST_TITLES.error,
+        e instanceof Error ? e.message : "Delete failed.",
+      );
       setDeleteTarget(null);
     } finally {
       setBusyId(null);
@@ -257,25 +293,6 @@ export default function RedeemPage() {
         onQuery={setQuery}
         onFilter={setFilter}
       />
-      {error ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
-          <p className="text-[13px] text-rose-800">{error}</p>
-          <button
-            type="button"
-            onClick={() => {
-              void load();
-            }}
-            className="shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-rose-800 hover:bg-rose-100"
-          >
-            Retry
-          </button>
-        </div>
-      ) : null}
-      {notice ? (
-        <p className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-[12px] text-amber-900">
-          {notice}
-        </p>
-      ) : null}
       {loading ? (
         <p className="text-sm text-slate-500">Loading redeem inventory…</p>
       ) : error && rows.length === 0 ? null : inventoryEmpty ? (
@@ -291,6 +308,8 @@ export default function RedeemPage() {
       ) : (
         <RedeemTable
           rows={paged}
+          types={types}
+          cadences={cadences}
           onEdit={openEdit}
           onReveal={(id) => {
             void revealCode(id);
@@ -304,7 +323,7 @@ export default function RedeemPage() {
           footer={
             <RedeemPagination
               page={page}
-              pageSize={PAGE_SIZE}
+              pageSize={REDEEM_PAGE_SIZE}
               total={filtered.length}
               onPage={setPage}
             />
@@ -316,8 +335,12 @@ export default function RedeemPage() {
         open={formOpen}
         mode={formMode}
         initial={formInitial}
+        types={types}
+        cadences={cadences}
         onClose={() => setFormOpen(false)}
         onSubmit={saveForm}
+        onCreateType={handleCreateType}
+        onCreateCadence={handleCreateCadence}
       />
       <RedeemRevealModal
         open={Boolean(reveal)}
@@ -356,6 +379,19 @@ export default function RedeemPage() {
         }}
         onConfirm={() => {
           void confirmDelete();
+        }}
+      />
+      <RedeemToastHost
+        toasts={toasts}
+        onDismiss={(id) => {
+          dismiss(id);
+          if (id === retryToastId) setRetryToastId(null);
+        }}
+        onAction={(id) => {
+          if (id !== retryToastId) return;
+          dismiss(id);
+          setRetryToastId(null);
+          void load();
         }}
       />
     </section>

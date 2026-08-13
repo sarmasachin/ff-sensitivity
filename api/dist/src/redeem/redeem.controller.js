@@ -18,6 +18,7 @@ const throttler_1 = require("@nestjs/throttler");
 const user_jwt_auth_guard_1 = require("../user-auth/user-jwt-auth.guard");
 const current_user_decorator_1 = require("../user-auth/current-user.decorator");
 const redeem_service_1 = require("./redeem.service");
+const redeem_scratch_dto_1 = require("./dto/redeem-scratch.dto");
 let RedeemController = class RedeemController {
     redeem;
     constructor(redeem) {
@@ -28,6 +29,12 @@ let RedeemController = class RedeemController {
     }
     myClaims(user) {
         return this.redeem.myClaims(user.id);
+    }
+    scratch(user, id, dto) {
+        return this.redeem.scratch(user.id, id, dto.attemptKey);
+    }
+    scratchAdUnlock(user, id) {
+        return this.redeem.scratchAdUnlock(user.id, id);
     }
     claim(user, id) {
         return this.redeem.claim(user.id, id);
@@ -50,6 +57,25 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], RedeemController.prototype, "myClaims", null);
+__decorate([
+    (0, common_1.Post)(':id/scratch'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, redeem_scratch_dto_1.ScratchRedeemDto]),
+    __metadata("design:returntype", void 0)
+], RedeemController.prototype, "scratch", null);
+__decorate([
+    (0, common_1.Post)(':id/scratch-ad-unlock'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], RedeemController.prototype, "scratchAdUnlock", null);
 __decorate([
     (0, common_1.Post)(':id/claim'),
     (0, throttler_1.Throttle)({ default: { limit: 15, ttl: 60_000 } }),

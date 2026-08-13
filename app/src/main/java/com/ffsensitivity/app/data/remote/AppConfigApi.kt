@@ -211,8 +211,8 @@ object AppConfigDefaults {
         redeemDaily = AppRemoteAdPlacement(
             enabled = true,
             cooldownHours = 24,
-            incompleteMessage = "Watch the ad to open today’s redeem card.",
-            buttonLabel = "Redeem Now · Watch Ad"
+            incompleteMessage = "Watch the ad to scratch again and earn coins.",
+            buttonLabel = "Scratch again · Watch Ad"
         )
     )
 

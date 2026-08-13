@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemStatus
-import com.ffsensitivity.app.data.RedeemType
 import com.ffsensitivity.app.presentation.components.AppScreenHeader
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
@@ -65,8 +64,9 @@ import com.ffsensitivity.app.presentation.theme.VoidBlack
 
 @Composable
 internal fun RedeemTabRow(
-    selected: RedeemTab,
-    onSelect: (RedeemTab) -> Unit,
+    tabs: List<Pair<String, String>>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -78,18 +78,14 @@ internal fun RedeemTabRow(
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        RedeemTabChip(
-            label = "Daily",
-            selected = selected == RedeemTab.DAILY,
-            onClick = { onSelect(RedeemTab.DAILY) },
-            modifier = Modifier.weight(1f)
-        )
-        RedeemTabChip(
-            label = "Weekly",
-            selected = selected == RedeemTab.WEEKLY,
-            onClick = { onSelect(RedeemTab.WEEKLY) },
-            modifier = Modifier.weight(1f)
-        )
+        tabs.forEach { (id, label) ->
+            RedeemTabChip(
+                label = label,
+                selected = selectedId == id,
+                onClick = { onSelect(id) },
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
@@ -123,7 +119,7 @@ private fun RedeemTabChip(
 }
 
 @Composable
-internal fun RedeemTabEmptyPane(tab: RedeemTab) {
+internal fun RedeemTabEmptyPane(cadenceId: String, cadenceLabel: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -134,17 +130,17 @@ internal fun RedeemTabEmptyPane(tab: RedeemTab) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = if (tab == RedeemTab.DAILY) "No daily rewards yet" else "No weekly rewards yet",
+            text = "No ${cadenceLabel.lowercase()} rewards yet",
             color = InkPrimary,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = if (tab == RedeemTab.DAILY) {
+            text = if (cadenceId == "DAILY") {
                 "Complete today’s challenge, then check back here."
             } else {
-                "Keep a 7-day streak to unlock weekly gift chances."
+                "Check back soon for ${cadenceLabel.lowercase()} rewards."
             },
             color = InkMuted,
             fontSize = 12.sp,
@@ -231,7 +227,7 @@ internal fun RedeemCodeCard(
         unlocked -> maskCode(item.code)
         else -> maskCode(item.code)
     }
-    val typeIcon = if (item.type == RedeemType.GOOGLE_PLAY) {
+    val typeIcon = if (item.isPlayGift) {
         Icons.Outlined.CardGiftcard
     } else {
         Icons.Outlined.Star
@@ -387,7 +383,7 @@ internal fun RedeemCodeCard(
                 VoteChip("YES", vote == true, true) { onVote(true) }
                 VoteChip("NO", vote == false, false) { onVote(false) }
             }
-            if (item.type == RedeemType.GOOGLE_PLAY) {
+            if (item.isPlayGift) {
                 CommentChip(onClick = onOpenComment)
             }
         }

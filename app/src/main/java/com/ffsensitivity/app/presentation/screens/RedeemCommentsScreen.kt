@@ -35,7 +35,6 @@ import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemCommentAddResult
 import com.ffsensitivity.app.data.RedeemCommentsStore
 import com.ffsensitivity.app.data.RedeemStatus
-import com.ffsensitivity.app.data.RedeemType
 import com.ffsensitivity.app.data.remote.RedeemRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
@@ -360,7 +359,7 @@ fun RedeemCommentsScreen(
                             title = reward.title,
                             valueLabel = reward.valueLabel,
                             active = reward.status == RedeemStatus.ACTIVE,
-                            isPlayGift = reward.type == RedeemType.GOOGLE_PLAY,
+                            isPlayGift = reward.isPlayGift,
                             vote = vote,
                             onVote = { liked -> applyVote(liked) }
                         )

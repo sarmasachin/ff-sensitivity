@@ -13,7 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Scratch open + Daily interstitial gate (keeps RedeemScreen under 400 lines). */
+/** Scratch open + ad gate (keeps RedeemScreen under line budget). */
 internal object RedeemScreenScratch {
     fun start(
         context: Context,
@@ -103,6 +103,57 @@ internal object RedeemScreenScratch {
                 onReady = onReady
             )
         }
+
+        // Type B: ad only when server says needsAd (re-scratch / more coins).
+        if (item.isScratchReward) {
+            if (!item.needsAd) {
+                proceed(isBusy)
+                return
+            }
+            RedeemDailyAdGate.run(
+                context = context,
+                activity = context.findActivity(),
+                busy = isBusy,
+                setBusy = setBusy,
+                onClearError = clearError,
+                onError = setActionError,
+                onPassTick = onPassTick,
+                retryItemId = item.id,
+                onProceed = {
+                    setBusy(true)
+                    scope.launch {
+                        val unlock = withContext(Dispatchers.IO) {
+                            RedeemRepository.unlockScratchAfterAd(context, item)
+                        }
+                        setBusy(false)
+                        unlock.fold(
+                            onSuccess = {
+                                onPassTick()
+                                proceed(busyNow = false)
+                            },
+                            onFailure = { err ->
+                                AppLog.e("Scratch ad unlock failed", err)
+                                setActionError(
+                                    RedeemUiError(
+                                        code = (err as? ApiException)?.code
+                                            ?: "REDEEM_AD_UNLOCK_FAILED",
+                                        title = "Couldn’t unlock scratch",
+                                        message = when (err) {
+                                            is ApiException -> err.message
+                                            else -> "Watch the ad again to scratch for coins."
+                                        },
+                                        retryKind = RedeemRetryKind.SCRATCH,
+                                        retryItemId = item.id
+                                    )
+                                )
+                            }
+                        )
+                    }
+                }
+            )
+            return
+        }
+
         if (!dailyTab) {
             proceed(isBusy)
             return

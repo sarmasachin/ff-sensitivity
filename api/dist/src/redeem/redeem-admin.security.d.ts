@@ -1,8 +1,12 @@
-import { RedeemCadence, RedeemCodeStatus, RedeemType } from '@prisma/client';
+import { RedeemCodeStatus } from '@prisma/client';
 export declare function sanitizeRedeemText(raw: string, max: number): string;
 export declare function assertRedeemAdminId(raw: string): string;
-export declare function assertRedeemType(raw: string): RedeemType;
+export declare function assertRedeemDefId(raw: string): string;
+export declare function assertRedeemType(raw: string): string;
+export declare function assertRedeemCadence(raw: string): string;
 export declare function assertRedeemStatus(raw: string): RedeemCodeStatus;
-export declare function assertRedeemCadence(raw: string): RedeemCadence;
 export declare function assertStockLeft(n: number): number;
 export declare function assertCodeSecret(raw: string): string;
+export declare function assertSortOrder(n: unknown, fallback?: number): number;
+export declare function assertClaimLimit(n: unknown, fallback?: number): number;
+export declare function assertWindowHours(n: unknown, fallback?: number): number;

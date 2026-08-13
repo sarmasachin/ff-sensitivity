@@ -328,8 +328,10 @@ fun MilestoneScratchCardDialog(
 data class ScratchClaimUiResult(
     val ok: Boolean,
     val message: String = "",
-    /** Redeem: real gift code after successful claim. */
-    val revealedCode: String? = null
+    /** Redeem: real gift code after successful claim (optional for Type B). */
+    val revealedCode: String? = null,
+    /** Type B: coins granted on this scratch. */
+    val coinsGranted: Int = 0
 )
 
 @Composable

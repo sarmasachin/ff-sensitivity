@@ -25,7 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ffsensitivity.app.data.RedeemCadence
+import com.ffsensitivity.app.data.RedeemCadenceOption
 import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemDailyAdConfig
 import com.ffsensitivity.app.data.RedeemDailyAdStore
@@ -55,10 +55,18 @@ fun RedeemScreen(
     var scratchTarget by remember { mutableStateOf<RedeemCodeItem?>(null) }
     var actionError by remember { mutableStateOf<RedeemUiError?>(null) }
     var isBusy by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableStateOf(RedeemTab.DAILY) }
+    var selectedCadenceId by remember { mutableStateOf("DAILY") }
     var redeemDailyAdPassTick by remember { mutableIntStateOf(0) }
 
     var codes by remember { mutableStateOf<List<RedeemCodeItem>>(emptyList()) }
+    var cadenceTabs by remember {
+        mutableStateOf(
+            listOf(
+                RedeemCadenceOption("DAILY", "Daily", 3, 24),
+                RedeemCadenceOption("WEEKLY", "Weekly", 2, 168)
+            )
+        )
+    }
     var catalogLoading by remember { mutableStateOf(true) }
     var catalogLoadFailed by remember { mutableStateOf(false) }
     var catalogGeneration by remember { mutableStateOf(0) }
@@ -69,11 +77,17 @@ fun RedeemScreen(
             RedeemRepository.loadCatalog(context)
         }
         result.fold(
-            onSuccess = { list ->
-                val cleaned = list
+            onSuccess = { payload ->
+                val cleaned = payload.items
                     .filter { it.id.isNotBlank() && !it.id.contains('/') }
                     .distinctBy { it.id }
                 codes = cleaned
+                if (payload.cadences.isNotEmpty()) {
+                    cadenceTabs = payload.cadences
+                    if (cadenceTabs.none { it.id == selectedCadenceId }) {
+                        selectedCadenceId = cadenceTabs.first().id
+                    }
+                }
                 unlocked.clear()
                 cleaned.filter { it.serverUnlocked }.forEach { unlocked[it.id] = true }
                 catalogLoadFailed = false
@@ -87,27 +101,29 @@ fun RedeemScreen(
         catalogLoading = false
     }
 
-    val cadence = if (selectedTab == RedeemTab.DAILY) RedeemCadence.DAILY else RedeemCadence.WEEKLY
-    val tabCodes = remember(codes, selectedTab) {
-        codes.filter { it.cadence == cadence }
+    val selectedCadenceLabel =
+        cadenceTabs.firstOrNull { it.id == selectedCadenceId }?.label ?: selectedCadenceId
+    val isDailyCadence = selectedCadenceId == "DAILY"
+    val tabCodes = remember(codes, selectedCadenceId) {
+        codes.filter { it.cadence == selectedCadenceId }
     }
-    val needsRedeemDailyAd = remember(selectedTab, isBusy, redeemDailyAdPassTick) {
-        selectedTab == RedeemTab.DAILY && RedeemDailyAdStore.needsAd(context)
+    val needsRedeemDailyAd = remember(selectedCadenceId, isBusy, redeemDailyAdPassTick) {
+        isDailyCadence && RedeemDailyAdStore.needsAd(context)
     }
-    LaunchedEffect(selectedTab, redeemDailyAdPassTick) {
-        RedeemScreenScratch.preloadIfNeeded(context, selectedTab == RedeemTab.DAILY)
+    LaunchedEffect(selectedCadenceId, redeemDailyAdPassTick) {
+        RedeemScreenScratch.preloadIfNeeded(context, isDailyCadence)
     }
     val catalogError = when {
         catalogLoading -> null
         catalogLoadFailed -> RedeemUiError(
             code = "REDEEM_CATALOG_FAILED",
-            title = "Gift codes unavailable",
+            title = "Rewards unavailable",
             message = "Could not load redeem inventory. Check your connection and try again."
         )
         codes.isEmpty() -> RedeemUiError(
             code = "REDEEM_CATALOG_EMPTY",
-            title = "No codes right now",
-            message = "There are no gift codes to show. Check back later."
+            title = "No rewards right now",
+            message = "There are no scratch cards to show. Check back later."
         )
         else -> null
     }
@@ -191,7 +207,7 @@ fun RedeemScreen(
             context = context,
             scope = scope,
             item = item,
-            dailyTab = selectedTab == RedeemTab.DAILY,
+            dailyTab = isDailyCadence,
             alreadyUnlocked = unlocked[item.id] == true,
             isBusy = isBusy,
             setBusy = { isBusy = it },
@@ -363,7 +379,7 @@ fun RedeemScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Loading gift codes…",
+                        text = "Loading rewards…",
                         color = InkSecondary,
                         fontSize = 14.sp
                     )
@@ -397,16 +413,17 @@ fun RedeemScreen(
                     }
                     item {
                         RedeemTabRow(
-                            selected = selectedTab,
-                            onSelect = { selectedTab = it }
+                            tabs = cadenceTabs.map { it.id to it.label },
+                            selectedId = selectedCadenceId,
+                            onSelect = { selectedCadenceId = it }
                         )
                     }
                     item {
                         Text(
-                            text = if (selectedTab == RedeemTab.DAILY) {
-                                "Complete today’s challenge to unlock"
+                            text = if (isDailyCadence) {
+                                "Scratch to earn Coins · limited codes by schedule"
                             } else {
-                                "7-day streak · bigger gift chance"
+                                "$selectedCadenceLabel · coins every scratch"
                             },
                             color = InkMuted,
                             fontSize = 12.sp,
@@ -429,8 +446,11 @@ fun RedeemScreen(
                         }
                     }
                     if (tabCodes.isEmpty()) {
-                        item(key = "redeem_tab_empty_$selectedTab") {
-                            RedeemTabEmptyPane(tab = selectedTab)
+                        item(key = "redeem_tab_empty_$selectedCadenceId") {
+                            RedeemTabEmptyPane(
+                                cadenceId = selectedCadenceId,
+                                cadenceLabel = selectedCadenceLabel
+                            )
                         }
                     } else {
                         items(tabCodes, key = { it.id }) { item ->
@@ -446,6 +466,9 @@ fun RedeemScreen(
                                 onVote = { yes -> onVoteSafe(item.id, yes) },
                                 onOpenComment = { openCommentsSafe(item) },
                                 redeemActionLabel = when {
+                                    item.isScratchReward && item.needsAd ->
+                                        RedeemDailyAdConfig.buttonLabel
+                                    item.isScratchReward -> "Scratch for Coins"
                                     isUnlocked -> null
                                     needsRedeemDailyAd -> RedeemDailyAdConfig.buttonLabel
                                     else -> null

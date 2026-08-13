@@ -210,8 +210,17 @@ async function main() {
     );
   }
 
-  // Seed
-  if (seed.includes('shopItem.count()') && seed.includes('skip item seed')) {
+  // Seed: categories only — no demo catalog rows
+  if (
+    seed.includes('Dummy shop items removed') &&
+    !seed.includes('const shopSeed') &&
+    !seed.includes('shopItem.createMany')
+  ) {
+    dyn(
+      'db_seed_catalog',
+      'Seed keeps categories only; dummy shop items are purged (no auto catalog seed)',
+    );
+  } else if (seed.includes('shopItem.count()') && seed.includes('skip item seed')) {
     part(
       'db_seed_catalog',
       'Seed inserts default items only when shop_items is empty',

@@ -2,8 +2,6 @@ package com.ffsensitivity.app.presentation.screens
 
 internal enum class RedeemRetryKind { COMMENTS, SCRATCH, COPY }
 
-internal enum class RedeemTab { DAILY, WEEKLY }
-
 internal data class RedeemUiError(
     val code: String,
     val title: String,

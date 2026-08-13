@@ -118,10 +118,37 @@ async function main() {
     ? pass('android_catalog_remote_only')
     : fail('android_catalog_remote_only');
 
-  const seedCount = await prisma.shopItem.count();
-  seedCount >= 10
-    ? pass('db_has_seeded_shop_items', String(seedCount))
-    : fail('db_has_seeded_shop_items', String(seedCount));
+  const seed = read('api/prisma/seed.ts');
+  !seed.includes('shopItem.createMany') &&
+  !seed.includes('const shopSeed') &&
+  seed.includes('Dummy shop items removed')
+    ? pass('seed_does_not_insert_shop_items')
+    : fail('seed_does_not_insert_shop_items');
+
+  const leftoverDummy = await prisma.shopItem.count({
+    where: {
+      id: {
+        in: [
+          'prize_google_play_gift',
+          'prize_ff_diamonds',
+          'prize_ffmax_diamonds',
+          'prize_royale_pass',
+          'prize_premium_skin',
+          'boost_quiz_double',
+          'boost_checkin_plus',
+          'unlock_premium_badge',
+          'unlock_elite_title',
+          'pack_stylish_rare',
+          'pack_scratch_bonus',
+          'cosmetic_gold_wallet',
+          'cosmetic_foil_obsidian',
+        ],
+      },
+    },
+  });
+  leftoverDummy === 0
+    ? pass('db_has_no_dummy_shop_items')
+    : fail('db_has_no_dummy_shop_items', String(leftoverDummy));
 
   if (!process.env.JWT_ACCESS_SECRET || !process.env.JWT_USER_SECRET) {
     fail('jwt_secrets');
@@ -306,16 +333,16 @@ async function main() {
     ? pass('purchase_blocked_when_disabled')
     : fail('purchase_blocked_when_disabled', JSON.stringify(buyDisabled.json));
 
-  // Seeded classic item still purchasable
+  // Known dummy catalog ids must not be purchasable anymore
   await prisma.user.update({ where: { id: user.id }, data: { coins: 100 } });
   const classic = await req('POST', '/api/v1/economy/shop/purchase', {
     token: userTok,
     body: { itemId: 'cosmetic_gold_wallet', requestId: randomUUID() },
   });
-  (classic.status === 200 || classic.status === 201) &&
-  classic.json?.coins === 0
-    ? pass('seeded_item_still_purchasable')
-    : fail('seeded_item_still_purchasable', JSON.stringify(classic.json));
+  classic.status === 404 &&
+  classic.json?.error?.code === 'SHOP_ITEM_NOT_FOUND'
+    ? pass('dummy_shop_item_not_purchasable')
+    : fail('dummy_shop_item_not_purchasable', JSON.stringify(classic.json));
 
   // Audit rows
   const audits = await prisma.auditLog.count({

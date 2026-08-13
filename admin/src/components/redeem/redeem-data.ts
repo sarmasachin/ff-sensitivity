@@ -1,32 +1,66 @@
-export type RedeemType = "GOOGLE_PLAY" | "FF_DIAMONDS";
 export type RedeemStatus = "ACTIVE" | "PAUSED" | "EXHAUSTED" | "EXPIRED";
-export type RedeemCadence = "DAILY" | "WEEKLY";
+export type RedeemMode = "SINGLE" | "SCRATCH_REWARD";
+
+export type RedeemTypeRow = {
+  id: string;
+  label: string;
+  sortOrder: number;
+  enabled: boolean;
+};
+
+export type RedeemCadenceRow = {
+  id: string;
+  label: string;
+  claimLimit: number;
+  windowHours: number;
+  sortOrder: number;
+  enabled: boolean;
+};
+
+export const SAFE_SCRATCH_TIP =
+  "Scratch to earn Coins. Limited reward codes distributed via schedule.";
 
 export type RedeemListRow = {
   id: string;
   title: string;
-  type: RedeemType;
+  type: string;
   valueLabel: string;
   codeSecret: string;
   codeMasked: string;
   status: RedeemStatus;
-  cadence: RedeemCadence;
+  cadence: string;
+  mode: RedeemMode;
   stockLeft: number;
+  poolLeft: number | null;
   coinCost: number | null;
+  coinRewardMin: number | null;
+  coinRewardMax: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  windowMinutes: number;
+  codesPerWindow: number;
   expiresLabel: string;
   tip: string;
   redeemUrl: string;
 };
 
 export type RedeemFormValues = {
+  cardMode: RedeemMode;
   title: string;
-  type: RedeemType;
+  type: string;
   valueLabel: string;
   codeSecret: string;
+  codePoolText: string;
   status: RedeemStatus;
-  cadence: RedeemCadence;
+  cadence: string;
   stockLeft: number;
   coinCost: string;
+  coinRewardMin: string;
+  coinRewardMax: string;
+  startsAtLocal: string;
+  endsAtLocal: string;
+  windowMinutes: string;
+  codesPerWindow: string;
   expiresLabel: string;
   tip: string;
   redeemUrl: string;
@@ -42,32 +76,69 @@ export function maskCode(secret: string): string {
   return `${clean.slice(0, 4)}-••••-••••-${clean.slice(-4)}`;
 }
 
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function emptyRedeemForm(): RedeemFormValues {
   return {
+    cardMode: "SINGLE",
     title: "",
     type: "GOOGLE_PLAY",
     valueLabel: "",
     codeSecret: "",
+    codePoolText: "",
     status: "ACTIVE",
     cadence: "DAILY",
     stockLeft: 1,
     coinCost: "",
+    coinRewardMin: "5",
+    coinRewardMax: "20",
+    startsAtLocal: "",
+    endsAtLocal: "",
+    windowMinutes: "30",
+    codesPerWindow: "1",
     expiresLabel: "",
     tip: "First Come, First Serve!",
     redeemUrl: "https://play.google.com/redeem",
   };
 }
 
-export function rowToForm(row: RedeemListRow): RedeemFormValues {
+export function emptyScratchRewardForm(): RedeemFormValues {
   return {
+    ...emptyRedeemForm(),
+    cardMode: "SCRATCH_REWARD",
+    tip: SAFE_SCRATCH_TIP,
+    valueLabel: "Coins + limited codes",
+    expiresLabel: "Schedule",
+  };
+}
+
+export function rowToForm(row: RedeemListRow): RedeemFormValues {
+  const mode = row.mode ?? "SINGLE";
+  return {
+    cardMode: mode,
     title: row.title,
     type: row.type,
     valueLabel: row.valueLabel,
     codeSecret: "",
+    codePoolText: "",
     status: row.status,
     cadence: row.cadence,
     stockLeft: row.stockLeft === 0 ? 0 : 1,
     coinCost: row.coinCost == null ? "" : String(row.coinCost),
+    coinRewardMin:
+      row.coinRewardMin == null ? "5" : String(row.coinRewardMin),
+    coinRewardMax:
+      row.coinRewardMax == null ? "20" : String(row.coinRewardMax),
+    startsAtLocal: toLocalInput(row.startsAt),
+    endsAtLocal: toLocalInput(row.endsAt),
+    windowMinutes: String(row.windowMinutes ?? 30),
+    codesPerWindow: String(row.codesPerWindow ?? 1),
     expiresLabel: row.expiresLabel,
     tip: row.tip,
     redeemUrl: row.redeemUrl,
@@ -88,22 +159,22 @@ export function computeRedeemStats(rows: RedeemListRow[]) {
 export const REDEEM_CAPABILITIES = [
   {
     title: "Live inventory",
-    body: "Add, edit, pause, or delete codes. The Android redeem tab reads this same database.",
+    body: "Add Single codes or Scratch-reward cards. The Android redeem tab reads this same database.",
+  },
+  {
+    title: "Scratch reward (safe)",
+    body: "Coins every scratch. Limited codes drip by schedule. Ad unlocks another scratch — not a gift code.",
   },
   {
     title: "Masked list + reveal",
-    body: "List stays masked. Reveal loads the secret from the API and writes an audit row.",
+    body: "List stays masked. Reveal loads secrets from the API and writes an audit row.",
   },
   {
-    title: "One secret per row",
-    body: "Stock is 0 or 1. Each gift code is its own inventory row.",
+    title: "Pool top-up",
+    body: "Append more codes to a live Scratch-reward card for upcoming days without recreating it.",
   },
   {
-    title: "Claim log",
-    body: "Who claimed what is on the live Claims API — open Claim log from the header.",
-  },
-  {
-    title: "Daily / Weekly",
-    body: "Cadence matches the app tabs — daily pool vs weekly streak bonus.",
+    title: "Dynamic Type / Cadence",
+    body: "Add new reward types and app tabs from admin — same live pattern as shop categories.",
   },
 ];

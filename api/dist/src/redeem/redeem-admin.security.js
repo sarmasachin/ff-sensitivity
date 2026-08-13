@@ -2,16 +2,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sanitizeRedeemText = sanitizeRedeemText;
 exports.assertRedeemAdminId = assertRedeemAdminId;
+exports.assertRedeemDefId = assertRedeemDefId;
 exports.assertRedeemType = assertRedeemType;
-exports.assertRedeemStatus = assertRedeemStatus;
 exports.assertRedeemCadence = assertRedeemCadence;
+exports.assertRedeemStatus = assertRedeemStatus;
 exports.assertStockLeft = assertStockLeft;
 exports.assertCodeSecret = assertCodeSecret;
+exports.assertSortOrder = assertSortOrder;
+exports.assertClaimLimit = assertClaimLimit;
+exports.assertWindowHours = assertWindowHours;
 const client_1 = require("@prisma/client");
 const app_error_1 = require("../common/errors/app-error");
-const TYPES = new Set(Object.values(client_1.RedeemType));
 const STATUSES = new Set(Object.values(client_1.RedeemCodeStatus));
-const CADENCES = new Set(Object.values(client_1.RedeemCadence));
+const DEF_ID_RE = /^[A-Z][A-Z0-9_]{1,31}$/;
 function sanitizeRedeemText(raw, max) {
     return [...(raw ?? '')]
         .filter((ch) => {
@@ -33,21 +36,24 @@ function assertRedeemAdminId(raw) {
     }
     return id;
 }
-function assertRedeemType(raw) {
-    if (!TYPES.has(raw)) {
-        throw new app_error_1.AppError('REDEEM_BAD_TYPE', 'Invalid redeem type.', 400);
+function assertRedeemDefId(raw) {
+    const id = String(raw ?? '')
+        .trim()
+        .toUpperCase();
+    if (!DEF_ID_RE.test(id)) {
+        throw new app_error_1.AppError('REDEEM_BAD_DEF_ID', 'Id must be UPPER_SNAKE (2–32), e.g. GOOGLE_PLAY or DAILY.', 400);
     }
-    return raw;
+    return id;
+}
+function assertRedeemType(raw) {
+    return assertRedeemDefId(raw);
+}
+function assertRedeemCadence(raw) {
+    return assertRedeemDefId(raw);
 }
 function assertRedeemStatus(raw) {
     if (!STATUSES.has(raw)) {
         throw new app_error_1.AppError('REDEEM_BAD_STATUS', 'Invalid redeem status.', 400);
-    }
-    return raw;
-}
-function assertRedeemCadence(raw) {
-    if (!CADENCES.has(raw)) {
-        throw new app_error_1.AppError('REDEEM_BAD_CADENCE', 'Invalid cadence.', 400);
     }
     return raw;
 }
@@ -63,5 +69,32 @@ function assertCodeSecret(raw) {
         throw new app_error_1.AppError('REDEEM_BAD_SECRET', 'Code must be at least 8 characters.', 400);
     }
     return secret;
+}
+function assertSortOrder(n, fallback = 0) {
+    if (n == null || n === '')
+        return fallback;
+    const v = Number(n);
+    if (!Number.isInteger(v) || v < 0 || v > 9999) {
+        throw new app_error_1.AppError('REDEEM_BAD_SORT', 'Sort order must be 0–9999.', 400);
+    }
+    return v;
+}
+function assertClaimLimit(n, fallback = 3) {
+    if (n == null || n === '')
+        return fallback;
+    const v = Number(n);
+    if (!Number.isInteger(v) || v < 1 || v > 100) {
+        throw new app_error_1.AppError('REDEEM_BAD_CLAIM_LIMIT', 'Claim limit must be 1–100.', 400);
+    }
+    return v;
+}
+function assertWindowHours(n, fallback = 24) {
+    if (n == null || n === '')
+        return fallback;
+    const v = Number(n);
+    if (!Number.isInteger(v) || v < 1 || v > 8760) {
+        throw new app_error_1.AppError('REDEEM_BAD_WINDOW_HOURS', 'Window hours must be 1–8760.', 400);
+    }
+    return v;
 }
 //# sourceMappingURL=redeem-admin.security.js.map

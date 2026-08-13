@@ -14,75 +14,38 @@ const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../prisma/prisma.service");
 const app_error_1 = require("../common/errors/app-error");
-const settings_service_1 = require("../settings/settings.service");
 const analytics_service_1 = require("../analytics/analytics.service");
-const redeem_mask_1 = require("./redeem-mask");
+const redeem_scratch_service_1 = require("./redeem-scratch.service");
+const redeem_claims_service_1 = require("./redeem-claims.service");
+const redeem_catalog_service_1 = require("./redeem-catalog.service");
 let RedeemService = class RedeemService {
     prisma;
-    settings;
     analytics;
-    constructor(prisma, settings, analytics) {
+    scratchService;
+    claimsService;
+    catalogService;
+    constructor(prisma, analytics, scratchService, claimsService, catalogService) {
         this.prisma = prisma;
-        this.settings = settings;
         this.analytics = analytics;
+        this.scratchService = scratchService;
+        this.claimsService = claimsService;
+        this.catalogService = catalogService;
     }
-    async catalog(userId) {
-        const now = new Date();
-        const codes = await this.prisma.redeemCode.findMany({
-            where: {
-                status: {
-                    in: [
-                        client_1.RedeemCodeStatus.ACTIVE,
-                        client_1.RedeemCodeStatus.EXHAUSTED,
-                        client_1.RedeemCodeStatus.EXPIRED,
-                        client_1.RedeemCodeStatus.PAUSED,
-                    ],
-                },
-            },
-            orderBy: { createdAt: 'asc' },
-        });
-        const claims = await this.prisma.redeemClaim.findMany({
-            where: { userId },
-            select: { redeemCodeId: true, codeSecret: true },
-        });
-        const claimMap = new Map(claims.map((c) => [c.redeemCodeId, c.codeSecret]));
-        return {
-            items: codes.map((row) => {
-                const mine = claimMap.get(row.id);
-                const claimedByMe = Boolean(mine);
-                const expiredByTime = row.expiresAt != null && row.expiresAt.getTime() <= now.getTime();
-                const listStatus = expiredByTime || row.status === client_1.RedeemCodeStatus.EXPIRED
-                    ? 'CLAIMED'
-                    : row.status === client_1.RedeemCodeStatus.ACTIVE && row.stockLeft > 0
-                        ? claimedByMe
-                            ? 'CLAIMED'
-                            : 'ACTIVE'
-                        : row.status === client_1.RedeemCodeStatus.EXHAUSTED || row.stockLeft <= 0
-                            ? 'CLAIMED'
-                            : row.status === client_1.RedeemCodeStatus.ACTIVE
-                                ? 'ACTIVE'
-                                : 'CLAIMED';
-                return {
-                    id: row.id,
-                    type: row.type,
-                    title: row.title,
-                    valueLabel: row.valueLabel,
-                    codeMasked: (0, redeem_mask_1.maskRedeemCode)(row.codeSecret),
-                    code: claimedByMe ? mine : null,
-                    status: listStatus,
-                    expiresLabel: row.expiresLabel,
-                    tip: row.tip,
-                    redeemUrl: row.redeemUrl,
-                    stockLeft: row.stockLeft,
-                    coinCost: row.coinCost,
-                    cadence: row.cadence,
-                    unlocked: claimedByMe,
-                };
-            }),
-        };
+    catalog(userId) {
+        return this.catalogService.catalog(userId);
     }
     async claim(userId, redeemCodeId) {
         this.assertRedeemId(redeemCodeId);
+        const modeRow = await this.prisma.redeemCode.findUnique({
+            where: { id: redeemCodeId },
+            select: { mode: true },
+        });
+        if (!modeRow) {
+            throw new app_error_1.AppError('REDEEM_NOT_FOUND', 'Code not found.', 404);
+        }
+        if (modeRow.mode === client_1.RedeemMode.SCRATCH_REWARD) {
+            throw new app_error_1.AppError('REDEEM_USE_SCRATCH', 'Use scratch to earn coins on this card.', 409);
+        }
         const seat = await this.prisma.user.findUnique({
             where: { id: userId },
             select: { isActive: true, isRestricted: true, coins: true },
@@ -243,6 +206,17 @@ let RedeemService = class RedeemService {
             throw err;
         }
     }
+    scratch(userId, redeemCodeId, attemptKey) {
+        this.assertRedeemId(redeemCodeId);
+        return this.scratchService.scratch(userId, redeemCodeId, attemptKey);
+    }
+    scratchAdUnlock(userId, redeemCodeId) {
+        this.assertRedeemId(redeemCodeId);
+        return this.scratchService.adUnlock(userId, redeemCodeId);
+    }
+    myClaims(userId) {
+        return this.claimsService.myClaims(userId);
+    }
     assertRedeemId(redeemCodeId) {
         const id = redeemCodeId?.trim() ?? '';
         if (id.length < 10 || id.length > 40 || !/^[a-z0-9_-]+$/i.test(id)) {
@@ -250,10 +224,10 @@ let RedeemService = class RedeemService {
         }
     }
     async assertCadenceWindow(tx, userId, cadence, now) {
-        const since = cadence === client_1.RedeemCadence.WEEKLY
-            ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-            : new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const limit = cadence === client_1.RedeemCadence.WEEKLY ? 2 : 3;
+        const def = await tx.redeemCadenceDef.findUnique({ where: { id: cadence } });
+        const windowHours = def?.windowHours ?? (cadence === 'WEEKLY' ? 168 : 24);
+        const limit = def?.claimLimit ?? (cadence === 'WEEKLY' ? 2 : 3);
+        const since = new Date(now.getTime() - windowHours * 60 * 60 * 1000);
         const recent = await tx.redeemClaim.count({
             where: {
                 userId,
@@ -262,224 +236,8 @@ let RedeemService = class RedeemService {
             },
         });
         if (recent >= limit) {
-            throw new app_error_1.AppError('REDEEM_CADENCE_LIMIT', cadence === client_1.RedeemCadence.WEEKLY
-                ? 'Weekly redeem limit reached. Try again later.'
-                : 'Daily redeem limit reached. Try again tomorrow.', 429);
-        }
-    }
-    async myClaims(userId) {
-        const rows = await this.prisma.redeemClaim.findMany({
-            where: { userId },
-            include: {
-                redeemCode: {
-                    select: {
-                        id: true,
-                        title: true,
-                        valueLabel: true,
-                        type: true,
-                        redeemUrl: true,
-                    },
-                },
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 100,
-        });
-        return rows.map((r) => ({
-            id: r.id,
-            redeemCodeId: r.redeemCodeId,
-            title: r.redeemCode.title,
-            valueLabel: r.redeemCode.valueLabel,
-            type: r.redeemCode.type,
-            redeemUrl: r.redeemCode.redeemUrl,
-            codeMasked: (0, redeem_mask_1.maskRedeemCode)(r.codeSecret),
-            code: r.codeSecret,
-            flagged: r.flagged,
-            createdAt: r.createdAt.toISOString(),
-            whenLabel: relativeLabel(r.createdAt),
-        }));
-    }
-    async adminListClaims(query) {
-        const q = query?.trim();
-        const where = q
-            ? {
-                OR: [
-                    { redeemCode: { title: { contains: q, mode: 'insensitive' } } },
-                    { user: { email: { contains: q, mode: 'insensitive' } } },
-                    { user: { displayName: { contains: q, mode: 'insensitive' } } },
-                    { redeemCodeId: { contains: q } },
-                    { id: { contains: q } },
-                ],
-            }
-            : {};
-        const rows = await this.prisma.redeemClaim.findMany({
-            where,
-            include: {
-                user: { select: { id: true, email: true, displayName: true } },
-                redeemCode: {
-                    select: { id: true, title: true, stockLeft: true, valueLabel: true },
-                },
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 300,
-        });
-        const userIds = [...new Set(rows.map((r) => r.userId))];
-        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const recentCounts = await this.prisma.redeemClaim.groupBy({
-            by: ['userId'],
-            where: { userId: { in: userIds }, createdAt: { gte: dayAgo } },
-            _count: { _all: true },
-        });
-        const recentMap = new Map(recentCounts.map((c) => [c.userId, c._count._all]));
-        return rows.map((r) => this.toAdminClaimRow(r, recentMap.get(r.userId) ?? 1));
-    }
-    async adminClaimsStats() {
-        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const [copied, flagged, distinctUsers, recentByUser] = await Promise.all([
-            this.prisma.redeemClaim.count({ where: { flagged: false } }),
-            this.prisma.redeemClaim.count({ where: { flagged: true } }),
-            this.prisma.redeemClaim
-                .findMany({ select: { userId: true }, distinct: ['userId'] })
-                .then((r) => r.length),
-            this.prisma.redeemClaim.groupBy({
-                by: ['userId'],
-                where: { createdAt: { gte: dayAgo } },
-                _count: { _all: true },
-            }),
-        ]);
-        const highAbuse = recentByUser.filter((u) => u._count._all >= 4).length;
-        return {
-            copied,
-            blocked: 0,
-            flagged: flagged + highAbuse,
-            devices: distinctUsers,
-        };
-    }
-    async adminFlagClaim(adminId, claimId, flagged, note) {
-        this.assertClaimId(claimId);
-        const before = await this.prisma.redeemClaim.findUnique({
-            where: { id: claimId },
-        });
-        if (!before) {
-            throw new app_error_1.AppError('CLAIM_NOT_FOUND', 'Claim not found.', 404);
-        }
-        const after = await this.prisma.redeemClaim.update({
-            where: { id: claimId },
-            data: {
-                flagged,
-                adminNote: note?.trim()
-                    ? note.trim().slice(0, 280)
-                    : flagged
-                        ? 'Manually flagged by staff.'
-                        : 'Cleared by staff after review.',
-            },
-            include: {
-                user: { select: { id: true, email: true, displayName: true } },
-                redeemCode: {
-                    select: { id: true, title: true, stockLeft: true, valueLabel: true },
-                },
-            },
-        });
-        await this.prisma.auditLog.create({
-            data: {
-                actorAdminId: adminId,
-                action: flagged ? 'claims.flag' : 'claims.clear',
-                entity: `redeem_claim:${claimId}`,
-                beforeJson: { flagged: before.flagged },
-                afterJson: { flagged: after.flagged },
-            },
-        });
-        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const recent = await this.prisma.redeemClaim.count({
-            where: { userId: after.userId, createdAt: { gte: dayAgo } },
-        });
-        return this.toAdminClaimRow(after, Math.max(1, recent));
-    }
-    async adminDeleteClaim(adminId, claimId) {
-        this.assertClaimId(claimId);
-        const before = await this.prisma.redeemClaim.findUnique({
-            where: { id: claimId },
-            include: {
-                redeemCode: { select: { title: true } },
-                user: { select: { email: true } },
-            },
-        });
-        if (!before) {
-            throw new app_error_1.AppError('CLAIM_NOT_FOUND', 'Claim not found.', 404);
-        }
-        await this.prisma.redeemClaim.delete({ where: { id: claimId } });
-        await this.prisma.auditLog.create({
-            data: {
-                actorAdminId: adminId,
-                action: 'claims.delete',
-                entity: `redeem_claim:${claimId}`,
-                beforeJson: {
-                    userEmail: before.user.email,
-                    title: before.redeemCode.title,
-                    redeemCodeId: before.redeemCodeId,
-                },
-                afterJson: { deleted: true, stockRestored: false },
-            },
-        });
-        return { ok: true };
-    }
-    async adminRevealClaim(adminId, claimId, currentPassword) {
-        this.assertClaimId(claimId);
-        await this.settings.assertStepUp(adminId, currentPassword, 'reveal');
-        const row = await this.prisma.redeemClaim.findUnique({
-            where: { id: claimId },
-            include: {
-                redeemCode: { select: { title: true } },
-                user: { select: { email: true } },
-            },
-        });
-        if (!row) {
-            throw new app_error_1.AppError('CLAIM_NOT_FOUND', 'Claim not found.', 404);
-        }
-        await this.prisma.auditLog.create({
-            data: {
-                actorAdminId: adminId,
-                action: 'claims.reveal',
-                entity: `redeem_claim:${claimId}`,
-                afterJson: {
-                    title: row.redeemCode.title,
-                    userEmail: row.user.email,
-                },
-            },
-        });
-        return {
-            id: row.id,
-            codeMasked: (0, redeem_mask_1.maskRedeemCode)(row.codeSecret),
-            code: row.codeSecret,
-            title: row.redeemCode.title,
-        };
-    }
-    toAdminClaimRow(r, recent) {
-        const abuseScore = r.flagged
-            ? Math.max(75, Math.min(99, 50 + recent * 15))
-            : Math.min(70, recent * 12);
-        return {
-            id: r.id,
-            title: r.redeemCode.title,
-            refId: r.redeemCodeId,
-            codeMasked: (0, redeem_mask_1.maskRedeemCode)(r.codeSecret),
-            deviceId: r.user.email,
-            userId: r.user.id,
-            userDisplayName: r.user.displayName,
-            result: r.flagged ? 'FLAGGED' : 'SUCCESS',
-            whenLabel: relativeLabel(r.createdAt),
-            createdAt: r.createdAt.toISOString(),
-            stockAfter: r.redeemCode.stockLeft,
-            abuseScore,
-            note: r.adminNote?.trim() ||
-                (r.flagged
-                    ? 'Flagged by staff for review.'
-                    : 'Claimed on unlock (scratch). Stock consumed at claim.'),
-        };
-    }
-    assertClaimId(claimId) {
-        const id = claimId?.trim() ?? '';
-        if (id.length < 10 || id.length > 40 || id.includes('/') || !/^[a-z0-9_-]+$/i.test(id)) {
-            throw new app_error_1.AppError('CLAIM_BAD_ID', 'Invalid claim id.', 400);
+            const label = def?.label ?? cadence;
+            throw new app_error_1.AppError('REDEEM_CADENCE_LIMIT', `${label} redeem limit reached. Try again later.`, 429);
         }
     }
 };
@@ -487,23 +245,9 @@ exports.RedeemService = RedeemService;
 exports.RedeemService = RedeemService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        settings_service_1.SettingsService,
-        analytics_service_1.AnalyticsService])
+        analytics_service_1.AnalyticsService,
+        redeem_scratch_service_1.RedeemScratchService,
+        redeem_claims_service_1.RedeemClaimsService,
+        redeem_catalog_service_1.RedeemCatalogService])
 ], RedeemService);
-function relativeLabel(date) {
-    const ms = Date.now() - date.getTime();
-    const min = Math.floor(ms / 60_000);
-    if (min < 1)
-        return 'just now';
-    if (min < 60)
-        return `${min} min ago`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24)
-        return `${hr}h ago`;
-    const days = Math.floor(hr / 24);
-    if (days < 7)
-        return `${days} day${days === 1 ? '' : 's'} ago`;
-    const weeks = Math.floor(days / 7);
-    return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
-}
 //# sourceMappingURL=redeem.service.js.map

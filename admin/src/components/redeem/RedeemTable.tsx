@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
-import type { RedeemCadence, RedeemListRow, RedeemStatus, RedeemType } from "./redeem-data";
+import type {
+  RedeemCadenceRow,
+  RedeemListRow,
+  RedeemStatus,
+  RedeemTypeRow,
+} from "./redeem-data";
 import {
   IconComments,
   IconEdit,
@@ -10,6 +15,8 @@ import {
 
 type Props = {
   rows: RedeemListRow[];
+  types?: RedeemTypeRow[];
+  cadences?: RedeemCadenceRow[];
   notice?: string | null;
   footer?: ReactNode;
   onEdit?: (id: string) => void;
@@ -32,7 +39,13 @@ function StatusPill({ status }: { status: RedeemStatus }) {
   );
 }
 
-function TypePill({ type }: { type: RedeemType }) {
+function TypePill({
+  type,
+  label,
+}: {
+  type: string;
+  label?: string;
+}) {
   const play = type === "GOOGLE_PLAY";
   return (
     <span
@@ -43,12 +56,18 @@ function TypePill({ type }: { type: RedeemType }) {
           : "bg-fuchsia-100 text-fuchsia-800 ring-1 ring-fuchsia-200",
       ].join(" ")}
     >
-      {play ? "Play Gift" : "FF Diamonds"}
+      {label ?? type}
     </span>
   );
 }
 
-function CadencePill({ cadence }: { cadence: RedeemCadence }) {
+function CadencePill({
+  cadence,
+  label,
+}: {
+  cadence: string;
+  label?: string;
+}) {
   const daily = cadence === "DAILY";
   return (
     <span
@@ -59,13 +78,15 @@ function CadencePill({ cadence }: { cadence: RedeemCadence }) {
           : "bg-violet-100 text-violet-800 ring-1 ring-violet-200",
       ].join(" ")}
     >
-      {cadence}
+      {label ?? cadence}
     </span>
   );
 }
 
 export function RedeemTable({
   rows,
+  types = [],
+  cadences = [],
   notice,
   footer,
   onEdit,
@@ -73,6 +94,10 @@ export function RedeemTable({
   onDelete,
   onComments,
 }: Props) {
+  const typeLabel = Object.fromEntries(types.map((t) => [t.id, t.label]));
+  const cadenceLabel = Object.fromEntries(
+    cadences.map((c) => [c.id, c.label]),
+  );
   return (
     <div className="overflow-hidden rounded-2xl border border-[#e8eaee] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       {notice ? (
@@ -103,10 +128,17 @@ export function RedeemTable({
                 className="border-b border-[#f1f5f9] transition-colors last:border-0 hover:bg-slate-50/70"
               >
                 <td className="px-4 py-3.5 text-[13px] font-medium text-[#0f172a]">
-                  {row.title}
+                  <div className="flex flex-col gap-1">
+                    <span>{row.title}</span>
+                    {(row.mode ?? "SINGLE") === "SCRATCH_REWARD" ? (
+                      <span className="inline-flex w-fit rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
+                        Scratch · coins
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="px-4 py-3.5">
-                  <TypePill type={row.type} />
+                  <TypePill type={row.type} label={typeLabel[row.type]} />
                 </td>
                 <td className="px-4 py-3.5 text-[13px] font-medium whitespace-nowrap text-teal-700 tabular-nums">
                   {row.valueLabel}
@@ -115,7 +147,10 @@ export function RedeemTable({
                   {row.codeMasked}
                 </td>
                 <td className="px-4 py-3.5">
-                  <CadencePill cadence={row.cadence} />
+                  <CadencePill
+                    cadence={row.cadence}
+                    label={cadenceLabel[row.cadence]}
+                  />
                 </td>
                 <td className="px-4 py-3.5 text-[13px] font-semibold tabular-nums text-[#0f172a]">
                   <span
@@ -125,9 +160,16 @@ export function RedeemTable({
                   >
                     {row.stockLeft}
                   </span>
+                  {(row.mode ?? "SINGLE") === "SCRATCH_REWARD" ? (
+                    <span className="mt-0.5 block text-[10px] font-medium text-slate-400">
+                      pool · {row.codesPerWindow}/{row.windowMinutes}m
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3.5 text-[13px] tabular-nums text-slate-500">
-                  {row.coinCost ?? "—"}
+                  {(row.mode ?? "SINGLE") === "SCRATCH_REWARD"
+                    ? `${row.coinRewardMin ?? "?"}–${row.coinRewardMax ?? "?"}`
+                    : (row.coinCost ?? "—")}
                 </td>
                 <td className="px-4 py-3.5">
                   <StatusPill status={row.status} />

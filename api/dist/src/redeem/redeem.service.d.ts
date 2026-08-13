@@ -1,15 +1,29 @@
 import { PrismaService } from '../prisma/prisma.service';
-import { SettingsService } from '../settings/settings.service';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { RedeemScratchService } from './redeem-scratch.service';
+import { RedeemClaimsService } from './redeem-claims.service';
+import { RedeemCatalogService } from './redeem-catalog.service';
 export declare class RedeemService {
     private readonly prisma;
-    private readonly settings;
     private readonly analytics;
-    constructor(prisma: PrismaService, settings: SettingsService, analytics: AnalyticsService);
+    private readonly scratchService;
+    private readonly claimsService;
+    private readonly catalogService;
+    constructor(prisma: PrismaService, analytics: AnalyticsService, scratchService: RedeemScratchService, claimsService: RedeemClaimsService, catalogService: RedeemCatalogService);
     catalog(userId: string): Promise<{
-        items: {
+        types: {
             id: string;
-            type: import(".prisma/client").$Enums.RedeemType;
+            label: string;
+        }[];
+        cadences: {
+            id: string;
+            label: string;
+            claimLimit: number;
+            windowHours: number;
+        }[];
+        items: ({
+            id: string;
+            type: string;
             title: string;
             valueLabel: string;
             codeMasked: string;
@@ -20,9 +34,44 @@ export declare class RedeemService {
             redeemUrl: string;
             stockLeft: number;
             coinCost: number | null;
-            cadence: import(".prisma/client").$Enums.RedeemCadence;
+            cadence: string;
             unlocked: boolean;
-        }[];
+            mode: "SCRATCH_REWARD";
+            coinRewardMin: number | null;
+            coinRewardMax: number | null;
+            startsAt: string | null;
+            endsAt: string | null;
+            windowMinutes: number;
+            codesPerWindow: number;
+            poolLeft: number;
+            needsAd: boolean;
+            canScratch: boolean;
+        } | {
+            id: string;
+            type: string;
+            title: string;
+            valueLabel: string;
+            codeMasked: string;
+            code: string | null | undefined;
+            status: string;
+            expiresLabel: string;
+            tip: string;
+            redeemUrl: string;
+            stockLeft: number;
+            coinCost: number | null;
+            cadence: string;
+            unlocked: boolean;
+            mode: "SINGLE";
+            coinRewardMin: number | null;
+            coinRewardMax: number | null;
+            startsAt: string | null;
+            endsAt: string | null;
+            windowMinutes: number;
+            codesPerWindow: number;
+            poolLeft: number | null;
+            needsAd: boolean;
+            canScratch: boolean;
+        })[];
     }>;
     claim(userId: string, redeemCodeId: string): Promise<{
         id: string;
@@ -31,14 +80,30 @@ export declare class RedeemService {
         coinCost: number | null;
         coinsRemaining: number;
     }>;
-    private assertRedeemId;
-    private assertCadenceWindow;
+    scratch(userId: string, redeemCodeId: string, attemptKey: string): Promise<{
+        id: string;
+        mode: "SCRATCH_REWARD";
+        coinsGranted: number;
+        code: string | null;
+        codeMasked: string | null;
+        alreadyProcessed: boolean;
+        coinsRemaining: number;
+        attemptKey: string;
+        tip: string;
+    }>;
+    scratchAdUnlock(userId: string, redeemCodeId: string): Promise<{
+        ok: boolean;
+        alreadyAllowed: boolean;
+        allowedAttempts: number;
+        usedAttempts: number;
+        needsAd: boolean;
+    }>;
     myClaims(userId: string): Promise<{
         id: string;
         redeemCodeId: string;
         title: string;
         valueLabel: string;
-        type: import(".prisma/client").$Enums.RedeemType;
+        type: string;
         redeemUrl: string;
         codeMasked: string;
         code: string;
@@ -46,51 +111,6 @@ export declare class RedeemService {
         createdAt: string;
         whenLabel: string;
     }[]>;
-    adminListClaims(query?: string): Promise<{
-        id: string;
-        title: string;
-        refId: string;
-        codeMasked: string;
-        deviceId: string;
-        userId: string;
-        userDisplayName: string | null;
-        result: "FLAGGED" | "SUCCESS";
-        whenLabel: string;
-        createdAt: string;
-        stockAfter: number;
-        abuseScore: number;
-        note: string;
-    }[]>;
-    adminClaimsStats(): Promise<{
-        copied: number;
-        blocked: number;
-        flagged: number;
-        devices: number;
-    }>;
-    adminFlagClaim(adminId: string, claimId: string, flagged: boolean, note?: string): Promise<{
-        id: string;
-        title: string;
-        refId: string;
-        codeMasked: string;
-        deviceId: string;
-        userId: string;
-        userDisplayName: string | null;
-        result: "FLAGGED" | "SUCCESS";
-        whenLabel: string;
-        createdAt: string;
-        stockAfter: number;
-        abuseScore: number;
-        note: string;
-    }>;
-    adminDeleteClaim(adminId: string, claimId: string): Promise<{
-        ok: boolean;
-    }>;
-    adminRevealClaim(adminId: string, claimId: string, currentPassword?: string): Promise<{
-        id: string;
-        codeMasked: string;
-        code: string;
-        title: string;
-    }>;
-    private toAdminClaimRow;
-    private assertClaimId;
+    private assertRedeemId;
+    private assertCadenceWindow;
 }

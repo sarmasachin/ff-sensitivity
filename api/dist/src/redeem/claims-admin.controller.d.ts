@@ -1,9 +1,9 @@
 import type { AuthAdmin } from '../auth/current-admin.decorator';
 import { FlagClaimDto, RevealClaimDto } from './dto/claims-admin.dto';
-import { RedeemService } from './redeem.service';
+import { RedeemClaimsService } from './redeem-claims.service';
 export declare class ClaimsAdminController {
-    private readonly redeem;
-    constructor(redeem: RedeemService);
+    private readonly claims;
+    constructor(claims: RedeemClaimsService);
     list(q?: string): Promise<{
         id: string;
         title: string;

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var _a, _b, _c, _d;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RedeemAdminController = void 0;
 const common_1 = require("@nestjs/common");
@@ -21,14 +22,47 @@ const current_admin_decorator_1 = require("../auth/current-admin.decorator");
 const app_error_1 = require("../common/errors/app-error");
 const redeem_module_guard_1 = require("./redeem-module.guard");
 const redeem_admin_service_1 = require("./redeem-admin.service");
+const redeem_admin_defs_service_1 = require("./redeem-admin-defs.service");
 const redeem_admin_dto_1 = require("./dto/redeem-admin.dto");
 let RedeemAdminController = class RedeemAdminController {
     redeem;
-    constructor(redeem) {
+    defs;
+    constructor(redeem, defs) {
         this.redeem = redeem;
+        this.defs = defs;
     }
     list() {
         return this.redeem.list();
+    }
+    listTypes() {
+        return this.defs.listTypes();
+    }
+    createType(admin, dto) {
+        this.assertCanMutate(admin);
+        return this.defs.createType(admin.id, dto);
+    }
+    updateType(admin, id, dto) {
+        this.assertCanMutate(admin);
+        return this.defs.updateType(admin.id, id, dto);
+    }
+    removeType(admin, id) {
+        this.assertCanMutate(admin);
+        return this.defs.removeType(admin.id, id);
+    }
+    listCadences() {
+        return this.defs.listCadences();
+    }
+    createCadence(admin, dto) {
+        this.assertCanMutate(admin);
+        return this.defs.createCadence(admin.id, dto);
+    }
+    updateCadence(admin, id, dto) {
+        this.assertCanMutate(admin);
+        return this.defs.updateCadence(admin.id, id, dto);
+    }
+    removeCadence(admin, id) {
+        this.assertCanMutate(admin);
+        return this.defs.removeCadence(admin.id, id);
     }
     create(admin, dto) {
         this.assertCanMutate(admin);
@@ -37,6 +71,10 @@ let RedeemAdminController = class RedeemAdminController {
     update(admin, id, dto) {
         this.assertCanMutate(admin);
         return this.redeem.update(admin.id, id, dto);
+    }
+    appendPool(admin, id, dto) {
+        this.assertCanMutate(admin);
+        return this.redeem.appendPool(admin.id, id, dto);
     }
     remove(admin, id) {
         this.assertCanMutate(admin);
@@ -61,6 +99,76 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], RedeemAdminController.prototype, "list", null);
 __decorate([
+    (0, common_1.Get)('types'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "listTypes", null);
+__decorate([
+    (0, common_1.Post)('types'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, typeof (_a = typeof redeem_admin_dto_1.CreateRedeemTypeDto !== "undefined" && redeem_admin_dto_1.CreateRedeemTypeDto) === "function" ? _a : Object]),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "createType", null);
+__decorate([
+    (0, common_1.Patch)('types/:id'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, typeof (_b = typeof redeem_admin_dto_1.UpdateRedeemTypeDto !== "undefined" && redeem_admin_dto_1.UpdateRedeemTypeDto) === "function" ? _b : Object]),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "updateType", null);
+__decorate([
+    (0, common_1.Delete)('types/:id'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "removeType", null);
+__decorate([
+    (0, common_1.Get)('cadences'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "listCadences", null);
+__decorate([
+    (0, common_1.Post)('cadences'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, typeof (_c = typeof redeem_admin_dto_1.CreateRedeemCadenceDto !== "undefined" && redeem_admin_dto_1.CreateRedeemCadenceDto) === "function" ? _c : Object]),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "createCadence", null);
+__decorate([
+    (0, common_1.Patch)('cadences/:id'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, typeof (_d = typeof redeem_admin_dto_1.UpdateRedeemCadenceDto !== "undefined" && redeem_admin_dto_1.UpdateRedeemCadenceDto) === "function" ? _d : Object]),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "updateCadence", null);
+__decorate([
+    (0, common_1.Delete)('cadences/:id'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "removeCadence", null);
+__decorate([
     (0, common_1.Post)(),
     (0, throttler_1.Throttle)({ default: { limit: 30, ttl: 60_000 } }),
     __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
@@ -79,6 +187,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, redeem_admin_dto_1.UpdateRedeemCodeDto]),
     __metadata("design:returntype", void 0)
 ], RedeemAdminController.prototype, "update", null);
+__decorate([
+    (0, common_1.Post)(':id/pool'),
+    (0, throttler_1.Throttle)({ default: { limit: 30, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, redeem_admin_dto_1.AppendRedeemPoolDto]),
+    __metadata("design:returntype", void 0)
+], RedeemAdminController.prototype, "appendPool", null);
 __decorate([
     (0, common_1.Delete)(':id'),
     (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
@@ -101,6 +219,7 @@ __decorate([
 exports.RedeemAdminController = RedeemAdminController = __decorate([
     (0, common_1.Controller)('api/v1/admin/redeem'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, redeem_module_guard_1.RedeemModuleGuard),
-    __metadata("design:paramtypes", [redeem_admin_service_1.RedeemAdminService])
+    __metadata("design:paramtypes", [redeem_admin_service_1.RedeemAdminService,
+        redeem_admin_defs_service_1.RedeemAdminDefsService])
 ], RedeemAdminController);
 //# sourceMappingURL=redeem-admin.controller.js.map

@@ -15,9 +15,14 @@ const claims_admin_controller_1 = require("./claims-admin.controller");
 const claims_module_guard_1 = require("./claims-module.guard");
 const redeem_admin_controller_1 = require("./redeem-admin.controller");
 const redeem_admin_service_1 = require("./redeem-admin.service");
+const redeem_admin_pool_service_1 = require("./redeem-admin-pool.service");
+const redeem_admin_defs_service_1 = require("./redeem-admin-defs.service");
 const redeem_controller_1 = require("./redeem.controller");
 const redeem_module_guard_1 = require("./redeem-module.guard");
 const redeem_service_1 = require("./redeem.service");
+const redeem_scratch_service_1 = require("./redeem-scratch.service");
+const redeem_claims_service_1 = require("./redeem-claims.service");
+const redeem_catalog_service_1 = require("./redeem-catalog.service");
 let RedeemModule = class RedeemModule {
 };
 exports.RedeemModule = RedeemModule;
@@ -27,8 +32,13 @@ exports.RedeemModule = RedeemModule = __decorate([
         controllers: [redeem_controller_1.RedeemController, claims_admin_controller_1.ClaimsAdminController, redeem_admin_controller_1.RedeemAdminController],
         providers: [
             redeem_service_1.RedeemService,
+            redeem_scratch_service_1.RedeemScratchService,
+            redeem_claims_service_1.RedeemClaimsService,
+            redeem_catalog_service_1.RedeemCatalogService,
             claims_module_guard_1.ClaimsModuleGuard,
             redeem_admin_service_1.RedeemAdminService,
+            redeem_admin_pool_service_1.RedeemAdminPoolService,
+            redeem_admin_defs_service_1.RedeemAdminDefsService,
             redeem_module_guard_1.RedeemModuleGuard,
         ],
         exports: [redeem_service_1.RedeemService],

@@ -4,10 +4,26 @@
  */
 import { PrismaClient } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const BASE = process.env.API_BASE ?? 'http://127.0.0.1:4000';
-const SECRET =
-  process.env.JWT_USER_SECRET ?? 'dev-user-jwt-secret-change-me-min-32-chars!!';
+
+function loadEnv() {
+  const raw = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
+  for (const line of raw.split(/\r?\n/)) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (!m) continue;
+    let v = m[2].trim();
+    if (
+      (v.startsWith('"') && v.endsWith('"')) ||
+      (v.startsWith("'") && v.endsWith("'"))
+    ) {
+      v = v.slice(1, -1);
+    }
+    if (!process.env[m[1]]) process.env[m[1]] = v;
+  }
+}
 
 type Check = { name: string; ok: boolean; detail: string };
 const checks: Check[] = [];
@@ -20,10 +36,10 @@ function note(name: string, ok: boolean, detail: string) {
 
 async function http(
   method: string,
-  path: string,
+  pathName: string,
   opts?: { token?: string; body?: unknown },
 ) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${BASE}${pathName}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -42,6 +58,8 @@ async function http(
 }
 
 async function main() {
+  loadEnv();
+  const SECRET = process.env.JWT_USER_SECRET!;
   const prisma = new PrismaClient();
   const user = await prisma.user.upsert({
     where: { email: 'e2e-redeem@ffsensitivity.local' },
@@ -55,10 +73,42 @@ async function main() {
   });
 
   const token = jwt.sign(
-    { sub: user.id, email: user.email, aud: 'user' },
+    { sub: user.id, email: user.email, aud: 'user', tv: 0 },
     SECRET,
     { expiresIn: '1h' },
   );
+
+  // Ensure at least one ACTIVE free SINGLE exists so catalog isn't empty after cleanups.
+  {
+    const stamp = Date.now().toString(36).toUpperCase();
+    const existingFree = await prisma.redeemCode.findFirst({
+      where: {
+        status: 'ACTIVE',
+        mode: 'SINGLE',
+        stockLeft: { gt: 0 },
+        coinCost: null,
+      },
+      select: { id: true },
+    });
+    if (!existingFree) {
+      await prisma.redeemCode.create({
+        data: {
+          title: `Security E2E Seed ${stamp}`,
+          type: 'GOOGLE_PLAY',
+          valueLabel: '₹1',
+          codeSecret: `SECSEED${stamp}FREE01`,
+          status: 'ACTIVE',
+          cadence: 'DAILY',
+          mode: 'SINGLE',
+          stockLeft: 1,
+          coinCost: null,
+          expiresLabel: 'E2E',
+          tip: 'First Come, First Serve!',
+          redeemUrl: 'https://play.google.com/redeem',
+        },
+      });
+    }
+  }
 
   // 1) No token → 401
   {
@@ -93,9 +143,19 @@ async function main() {
     const items = r.json?.items ?? [];
     const active = items.filter((i: any) => i.status === 'ACTIVE');
     freeId =
-      active.find((i: any) => i.coinCost == null && !i.unlocked)?.id ?? null;
+      active.find(
+        (i: any) =>
+          (i.mode ?? 'SINGLE') === 'SINGLE' &&
+          i.coinCost == null &&
+          !i.unlocked,
+      )?.id ?? null;
     paidId =
-      active.find((i: any) => (i.coinCost ?? 0) > 0 && !i.unlocked)?.id ?? null;
+      active.find(
+        (i: any) =>
+          (i.mode ?? 'SINGLE') === 'SINGLE' &&
+          (i.coinCost ?? 0) > 0 &&
+          !i.unlocked,
+      )?.id ?? null;
     note(
       'catalog with JWT',
       r.status === 200 && Array.isArray(items) && items.length > 0,
@@ -160,7 +220,28 @@ async function main() {
     note('claim paid without coins', true, 'skipped (no paid ACTIVE code)');
   }
 
-  // 7) Free claim + coinsRemaining
+  // 7) Free claim + coinsRemaining (SINGLE only — Type B uses /scratch)
+  if (!freeId) {
+    const stamp = Date.now().toString(36).toUpperCase();
+    const secret = `SECE2E${stamp}FREE01`;
+    const created = await prisma.redeemCode.create({
+      data: {
+        title: `Security E2E Free ${stamp}`,
+        type: 'GOOGLE_PLAY',
+        valueLabel: '₹1',
+        codeSecret: secret,
+        status: 'ACTIVE',
+        cadence: 'DAILY',
+        mode: 'SINGLE',
+        stockLeft: 1,
+        coinCost: null,
+        expiresLabel: 'E2E',
+        tip: 'First Come, First Serve!',
+        redeemUrl: 'https://play.google.com/redeem',
+      },
+    });
+    freeId = created.id;
+  }
   if (freeId) {
     await prisma.user.update({ where: { id: user.id }, data: { coins: 100 } });
     const r = await http('POST', `/api/v1/redeem/${freeId}/claim`, { token });
@@ -186,6 +267,10 @@ async function main() {
         again.json?.alreadyClaimed === true,
       `status=${again.status} already=${again.json?.alreadyClaimed}`,
     );
+
+    await prisma.redeemCode
+      .deleteMany({ where: { title: { startsWith: 'Security E2E Free' } } })
+      .catch(() => undefined);
   } else {
     note('claim free code', true, 'skipped (no free ACTIVE code left)');
     note('reclaim same code', true, 'skipped');
