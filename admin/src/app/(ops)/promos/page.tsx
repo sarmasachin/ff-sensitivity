@@ -145,19 +145,31 @@ export default function PromosPage() {
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  async function handleSave() {
+  async function persistCatalog(next: PromoRow[], okNotice: string) {
+    const previous = rows;
+    const previousKey = savedKey;
+    setRows(next);
     setSaving(true);
     setError(null);
     try {
-      const saved = reindexOrders(await savePromos(reindexOrders(rows)));
+      const saved = reindexOrders(await savePromos(reindexOrders(next)));
       setRows(saved);
       setSavedKey(snapKey(saved));
-      setNotice("Promos saved live — Android home syncs on next open.");
+      setNotice(okNotice);
     } catch (e) {
+      setRows(previous);
+      setSavedKey(previousKey);
       setError(e instanceof Error ? e.message : "Save failed.");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSave() {
+    await persistCatalog(
+      rows,
+      "Promos saved live — Android home syncs on next open.",
+    );
   }
 
   function openAdd() {
@@ -196,13 +208,17 @@ export default function PromosPage() {
   }
 
   function togglePromo(id: string) {
+    if (saving) return;
     const row = rows.find((r) => r.id === id);
     if (!row) return;
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)),
+    const next = rows.map((r) =>
+      r.id === id ? { ...r, enabled: !r.enabled } : r,
     );
-    setNotice(
-      `${row.enabled ? "Disabled" : "Enabled"} promo “${row.title}”. Save to push.`,
+    void persistCatalog(
+      next,
+      row.enabled
+        ? `Disabled “${row.title}” live — gone from app home on next open.`
+        : `Enabled “${row.title}” live.`,
     );
   }
 
@@ -303,6 +319,7 @@ export default function PromosPage() {
             <>
               <PromosTable
                 rows={paged}
+                busy={saving}
                 onEdit={openEdit}
                 onToggle={togglePromo}
                 onDelete={deletePromo}

@@ -9,6 +9,7 @@ import {
 
 type Props = {
   rows: PromoRow[];
+  busy?: boolean;
   onEdit: (id: string) => void;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
@@ -20,6 +21,7 @@ const btn =
 
 export function PromosTable({
   rows,
+  busy = false,
   onEdit,
   onToggle,
   onDelete,
@@ -57,16 +59,18 @@ export function PromosTable({
                         <button
                           type="button"
                           aria-label={`Move ${row.title} up`}
+                          disabled={busy}
                           onClick={() => onMove(row.id, -1)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100"
+                          className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-40"
                         >
                           ↑
                         </button>
                         <button
                           type="button"
                           aria-label={`Move ${row.title} down`}
+                          disabled={busy}
                           onClick={() => onMove(row.id, 1)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100"
+                          className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-40"
                         >
                           ↓
                         </button>
@@ -115,22 +119,25 @@ export function PromosTable({
                     <div className="flex justify-end gap-1.5">
                       <button
                         type="button"
+                        disabled={busy}
                         onClick={() => onEdit(row.id)}
-                        className={`${btn} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+                        className={`${btn} bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40`}
                       >
                         Edit
                       </button>
                       <button
                         type="button"
+                        disabled={busy}
                         onClick={() => onToggle(row.id)}
-                        className={`${btn} bg-amber-50 text-amber-900 hover:bg-amber-100`}
+                        className={`${btn} bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-40`}
                       >
                         {row.enabled ? "Disable" : "Enable"}
                       </button>
                       <button
                         type="button"
+                        disabled={busy}
                         onClick={() => onDelete(row.id)}
-                        className={`${btn} bg-rose-50 text-rose-700 hover:bg-rose-100`}
+                        className={`${btn} bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40`}
                       >
                         Delete
                       </button>
