@@ -82,4 +82,12 @@ export async function setUserStatusApi(
   );
   return data.user;
 }
+
+export async function deleteUserDataApi(userId: string): Promise<UserListRow> {
+  const data = await apiFetch<{ user: UserListRow }>(
+    `/api/v1/admin/users/${encodeURIComponent(userId)}/delete`,
+    { method: "POST" },
+  );
+  return data.user;
+}
 // --- End: Users admin live wire (Sachin) ---

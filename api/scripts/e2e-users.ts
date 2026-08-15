@@ -40,6 +40,18 @@ function okAuth(status: number) {
   return status === 200 || status === 201;
 }
 
+function readAccessCookie(res: Response): string | undefined {
+  const cookies =
+    typeof res.headers.getSetCookie === 'function'
+      ? res.headers.getSetCookie()
+      : [];
+  for (const c of cookies) {
+    const m = /^access_token=([^;]+)/.exec(c);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return undefined;
+}
+
 async function req(
   method: string,
   pathName: string,
@@ -60,7 +72,11 @@ async function req(
   } catch {
     json = { raw: text };
   }
-  return { status: res.status, json };
+  return {
+    status: res.status,
+    json,
+    accessToken: json?.accessToken || readAccessCookie(res),
+  };
 }
 
 async function main() {
@@ -79,13 +95,13 @@ async function main() {
   const login = await req('POST', '/api/v1/auth/login', {
     body: { email: adminEmail, password: adminPassword },
   });
-  if (!okAuth(login.status) || !login.json?.accessToken) {
+  if (!okAuth(login.status) || !login.accessToken) {
     fail('admin_login');
     await prisma.$disconnect();
     process.exit(1);
   }
   pass('admin_login');
-  const tok = login.json.accessToken as string;
+  const tok = login.accessToken;
 
   {
     const r = await req('GET', '/api/v1/admin/users', { token: tok });
@@ -104,6 +120,8 @@ async function main() {
       googleSub: 'e2e-users-app-sub-abcd1234',
       // Suspend bumps tokenVersion, so reset it or the next run's JWT is stale.
       tokenVersion: 0,
+      dataDeletedAt: null,
+      displayName: 'Users App',
     },
     create: {
       googleSub: 'e2e-users-app-sub-abcd1234',
@@ -254,6 +272,179 @@ async function main() {
       : fail('restore_ok', `${r.status} ${JSON.stringify(r.json)}`);
   }
 
+  const installId = `e2e-users-del-${stamp}`;
+  await prisma.walletLedger.create({
+    data: {
+      userId: user.id,
+      delta: 50,
+      balanceAfter: 170,
+      reason: 'e2e-delete',
+      idempotencyKey: `e2e-del-ledger-${stamp}`,
+    },
+  });
+  await prisma.userBoostCharge.create({
+    data: { userId: user.id, boostId: 'e2e_boost', charges: 2 },
+  });
+  await prisma.appAnalyticsEvent.create({
+    data: { userId: user.id, name: 'login', installId },
+  });
+  await prisma.devicePushToken.create({
+    data: {
+      userId: user.id,
+      token: `e2e-fcm-${stamp}`,
+      installId,
+    },
+  });
+  await prisma.deviceInstall.create({
+    data: {
+      installId,
+      userId: user.id,
+      brand: 'e2e',
+      model: 'DeletePhone',
+      appVersion: '1.0.5',
+    },
+  });
+  await prisma.communityPost.create({
+    data: {
+      userId: user.id,
+      name: 'E2E Post',
+      freeFireId: '123456789',
+      rank: 'Heroic',
+      role: 'Rusher',
+      deviceLabel: 'E2E Phone',
+      matches: 1,
+      kills: 1,
+      headshots: 0,
+      general: 100,
+      redDot: 100,
+      scope2x: 100,
+      scope4x: 100,
+      awm: 100,
+      freeLook: 100,
+    },
+  });
+  pass('seed_user_data_for_wipe');
+
+  {
+    const r = await req('POST', `/api/v1/admin/users/${user.id}/delete`, {
+      token: tok,
+    });
+    r.status === 409
+      ? pass('delete_requires_suspend')
+      : fail('delete_requires_suspend', `${r.status} ${JSON.stringify(r.json)}`);
+  }
+
+  {
+    await req('POST', `/api/v1/admin/users/${user.id}/status`, {
+      token: tok,
+      body: { action: 'suspend' },
+    });
+    const r = await req('POST', `/api/v1/admin/users/${user.id}/delete`, {
+      token: tok,
+    });
+    okAuth(r.status) && r.json?.user?.status === 'DELETED'
+      ? pass('delete_after_suspend')
+      : fail('delete_after_suspend', `${r.status} ${JSON.stringify(r.json)}`);
+  }
+
+  {
+    const wiped = await prisma.user.findUnique({ where: { id: user.id } });
+    const ledger = await prisma.walletLedger.count({ where: { userId: user.id } });
+    const boosts = await prisma.userBoostCharge.count({
+      where: { userId: user.id },
+    });
+    const events = await prisma.appAnalyticsEvent.count({
+      where: { userId: user.id },
+    });
+    const tokens = await prisma.devicePushToken.count({
+      where: { userId: user.id },
+    });
+    const posts = await prisma.communityPost.count({ where: { userId: user.id } });
+    const install = await prisma.deviceInstall.findUnique({
+      where: { installId },
+    });
+    wiped &&
+    wiped.isActive === false &&
+    wiped.dataDeletedAt &&
+    wiped.coins === 0 &&
+    wiped.email === 'e2e.users.app@example.com' &&
+    wiped.googleSub === 'e2e-users-app-sub-abcd1234' &&
+    wiped.displayName === 'Deleted user' &&
+    ledger === 0 &&
+    boosts === 0 &&
+    events === 0 &&
+    tokens === 0 &&
+    posts === 0 &&
+    install?.userId === null
+      ? pass('wipe_keeps_gmail_ban')
+      : fail(
+          'wipe_keeps_gmail_ban',
+          JSON.stringify({
+            active: wiped?.isActive,
+            deletedAt: wiped?.dataDeletedAt,
+            coins: wiped?.coins,
+            email: wiped?.email,
+            sub: wiped?.googleSub,
+            name: wiped?.displayName,
+            ledger,
+            boosts,
+            events,
+            tokens,
+            posts,
+            installUser: install?.userId,
+          }),
+        );
+  }
+
+  {
+    const existing = await prisma.user.findUnique({
+      where: { googleSub: 'e2e-users-app-sub-abcd1234' },
+      select: { isActive: true, dataDeletedAt: true },
+    });
+    existing && !existing.isActive && existing.dataDeletedAt
+      ? pass('same_gmail_login_blocked')
+      : fail('same_gmail_login_blocked', JSON.stringify(existing));
+  }
+
+  {
+    const banned = await prisma.user.findUnique({ where: { id: user.id } });
+    const staleTok = jwt.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        aud: 'user',
+        tv: banned?.tokenVersion ?? 0,
+      },
+      process.env.JWT_USER_SECRET!,
+      { expiresIn: '1h' },
+    );
+    const r = await req('GET', '/api/v1/economy/wallet', { token: staleTok });
+    r.status === 401
+      ? pass('deleted_jwt_rejected')
+      : fail('deleted_jwt_rejected', `status=${r.status}`);
+  }
+
+  {
+    const r = await req('GET', '/api/v1/admin/users', { token: tok });
+    const row = (r.json?.users ?? []).find((u: any) => u.id === user.id);
+    row?.status === 'DELETED' && row?.email === 'e2***@example.com'
+      ? pass('list_shows_deleted_masked')
+      : fail('list_shows_deleted_masked', JSON.stringify(row));
+  }
+
+  {
+    const r = await req('POST', `/api/v1/admin/users/${user.id}/status`, {
+      token: tok,
+      body: { action: 'restore' },
+    });
+    r.status === 409
+      ? pass('restore_blocked_after_delete')
+      : fail(
+          'restore_blocked_after_delete',
+          `${r.status} ${JSON.stringify(r.json)}`,
+        );
+  }
+
   const viewerEmail = `e2e.users.viewer.${stamp}@example.com`;
   const viewerHash = await bcrypt.hash('viewer-pass-123', 10);
   const viewer = await prisma.admin.create({
@@ -269,7 +460,7 @@ async function main() {
   const viewerLogin = await req('POST', '/api/v1/auth/login', {
     body: { email: viewerEmail, password: 'viewer-pass-123' },
   });
-  const viewerTok = viewerLogin.json?.accessToken as string | undefined;
+  const viewerTok = viewerLogin.accessToken;
   if (!viewerTok) {
     fail('viewer_login');
   } else {
@@ -292,6 +483,12 @@ async function main() {
     noteMut.status === 403
       ? pass('viewer_cannot_note')
       : fail('viewer_cannot_note', `status=${noteMut.status}`);
+    const del = await req('POST', `/api/v1/admin/users/${user.id}/delete`, {
+      token: viewerTok,
+    });
+    del.status === 403
+      ? pass('viewer_cannot_delete')
+      : fail('viewer_cannot_delete', `status=${del.status}`);
   }
 
   const noModEmail = `e2e.users.nomod.${stamp}@example.com`;
@@ -309,7 +506,7 @@ async function main() {
   const noModLogin = await req('POST', '/api/v1/auth/login', {
     body: { email: noModEmail, password: 'nomod-pass-123' },
   });
-  const noModTok = noModLogin.json?.accessToken as string | undefined;
+  const noModTok = noModLogin.accessToken;
   if (noModTok) {
     const r = await req('GET', '/api/v1/admin/users', { token: noModTok });
     r.status === 403
@@ -324,7 +521,12 @@ async function main() {
   });
   await prisma.user.update({
     where: { id: user.id },
-    data: { isActive: true, isRestricted: false, accountNote: '' },
+    data: {
+      isActive: true,
+      isRestricted: false,
+      accountNote: '',
+      dataDeletedAt: null,
+    },
   });
 
   const failed = checks.filter((c) => !c.ok);

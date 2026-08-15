@@ -3,6 +3,7 @@ type Props = {
   active: number;
   restricted: number;
   suspended: number;
+  deleted: number;
   coinsHeld: number;
 };
 
@@ -49,6 +50,7 @@ export function UsersStats({
   active,
   restricted,
   suspended,
+  deleted,
   coinsHeld,
 }: Props) {
   const stats = [
@@ -77,6 +79,12 @@ export function UsersStats({
       tone: "rose" as const,
     },
     {
+      label: "Deleted",
+      value: String(deleted),
+      hint: "Gmail banned",
+      tone: "slate" as const,
+    },
+    {
       label: "Coins held",
       value: coinsHeld.toLocaleString(),
       hint: "Across seats",
@@ -85,7 +93,7 @@ export function UsersStats({
   ];
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
       {stats.map((s) => {
         const t = TONE[s.tone];
         return (

@@ -95,6 +95,7 @@ export class UsersService {
       coins: number;
       isActive: boolean;
       isRestricted: boolean;
+      dataDeletedAt: Date | null;
       accountNote: string;
       createdAt: Date;
       lastLoginAt: Date | null;
@@ -130,7 +131,11 @@ export class UsersService {
       displayName: user.displayName || 'Player',
       email: maskEmail(user.email),
       googleSubMasked: maskGoogleSub(user.googleSub),
-      status: mapAccountStatus(user.isActive, user.isRestricted),
+      status: mapAccountStatus(
+        user.isActive,
+        user.isRestricted,
+        user.dataDeletedAt,
+      ),
       joinedLabel: formatJoined(user.createdAt),
       lastActiveLabel: formatWhen(h),
       lastActiveHoursAgo: Math.round(h * 10) / 10,
@@ -156,6 +161,7 @@ export class UsersService {
         coins: true,
         isActive: true,
         isRestricted: true,
+        dataDeletedAt: true,
         accountNote: true,
         createdAt: true,
         lastLoginAt: true,
@@ -186,6 +192,7 @@ export class UsersService {
         coins: true,
         isActive: true,
         isRestricted: true,
+        dataDeletedAt: true,
         accountNote: true,
         createdAt: true,
         lastLoginAt: true,
@@ -216,6 +223,13 @@ export class UsersService {
     if (!before) {
       throw new AppError('USER_NOT_FOUND', 'User not found.', 404);
     }
+    if (before.dataDeletedAt) {
+      throw new AppError(
+        'USER_STATUS_CONFLICT',
+        'This Gmail is banned after data delete. Cannot restore.',
+        409,
+      );
+    }
 
     let data: {
       isActive: boolean;
@@ -245,10 +259,21 @@ export class UsersService {
     if (note) data.accountNote = note;
 
     const after = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({
-        where: { id: userId },
+      const changed = await tx.user.updateMany({
+        where: { id: userId, dataDeletedAt: null },
         data,
       });
+      if (changed.count !== 1) {
+        throw new AppError(
+          'USER_STATUS_CONFLICT',
+          'This Gmail is banned after data delete. Cannot restore.',
+          409,
+        );
+      }
+      const updated = await tx.user.findUnique({ where: { id: userId } });
+      if (!updated) {
+        throw new AppError('USER_NOT_FOUND', 'User not found.', 404);
+      }
       await tx.auditLog.create({
         data: {
           actorAdminId: admin.id,
@@ -293,6 +318,93 @@ export class UsersService {
           entity: `user:${userId}`,
           beforeJson: { note: before.accountNote },
           afterJson: { note },
+        },
+      });
+    });
+
+    return { user: await this.loadRow(userId) };
+  }
+
+  async adminDeleteData(admin: AuthAdmin, userIdRaw: string) {
+    this.assertCanMutate(admin);
+    const userId = assertUserId(userIdRaw);
+    const before = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!before) {
+      throw new AppError('USER_NOT_FOUND', 'User not found.', 404);
+    }
+    if (before.dataDeletedAt) {
+      throw new AppError(
+        'USER_STATUS_CONFLICT',
+        'App data for this Gmail is already deleted.',
+        409,
+      );
+    }
+    if (before.isActive) {
+      throw new AppError(
+        'USER_STATUS_CONFLICT',
+        'Suspend the account before deleting data.',
+        409,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.communityPostReport.deleteMany({ where: { userId } });
+      await tx.communityPost.deleteMany({ where: { userId } });
+      await tx.redeemClaim.deleteMany({ where: { userId } });
+      await tx.redeemScratchRoll.deleteMany({ where: { userId } });
+      await tx.redeemScratchPass.deleteMany({ where: { userId } });
+      await tx.walletLedger.deleteMany({ where: { userId } });
+      await tx.userBoostCharge.deleteMany({ where: { userId } });
+      await tx.scratchRoll.deleteMany({ where: { userId } });
+      await tx.supportThread.deleteMany({ where: { userId } });
+      await tx.devicePushToken.deleteMany({ where: { userId } });
+      await tx.appAnalyticsEvent.deleteMany({ where: { userId } });
+      await tx.deviceInstall.updateMany({
+        where: { userId },
+        data: { userId: null },
+      });
+      await tx.redeemCodeSecret.updateMany({
+        where: { assignedUserId: userId },
+        data: { assignedUserId: null, assignedAt: null },
+      });
+      const wiped = await tx.user.updateMany({
+        where: { id: userId, isActive: false, dataDeletedAt: null },
+        data: {
+          displayName: 'Deleted user',
+          photoUrl: null,
+          coins: 0,
+          streakDays: 0,
+          lastCheckinDay: null,
+          walletFrozen: false,
+          walletNote: '',
+          isActive: false,
+          isRestricted: false,
+          tokenVersion: { increment: 1 },
+          dataDeletedAt: new Date(),
+          lastLoginAt: null,
+        },
+      });
+      if (wiped.count !== 1) {
+        throw new AppError(
+          'USER_STATUS_CONFLICT',
+          'Suspend the account before deleting data.',
+          409,
+        );
+      }
+      await tx.auditLog.create({
+        data: {
+          actorAdminId: admin.id,
+          action: 'user:delete-data',
+          entity: `user:${userId}`,
+          beforeJson: {
+            isActive: before.isActive,
+            coins: before.coins,
+            email: before.email,
+          },
+          afterJson: {
+            dataDeleted: true,
+            googleBanned: true,
+          },
         },
       });
     });

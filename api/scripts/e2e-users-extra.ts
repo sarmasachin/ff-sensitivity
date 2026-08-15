@@ -36,6 +36,18 @@ function fail(name: string, detail?: string) {
   console.log(`FAIL  ${name}${detail ? ` — ${detail}` : ''}`);
 }
 
+function readAccessCookie(res: Response): string | undefined {
+  const cookies =
+    typeof res.headers.getSetCookie === 'function'
+      ? res.headers.getSetCookie()
+      : [];
+  for (const c of cookies) {
+    const m = /^access_token=([^;]+)/.exec(c);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return undefined;
+}
+
 async function req(
   method: string,
   pathName: string,
@@ -56,7 +68,11 @@ async function req(
   } catch {
     json = { raw: text };
   }
-  return { status: res.status, json };
+  return {
+    status: res.status,
+    json,
+    accessToken: json?.accessToken || readAccessCookie(res),
+  };
 }
 
 async function main() {
@@ -67,7 +83,7 @@ async function main() {
   const login = await req('POST', '/api/v1/auth/login', {
     body: { email: adminEmail, password: adminPassword },
   });
-  const tok = login.json?.accessToken as string | undefined;
+  const tok = login.accessToken;
   if (!tok) {
     fail('admin_login');
     await prisma.$disconnect();
@@ -82,6 +98,7 @@ async function main() {
       isRestricted: false,
       accountNote: 'pre-suspended',
       googleSub: 'e2e-users-extra-sub-zzzz9999',
+      dataDeletedAt: null,
     },
     create: {
       googleSub: 'e2e-users-extra-sub-zzzz9999',

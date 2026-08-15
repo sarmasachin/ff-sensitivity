@@ -38,10 +38,11 @@ export class UserJwtStrategy extends PassportStrategy(Strategy, 'user-jwt') {
         email: true,
         displayName: true,
         isActive: true,
+        dataDeletedAt: true,
         tokenVersion: true,
       },
     });
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.dataDeletedAt) {
       throw new AppError('AUTH_INVALID', 'Invalid or inactive account.', 401);
     }
     const tv = typeof payload.tv === 'number' ? payload.tv : 0;

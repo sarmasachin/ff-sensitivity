@@ -1,4 +1,4 @@
-export type UserAccountStatus = "ACTIVE" | "RESTRICTED" | "SUSPENDED";
+export type UserAccountStatus = "ACTIVE" | "RESTRICTED" | "SUSPENDED" | "DELETED";
 
 export type UserListRow = {
   id: string;
@@ -24,6 +24,7 @@ export const USER_STATUS_LABEL: Record<UserAccountStatus, string> = {
   ACTIVE: "Active",
   RESTRICTED: "Restricted",
   SUSPENDED: "Suspended",
+  DELETED: "Deleted",
 };
 
 export const USERS_CAPABILITIES = [
@@ -41,7 +42,7 @@ export const USERS_CAPABILITIES = [
   },
   {
     title: "Account status",
-    body: "Active, restricted (redeem paused), or suspended (JWT + login blocked).",
+    body: "Active, restricted (redeem paused), suspended (login blocked), or deleted (data wiped, Gmail stays banned).",
   },
   {
     title: "Module ACL",
@@ -58,6 +59,7 @@ export function computeUserStats(rows: UserListRow[]) {
   const active = rows.filter((r) => r.status === "ACTIVE").length;
   const restricted = rows.filter((r) => r.status === "RESTRICTED").length;
   const suspended = rows.filter((r) => r.status === "SUSPENDED").length;
+  const deleted = rows.filter((r) => r.status === "DELETED").length;
   const coinsHeld = rows.reduce((sum, r) => sum + r.coinBalance, 0);
-  return { total, active, restricted, suspended, coinsHeld };
+  return { total, active, restricted, suspended, deleted, coinsHeld };
 }

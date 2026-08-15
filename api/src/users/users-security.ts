@@ -76,7 +76,9 @@ export function formatJoined(d: Date): string {
 export function mapAccountStatus(
   isActive: boolean,
   isRestricted: boolean,
-): 'ACTIVE' | 'RESTRICTED' | 'SUSPENDED' {
+  dataDeletedAt?: Date | null,
+): 'ACTIVE' | 'RESTRICTED' | 'SUSPENDED' | 'DELETED' {
+  if (dataDeletedAt) return 'DELETED';
   if (!isActive) return 'SUSPENDED';
   if (isRestricted) return 'RESTRICTED';
   return 'ACTIVE';

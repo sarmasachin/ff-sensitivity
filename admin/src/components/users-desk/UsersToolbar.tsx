@@ -5,6 +5,7 @@ export type UsersFilterKey =
   | "active"
   | "restricted"
   | "suspended"
+  | "deleted"
   | "stale";
 
 type Props = {
@@ -19,6 +20,7 @@ const FILTERS: { id: UsersFilterKey; label: string }[] = [
   { id: "active", label: "Active" },
   { id: "restricted", label: "Restricted" },
   { id: "suspended", label: "Suspended" },
+  { id: "deleted", label: "Deleted" },
   { id: "stale", label: "Stale" },
 ];
 

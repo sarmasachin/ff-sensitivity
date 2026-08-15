@@ -13,6 +13,7 @@ type Props = {
   onRestrict: (id: string) => void;
   onSuspend: (id: string) => void;
   onRestore: (id: string) => void;
+  onDelete: (id: string) => void;
 };
 
 function StatusPill({ status }: { status: UserAccountStatus }) {
@@ -20,6 +21,7 @@ function StatusPill({ status }: { status: UserAccountStatus }) {
     ACTIVE: "bg-emerald-100 text-emerald-800 ring-emerald-200",
     RESTRICTED: "bg-amber-100 text-amber-900 ring-amber-200",
     SUSPENDED: "bg-rose-100 text-rose-900 ring-rose-300",
+    DELETED: "bg-slate-200 text-slate-800 ring-slate-300",
   };
   return (
     <span
@@ -41,6 +43,7 @@ export function UsersTable({
   onRestrict,
   onSuspend,
   onRestore,
+  onDelete,
 }: Props) {
   return (
     <div className="overflow-hidden rounded-2xl border border-[#e8eaee] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
@@ -141,6 +144,15 @@ export function UsersTable({
                           onClick={() => onRestore(row.id)}
                         >
                           Restore
+                        </button>
+                      ) : null}
+                      {row.status === "SUSPENDED" ? (
+                        <button
+                          type="button"
+                          className={`${btn} bg-slate-800 text-white hover:bg-slate-700`}
+                          onClick={() => onDelete(row.id)}
+                        >
+                          Delete
                         </button>
                       ) : null}
                     </div>

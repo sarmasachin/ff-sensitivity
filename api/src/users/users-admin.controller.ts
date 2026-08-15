@@ -70,5 +70,14 @@ export class UsersAdminController {
   ) {
     return this.users.adminSetNote(admin, userId, dto);
   }
+
+  @Post(':userId/delete')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  deleteData(
+    @CurrentAdmin() admin: AuthAdmin,
+    @Param('userId') userId: string,
+  ) {
+    return this.users.adminDeleteData(admin, userId);
+  }
 }
 // --- End: Users admin live wire (Sachin) ---

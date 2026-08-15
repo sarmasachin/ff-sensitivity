@@ -13,6 +13,7 @@ import {
   type UsersFilterKey,
 } from "@/components/users-desk/UsersToolbar";
 import {
+  deleteUserDataApi,
   fetchUsers,
   setUserStatusApi,
 } from "@/components/users-desk/users-api";
@@ -130,6 +131,7 @@ export default function UsersPage() {
       if (filter === "active" && row.status !== "ACTIVE") return false;
       if (filter === "restricted" && row.status !== "RESTRICTED") return false;
       if (filter === "suspended" && row.status !== "SUSPENDED") return false;
+      if (filter === "deleted" && row.status !== "DELETED") return false;
       if (filter === "stale" && row.lastActiveHoursAgo < STALE_HOURS) {
         return false;
       }
@@ -210,6 +212,28 @@ export default function UsersPage() {
     );
   }
 
+  async function deleteUser(id: string) {
+    const row = users.find((u) => u.id === id);
+    if (!row || busy) return;
+    const ok = window.confirm(
+      `Delete all app data for ${row.displayName} (${row.email})?\n\nThe Gmail stays banned and cannot sign in again. This cannot be undone.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await deleteUserDataApi(id);
+      setUsers((rows) => rows.map((r) => (r.id === id ? updated : r)));
+      setNotice(
+        `Deleted app data for ${row.email}. Gmail remains banned.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!allowed) {
     return (
       <section className="mx-auto max-w-6xl rounded-2xl border border-amber-200 bg-amber-50 px-5 py-8 text-sm text-amber-950">
@@ -269,6 +293,7 @@ export default function UsersPage() {
             active={stats.active}
             restricted={stats.restricted}
             suspended={stats.suspended}
+            deleted={stats.deleted}
             coinsHeld={stats.coinsHeld}
           />
 
@@ -289,6 +314,7 @@ export default function UsersPage() {
               onRestrict={restrictUser}
               onSuspend={suspendUser}
               onRestore={restoreUser}
+              onDelete={deleteUser}
               footer={
                 <UsersPagination
                   page={safePage}
@@ -312,6 +338,7 @@ export default function UsersPage() {
         onRestrict={restrictUser}
         onSuspend={suspendUser}
         onRestore={restoreUser}
+        onDelete={deleteUser}
       />
     </section>
   );

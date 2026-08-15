@@ -12,6 +12,7 @@ type Props = {
   onRestrict: (id: string) => void;
   onSuspend: (id: string) => void;
   onRestore: (id: string) => void;
+  onDelete: (id: string) => void;
 };
 
 export function UsersDetailDrawer({
@@ -21,6 +22,7 @@ export function UsersDetailDrawer({
   onRestrict,
   onSuspend,
   onRestore,
+  onDelete,
 }: Props) {
   if (!open || !row) return null;
 
@@ -130,6 +132,12 @@ export function UsersDetailDrawer({
             <p className="mt-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3.5 py-3 text-[13px] leading-relaxed text-slate-700">
               {row.note}
             </p>
+            {row.status === "DELETED" ? (
+              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-3 text-[12px] leading-relaxed text-slate-700">
+                App data is wiped. This Gmail stays banned and cannot sign in
+                again.
+              </p>
+            ) : null}
           </section>
         </div>
 
@@ -159,6 +167,15 @@ export function UsersDetailDrawer({
               className="h-10 flex-1 rounded-xl bg-slate-900 text-[13px] font-semibold text-white hover:bg-slate-800"
             >
               Restore account
+            </button>
+          ) : null}
+          {row.status === "SUSPENDED" ? (
+            <button
+              type="button"
+              onClick={() => onDelete(row.id)}
+              className="h-10 flex-1 rounded-xl border border-rose-300 bg-rose-600 text-[13px] font-semibold text-white hover:bg-rose-700"
+            >
+              Delete data
             </button>
           ) : null}
           <button

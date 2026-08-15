@@ -62,9 +62,9 @@ export class UserAuthService {
     // Reject suspended seats before touching lastLoginAt / profile.
     const existing = await this.prisma.user.findUnique({
       where: { googleSub },
-      select: { isActive: true },
+      select: { isActive: true, dataDeletedAt: true },
     });
-    if (existing && !existing.isActive) {
+    if (existing && (!existing.isActive || existing.dataDeletedAt)) {
       throw new AppError('AUTH_SUSPENDED', 'This account is suspended.', 403);
     }
 
