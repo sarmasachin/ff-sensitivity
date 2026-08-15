@@ -10,6 +10,9 @@
 .cxx
 *.apk
 *.aab
+*.jks
+*.keystore
+keystore.properties
 api/.env
 admin/.env
 admin/.env.local

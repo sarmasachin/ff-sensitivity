@@ -19,14 +19,14 @@ val localProps = Properties().apply {
 
 android {
     namespace = "com.ffsensitivity.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.ffsensitivity.app"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 4
-        versionName = "1.0.3"
+        targetSdk = 35
+        versionCode = 6
+        versionName = "1.0.5"
 
         val googleServerClientId = localProps.getProperty("GOOGLE_SERVER_CLIENT_ID", "")
         buildConfigField(
@@ -66,6 +66,28 @@ android {
         manifestPlaceholders["admobAppId"] = admobAppId
     }
 
+    val storeFilePath = localProps.getProperty("STORE_FILE")?.trim().orEmpty()
+    val storePassword = localProps.getProperty("STORE_PASSWORD")?.trim().orEmpty()
+    val keyAlias = localProps.getProperty("KEY_ALIAS")?.trim().orEmpty()
+    val keyPassword = localProps.getProperty("KEY_PASSWORD")?.trim().orEmpty()
+    val hasReleaseSigning =
+        storeFilePath.isNotEmpty() &&
+            storePassword.isNotEmpty() &&
+            keyAlias.isNotEmpty() &&
+            keyPassword.isNotEmpty() &&
+            file(storeFilePath).isFile
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(storeFilePath)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -92,9 +114,12 @@ android {
             // before Play Store upload if you want a smaller AAB/APK.
             isMinifyEnabled = false
             isShrinkResources = false
-            // Signed so the APK installs on device. Replace with a Play upload
-            // keystore before Play Console / production distribution.
-            signingConfig = signingConfigs.getByName("debug")
+            // Play upload key from local.properties (STORE_*). Never use debug for Play.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             // Release must be HTTPS (Play / production).
             val releaseApi = localProps.getProperty(
                 "API_BASE_URL_RELEASE",

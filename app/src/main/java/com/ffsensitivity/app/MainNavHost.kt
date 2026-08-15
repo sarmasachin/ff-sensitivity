@@ -5,7 +5,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -74,11 +77,17 @@ internal fun MainNavHost(
         startDestination = startDestination
     ) {
         composable("login") {
+            var lastLoginBackAtMs by remember { mutableLongStateOf(0L) }
             BackHandler {
                 // Mid-session auth (e.g. Share Community) → pop back.
-                // Cold-start login root → leave the app.
-                if (!navController.popBackStack()) {
+                // Cold-start login root → confirm before exit.
+                if (navController.popBackStack()) return@BackHandler
+                val now = System.currentTimeMillis()
+                if (now - lastLoginBackAtMs <= 2_000L) {
                     activity.finish()
+                } else {
+                    lastLoginBackAtMs = now
+                    SafeOps.toast(activity, "Press back again to exit FF Sensitivity")
                 }
             }
             LoginScreen(
@@ -120,6 +129,7 @@ internal fun MainNavHost(
             )
         }
         composable("home") {
+            DoubleBackToExitHandler(activity)
             HomeScreen(
                 contentPadding = padding,
                 onOpenMenu = {

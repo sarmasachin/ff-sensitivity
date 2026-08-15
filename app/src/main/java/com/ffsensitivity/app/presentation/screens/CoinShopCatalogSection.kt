@@ -32,6 +32,9 @@ internal fun LazyListScope.coinShopStoreSection(
         catalogLoadFailed && catalogEmpty -> {
             item { EmptyShopBlock("Catalog failed to load. Use Retry above.") }
         }
+        catalogEmpty -> {
+            item { EmptyShopBlock("Shop is empty right now. Check back soon.") }
+        }
         filtered.isEmpty() -> {
             item { EmptyShopBlock("No items in this category.") }
         }
