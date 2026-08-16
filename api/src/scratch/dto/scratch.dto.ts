@@ -98,9 +98,10 @@ export class SaveScratchDto {
   @Type(() => ScratchPolicyDto)
   policy!: ScratchPolicyDto;
 
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ScratchPrizeDto)
-  prizes!: ScratchPrizeDto[];
+  prizes?: ScratchPrizeDto[];
 }
 // --- End: Scratch live wire (Sachin) ---

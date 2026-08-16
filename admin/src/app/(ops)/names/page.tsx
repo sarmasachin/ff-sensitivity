@@ -5,20 +5,26 @@ import { NamesCapabilities } from "@/components/names/NamesCapabilities";
 import { NamesEmptyState } from "@/components/names/NamesEmptyState";
 import { NamesFontsTable } from "@/components/names/NamesFontsTable";
 import { NamesFrameFormModal } from "@/components/names/NamesFrameFormModal";
-import { NamesFramesTable } from "@/components/names/NamesFramesTable";
+import { NamesFramesSection } from "@/components/names/NamesFramesSection";
 import { NamesHeader } from "@/components/names/NamesHeader";
-import { NamesPagination } from "@/components/names/NamesPagination";
 import { NamesPolicyCard } from "@/components/names/NamesPolicyCard";
 import { NamesStats } from "@/components/names/NamesStats";
 import { NamesTabs } from "@/components/names/NamesTabs";
+import type { NamesFilterKey } from "@/components/names/NamesToolbar";
 import {
-  NamesToolbar,
-  type NamesFilterKey,
-} from "@/components/names/NamesToolbar";
+  canAccessNames,
+  snapshotNamesPolicy,
+} from "@/components/names/names-access";
 import {
   fetchNamesBundle,
   saveNamesBundle,
 } from "@/components/names/names-api";
+import {
+  persistFrame,
+  deleteFrameRow,
+  toggleFontRow,
+  toggleFrameRow,
+} from "@/components/names/names-page-mutations";
 import {
   NAMES_DEFAULT_POLICY,
   computeNamesStats,
@@ -30,35 +36,11 @@ import {
   type NamesPolicy,
   type NamesTabId,
 } from "@/components/names/names-data";
+import { NAMES_TOAST_TITLES } from "@/components/names/names-toast";
+import { RedeemToastHost } from "@/components/redeem/RedeemToastHost";
+import { useRedeemToasts } from "@/components/redeem/useRedeemToasts";
 
 const PAGE_SIZE = 12;
-
-function snapKey(
-  policy: NamesPolicy,
-  frames: NameFrameRow[],
-  fonts: NameFontRow[],
-) {
-  return JSON.stringify({ policy, frames, fonts });
-}
-
-function canAccessNames(): boolean {
-  if (typeof window === "undefined") return false;
-  const raw =
-    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
-  if (!raw) return false;
-  try {
-    const admin = JSON.parse(raw) as {
-      role?: string;
-      allowedModules?: string[];
-    };
-    if (admin.role === "SUPER_ADMIN") return true;
-    return Array.isArray(admin.allowedModules)
-      ? admin.allowedModules.includes("names")
-      : false;
-  } catch {
-    return false;
-  }
-}
 
 export default function NamesPage() {
   const [allowed, setAllowed] = useState(true);
@@ -69,21 +51,20 @@ export default function NamesPage() {
   const [fonts, setFonts] = useState<NameFontRow[]>([]);
   const [policy, setPolicy] = useState<NamesPolicy>(NAMES_DEFAULT_POLICY);
   const [savedKey, setSavedKey] = useState(() =>
-    snapKey(NAMES_DEFAULT_POLICY, [], []),
+    snapshotNamesPolicy(NAMES_DEFAULT_POLICY),
   );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<NamesFilterKey>("all");
   const [page, setPage] = useState(1);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formInitial, setFormInitial] =
     useState<NameFrameFormValues>(emptyFrameForm());
+  const [retryToastId, setRetryToastId] = useState<string | null>(null);
+  const { toasts, push, dismiss } = useRedeemToasts();
 
-  const dirty = snapKey(policy, frames, fonts) !== savedKey;
+  const dirty = snapshotNamesPolicy(policy) !== savedKey;
   const stats = useMemo(
     () => computeNamesStats(frames, fonts),
     [frames, fonts],
@@ -95,19 +76,23 @@ export default function NamesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const bundle = await fetchNamesBundle();
       setPolicy(bundle.policy);
       setFrames(bundle.frames);
       setFonts(bundle.fonts);
-      setSavedKey(snapKey(bundle.policy, bundle.frames, bundle.fonts));
+      setSavedKey(snapshotNamesPolicy(bundle.policy));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load names.");
+      const message = e instanceof Error ? e.message : "Failed to load names.";
+      const id = push("error", NAMES_TOAST_TITLES.loadError, message, {
+        actionLabel: "Retry",
+        durationMs: 0,
+      });
+      setRetryToastId(id);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [push]);
 
   useEffect(() => {
     if (!allowed) {
@@ -138,7 +123,6 @@ export default function NamesPage() {
   }, [frames, query, filter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredFrames.length / PAGE_SIZE));
-
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
@@ -150,26 +134,37 @@ export default function NamesPage() {
 
   async function handleSave() {
     if (!fonts.some((f) => f.enabled)) {
-      setError("At least one letter font must stay enabled.");
+      push("error", NAMES_TOAST_TITLES.error, "At least one letter font must stay enabled.");
       return;
     }
     setSaving(true);
-    setError(null);
     try {
-      const saved = await saveNamesBundle({ policy, frames, fonts });
+      const saved = await saveNamesBundle({ policy });
       setPolicy(saved.policy);
       setFrames(saved.frames);
       setFonts(saved.fonts);
-      setSavedKey(snapKey(saved.policy, saved.frames, saved.fonts));
-      setNotice("Names catalog saved live — Android syncs on next open.");
+      setSavedKey(snapshotNamesPolicy(saved.policy));
+      push(
+        "success",
+        NAMES_TOAST_TITLES.success,
+        "Policy live — Android syncs on next open.",
+      );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed.");
+      push(
+        "error",
+        NAMES_TOAST_TITLES.error,
+        e instanceof Error ? e.message : "Save failed.",
+      );
     } finally {
       setSaving(false);
     }
   }
 
   function openAdd() {
+    if (frames.length >= 80) {
+      push("error", NAMES_TOAST_TITLES.error, "Frame table is full (max 80).");
+      return;
+    }
     setTab("frames");
     setFormMode("add");
     setEditingId(null);
@@ -186,51 +181,10 @@ export default function NamesPage() {
     setFormOpen(true);
   }
 
-  function saveFrame(row: NameFrameRow) {
-    if (formMode === "add") {
-      if (frames.some((f) => f.id === row.id)) {
-        setNotice(`Frame id “${row.id}” already exists.`);
-        return;
-      }
-      setFrames((prev) => [row, ...prev]);
-      setNotice(`Added frame “${row.label}”. Save to push live.`);
-      return;
-    }
-    if (!editingId) return;
-    setFrames((prev) =>
-      prev.map((f) => (f.id === editingId ? { ...row, id: editingId } : f)),
-    );
-    setNotice(`Updated frame “${row.label}”. Save to push live.`);
-  }
-
-  function toggleFrame(id: string) {
-    const row = frames.find((f) => f.id === id);
-    if (!row) return;
-    setFrames((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f)),
-    );
-    setNotice(
-      `${row.enabled ? "Disabled" : "Enabled"} frame “${row.label}”. Save to push.`,
-    );
-  }
-
-  function deleteFrame(id: string) {
-    const row = frames.find((f) => f.id === id);
-    if (!row) return;
-    if (!window.confirm(`Delete frame “${row.label}”?`)) return;
-    setFrames((prev) => prev.filter((f) => f.id !== id));
-    setNotice(`Deleted frame “${row.label}”. Save to push live.`);
-  }
-
-  function toggleFont(id: string) {
-    const row = fonts.find((f) => f.id === id);
-    if (!row) return;
-    setFonts((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f)),
-    );
-    setNotice(
-      `${row.enabled ? "Disabled" : "Enabled"} font “${row.label}”. Save to push.`,
-    );
+  async function saveFrame(
+    values: NameFrameFormValues,
+  ): Promise<string | null> {
+    return persistFrame(values, formMode, frames, editingId, setFrames, push);
   }
 
   if (!allowed) {
@@ -244,9 +198,6 @@ export default function NamesPage() {
     );
   }
 
-  const framesEmpty = frames.length === 0;
-  const filterEmpty = !framesEmpty && filteredFrames.length === 0;
-
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <NamesHeader
@@ -254,7 +205,11 @@ export default function NamesPage() {
         saving={saving}
         onAddFrame={openAdd}
         onSave={() => void handleSave()}
-        onReset={() => void load().then(() => setNotice("Reverted to server."))}
+        onReset={() => {
+          void load().then(() =>
+            push("success", NAMES_TOAST_TITLES.success, "Reverted to last saved policy."),
+          );
+        }}
       />
       <NamesStats
         frames={stats.frames}
@@ -264,29 +219,11 @@ export default function NamesPage() {
         liveFonts={stats.liveFonts}
       />
       <NamesTabs active={tab} onChange={setTab} />
-
       {loading ? (
         <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-[13px] text-slate-400">
-          Loading names catalog…
+          Loading live names catalog…
         </p>
       ) : null}
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
-        >
-          {error}
-        </div>
-      ) : null}
-      {notice ? (
-        <div
-          role="status"
-          className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-[13px] font-medium text-teal-950"
-        >
-          {notice}
-        </div>
-      ) : null}
-
       {!loading && tab === "policy" ? (
         <NamesPolicyCard
           policy={policy}
@@ -294,64 +231,60 @@ export default function NamesPage() {
           onSave={() => void handleSave()}
         />
       ) : null}
-
       {!loading && tab === "fonts" ? (
         fonts.length === 0 ? (
           <NamesEmptyState
             title="No letter fonts"
-            body="Font maps will appear here once the catalog is seeded."
+            body="Fonts appear here from Nest. Toggle which maps Android can generate."
           />
         ) : (
-          <NamesFontsTable rows={fonts} onToggle={toggleFont} />
+          <NamesFontsTable
+            rows={fonts}
+            onToggle={(id) => {
+              void toggleFontRow(id, fonts, setFonts, push);
+            }}
+          />
         )
       ) : null}
-
       {!loading && tab === "frames" ? (
-        <>
-          <NamesToolbar
-            query={query}
-            filter={filter}
-            onQuery={setQuery}
-            onFilter={setFilter}
-          />
-          {framesEmpty ? (
-            <NamesEmptyState
-              title="No frames yet"
-              body="Add a prefix/suffix frame pack for Stylish Names."
-            />
-          ) : filterEmpty ? (
-            <NamesEmptyState
-              title="No matches"
-              body="Try another search or filter."
-            />
-          ) : (
-            <>
-              <NamesFramesTable
-                rows={paged}
-                onEdit={openEdit}
-                onToggle={toggleFrame}
-                onDelete={deleteFrame}
-              />
-              <NamesPagination
-                page={page}
-                totalPages={totalPages}
-                totalItems={filteredFrames.length}
-                pageSize={PAGE_SIZE}
-                onPage={setPage}
-              />
-            </>
-          )}
-        </>
+        <NamesFramesSection
+          query={query}
+          filter={filter}
+          page={page}
+          pageSize={PAGE_SIZE}
+          frames={frames}
+          filtered={filteredFrames}
+          paged={paged}
+          onQuery={setQuery}
+          onFilter={setFilter}
+          onPage={setPage}
+          onEdit={openEdit}
+          onToggle={(id) => {
+            void toggleFrameRow(id, frames, setFrames, push);
+          }}
+          onDelete={(id) => {
+            void deleteFrameRow(id, frames, setFrames, push);
+          }}
+        />
       ) : null}
-
       {!loading ? <NamesCapabilities /> : null}
-
       <NamesFrameFormModal
         open={formOpen}
         mode={formMode}
         initial={formInitial}
         onClose={() => setFormOpen(false)}
         onSave={saveFrame}
+      />
+      <RedeemToastHost
+        toasts={toasts}
+        onDismiss={dismiss}
+        onAction={(id) => {
+          if (id === retryToastId) {
+            dismiss(id);
+            setRetryToastId(null);
+            void load();
+          }
+        }}
       />
     </section>
   );

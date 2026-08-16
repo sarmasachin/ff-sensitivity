@@ -12,7 +12,7 @@ type Props = {
   mode: "add" | "edit";
   initial: ScratchFormValues;
   onClose: () => void;
-  onSubmit: (values: ScratchFormValues) => string | null;
+  onSubmit: (values: ScratchFormValues) => Promise<string | null>;
 };
 
 const fieldClass =
@@ -31,11 +31,13 @@ export function ScratchFormModal({
 }: Props) {
   const [values, setValues] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
       setValues(initial);
       setError(null);
+      setBusy(false);
     }
   }, [open, initial]);
 
@@ -48,14 +50,21 @@ export function ScratchFormModal({
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const err = onSubmit(values);
-    if (err) {
-      setError(err);
-      return;
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const err = await onSubmit(values);
+      if (err) {
+        setError(err);
+        return;
+      }
+      onClose();
+    } finally {
+      setBusy(false);
     }
-    onClose();
   }
 
   return (
@@ -64,7 +73,9 @@ export function ScratchFormModal({
         type="button"
         className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]"
         aria-label="Close dialog"
-        onClick={onClose}
+        onClick={() => {
+          if (!busy) onClose();
+        }}
       />
 
       <form
@@ -87,7 +98,9 @@ export function ScratchFormModal({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                if (!busy) onClose();
+              }}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white hover:bg-white/25"
               aria-label="Close"
             >
@@ -137,7 +150,7 @@ export function ScratchFormModal({
                 className={`${fieldClass} font-mono text-[12px]`}
                 value={values.id}
                 onChange={(e) => patch("id", e.target.value)}
-                placeholder="gift_coins_50"
+                placeholder="prize_id"
                 disabled={mode === "edit"}
                 required={mode === "add"}
               />
@@ -216,16 +229,24 @@ export function ScratchFormModal({
         <footer className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-3">
           <button
             type="button"
-            onClick={onClose}
-            className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50"
+            onClick={() => {
+              if (!busy) onClose();
+            }}
+            disabled={busy}
+            className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="h-9 rounded-xl bg-fuchsia-600 px-4 text-[13px] font-semibold text-white hover:bg-fuchsia-500"
+            disabled={busy}
+            className="h-9 rounded-xl bg-fuchsia-600 px-4 text-[13px] font-semibold text-white hover:bg-fuchsia-500 disabled:opacity-50"
           >
-            {mode === "add" ? "Add prize" : "Save changes"}
+            {busy
+              ? "Saving…"
+              : mode === "add"
+                ? "Add prize"
+                : "Save changes"}
           </button>
         </footer>
       </form>

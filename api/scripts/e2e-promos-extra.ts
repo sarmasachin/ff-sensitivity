@@ -1,62 +1,17 @@
 /**
  * Extra promos security cross-checks (local).
  */
-import { PrismaClient } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
-import * as fs from 'fs';
-import * as path from 'path';
-
-const API = process.env.API_BASE ?? 'http://127.0.0.1:4000';
-const prisma = new PrismaClient();
-
-function loadEnv() {
-  const raw = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
-  for (const line of raw.split(/\r?\n/)) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (!m) continue;
-    let v = m[2].trim();
-    if (
-      (v.startsWith('"') && v.endsWith('"')) ||
-      (v.startsWith("'") && v.endsWith("'"))
-    ) {
-      v = v.slice(1, -1);
-    }
-    if (!process.env[m[1]]) process.env[m[1]] = v;
-  }
-}
-
-const checks: { name: string; ok: boolean; detail?: string }[] = [];
-function pass(name: string, detail?: string) {
-  checks.push({ name, ok: true, detail });
-  console.log(`PASS  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-function fail(name: string, detail?: string) {
-  checks.push({ name, ok: false, detail });
-  console.log(`FAIL  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-
-async function req(
-  method: string,
-  pathName: string,
-  opts?: { token?: string; body?: unknown },
-) {
-  const res = await fetch(`${API}${pathName}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-    },
-    body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  });
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-  return { status: res.status, json };
-}
+import {
+  checks,
+  fail,
+  loadEnv,
+  mintSuperToken,
+  pass,
+  prisma,
+  req,
+  restorePromos,
+} from './e2e-promos-lib';
 
 function pad(n: number) {
   return String(n).padStart(2, '0');
@@ -67,17 +22,17 @@ function fmt(d: Date) {
 
 async function main() {
   loadEnv();
-  const login = await req('POST', '/api/v1/auth/login', {
-    body: {
-      email: process.env.SUPERADMIN_EMAIL ?? 'sharma.sachinctr@gmail.com',
-      password: process.env.SUPERADMIN_PASSWORD ?? '123456',
-    },
-  });
-  const at = login.json?.accessToken as string;
+  const at = await mintSuperToken();
   if (!at) {
-    fail('admin_login');
+    fail('super_login', 'active admin not found');
     process.exit(1);
   }
+  pass('super_login', 'minted jwt');
+
+  const snapshot = await req('GET', '/api/v1/admin/promos', { token: at });
+  const snapshotPromos = Array.isArray(snapshot.json?.promos)
+    ? snapshot.json.promos
+    : [];
 
   const now = new Date();
   const pastStart = new Date(now.getTime() - 5 * 24 * 3600_000);
@@ -140,11 +95,28 @@ async function main() {
     ? pass('live_excludes_scheduled_and_ended', JSON.stringify(ids))
     : fail('live_excludes_scheduled_and_ended', JSON.stringify(ids));
 
-  // Public must not leak schedule fields
   const leaked = (r.json?.promos ?? []).some(
-    (p: any) => p.startsAt !== undefined || p.endsAt !== undefined || p.enabled !== undefined,
+    (p: any) =>
+      p.startsAt !== undefined ||
+      p.endsAt !== undefined ||
+      p.enabled !== undefined,
   );
   !leaked ? pass('public_no_schedule_fields') : fail('public_no_schedule_fields');
+
+  r = await req('POST', '/api/v1/admin/promos', {
+    token: at,
+    body: {
+      ...base,
+      id: 'e2e_bad_link',
+      title: 'Bad',
+      deepLink: 'https://evil.example/phish',
+      startsAt: fmt(liveStart),
+      endsAt: fmt(liveEnd),
+    },
+  });
+  r.status === 400
+    ? pass('item_reject_https_deeplink')
+    : fail('item_reject_https_deeplink', String(r.status));
 
   r = await req('PUT', '/api/v1/admin/promos', {
     token: at,
@@ -231,7 +203,6 @@ async function main() {
     ? pass('reject_dup_id')
     : fail('reject_dup_id', String(r.status));
 
-  // Query string / extra path must normalize to allowlisted path only
   r = await req('PUT', '/api/v1/admin/promos', {
     token: at,
     body: {
@@ -274,39 +245,10 @@ async function main() {
     ? pass('user_jwt_blocked_on_admin')
     : fail('user_jwt_blocked_on_admin', String(r.status));
 
-  // Restore useful catalog
-  await req('PUT', '/api/v1/admin/promos', {
-    token: at,
-    body: {
-      promos: [
-        {
-          id: 'promo_challenge_week',
-          title: 'Daily Challenge week',
-          subtitle: 'Complete quizzes for bonus coins.',
-          imageLabel: 'challenge-hero',
-          deepLink: 'ffops://challenge',
-          placement: 'HOME_BANNER',
-          sortOrder: 1,
-          enabled: true,
-          startsAt: fmt(liveStart),
-          endsAt: fmt(liveEnd),
-        },
-        {
-          id: 'promo_scratch_boost',
-          title: 'Scratch boost',
-          subtitle: 'Open your daily scratch after check-in.',
-          imageLabel: 'scratch-gold',
-          deepLink: 'ffops://scratch',
-          placement: 'HOME_BANNER',
-          sortOrder: 2,
-          enabled: true,
-          startsAt: fmt(liveStart),
-          endsAt: fmt(liveEnd),
-        },
-      ],
-    },
-  });
-  pass('restore');
+  const restored = await restorePromos(at, snapshotPromos);
+  restored.status === 200
+    ? pass('restore', `count=${snapshotPromos.length}`)
+    : fail('restore', `status=${restored.status}`);
 
   const ok = checks.filter((c) => c.ok).length;
   console.log(`\n${ok}/${checks.length} passed`);

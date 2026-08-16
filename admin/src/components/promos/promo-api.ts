@@ -23,11 +23,39 @@ function toSavePayload(promos: PromoRow[]) {
   }));
 }
 
-export async function savePromos(promos: PromoRow[]): Promise<PromoRow[]> {
-  const data = await apiFetch<{ promos: PromoRow[] }>("/api/v1/admin/promos", {
-    method: "PUT",
-    body: JSON.stringify({ promos: toSavePayload(promos) }),
+export async function createPromo(promo: PromoRow): Promise<PromoRow> {
+  return apiFetch<PromoRow>("/api/v1/admin/promos", {
+    method: "POST",
+    body: JSON.stringify(toSavePayload([promo])[0]),
   });
+}
+
+export async function updatePromo(
+  id: string,
+  promo: PromoRow,
+): Promise<PromoRow> {
+  return apiFetch<PromoRow>(`/api/v1/admin/promos/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(toSavePayload([{ ...promo, id }])[0]),
+  });
+}
+
+export async function deletePromo(
+  id: string,
+): Promise<{ ok: true; id: string }> {
+  return apiFetch<{ ok: true; id: string }>(`/api/v1/admin/promos/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function reorderPromos(ids: string[]): Promise<PromoRow[]> {
+  const data = await apiFetch<{ promos: PromoRow[] }>(
+    "/api/v1/admin/promos/reorder",
+    {
+      method: "PATCH",
+      body: JSON.stringify({ ids }),
+    },
+  );
   return data.promos ?? [];
 }
 // --- End: Promos live wire (Sachin) ---

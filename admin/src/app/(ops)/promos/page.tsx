@@ -12,7 +12,8 @@ import {
   PromosToolbar,
   type PromosFilterKey,
 } from "@/components/promos/PromosToolbar";
-import { fetchPromos, savePromos } from "@/components/promos/promo-api";
+import { canAccessPromos, sortByOrder } from "@/components/promos/promo-access";
+import { fetchPromos } from "@/components/promos/promo-api";
 import {
   computePromoStats,
   emptyPromoForm,
@@ -22,81 +23,59 @@ import {
   type PromoFormValues,
   type PromoRow,
 } from "@/components/promos/promo-data";
+import {
+  deletePromoRow,
+  movePromoRow,
+  persistPromo,
+  togglePromoRow,
+} from "@/components/promos/promo-page-mutations";
+import { PROMOS_TOAST_TITLES } from "@/components/promos/promo-toast";
+import { RedeemToastHost } from "@/components/redeem/RedeemToastHost";
+import { useRedeemToasts } from "@/components/redeem/useRedeemToasts";
 
 const PAGE_SIZE = 12;
-
-function sortByOrder(rows: PromoRow[]): PromoRow[] {
-  return [...rows].sort(
-    (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
-  );
-}
-
-function reindexOrders(rows: PromoRow[]): PromoRow[] {
-  return sortByOrder(rows).map((row, i) => ({ ...row, sortOrder: i + 1 }));
-}
-
-function snapKey(rows: PromoRow[]) {
-  return JSON.stringify(rows);
-}
-
-function canAccessPromos(): boolean {
-  if (typeof window === "undefined") return false;
-  const raw =
-    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
-  if (!raw) return false;
-  try {
-    const admin = JSON.parse(raw) as {
-      role?: string;
-      allowedModules?: string[];
-    };
-    if (admin.role === "SUPER_ADMIN") return true;
-    return Array.isArray(admin.allowedModules)
-      ? admin.allowedModules.includes("promos")
-      : false;
-  } catch {
-    return false;
-  }
-}
+const MAX_PROMOS = 40;
 
 export default function PromosPage() {
   const [allowed, setAllowed] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<PromoRow[]>([]);
-  const [savedKey, setSavedKey] = useState("[]");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<PromosFilterKey>("all");
   const [page, setPage] = useState(1);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formInitial, setFormInitial] = useState<PromoFormValues>(() =>
     emptyPromoForm(1),
   );
+  const [retryToastId, setRetryToastId] = useState<string | null>(null);
+  const { toasts, push, dismiss } = useRedeemToasts();
 
-  const dirty = snapKey(rows) !== savedKey;
   const stats = useMemo(() => computePromoStats(rows), [rows]);
 
   useEffect(() => {
     setAllowed(canAccessPromos());
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
-      const promos = reindexOrders(await fetchPromos());
-      setRows(promos);
-      setSavedKey(snapKey(promos));
+      setRows(sortByOrder(await fetchPromos()));
+      return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load promos.");
+      const message = e instanceof Error ? e.message : "Failed to load promos.";
+      const id = push("error", PROMOS_TOAST_TITLES.loadError, message, {
+        actionLabel: "Retry",
+        durationMs: 0,
+      });
+      setRetryToastId(id);
+      return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [push]);
 
   useEffect(() => {
     if (!allowed) {
@@ -145,34 +124,11 @@ export default function PromosPage() {
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  async function persistCatalog(next: PromoRow[], okNotice: string) {
-    const previous = rows;
-    const previousKey = savedKey;
-    setRows(next);
-    setSaving(true);
-    setError(null);
-    try {
-      const saved = reindexOrders(await savePromos(reindexOrders(next)));
-      setRows(saved);
-      setSavedKey(snapKey(saved));
-      setNotice(okNotice);
-    } catch (e) {
-      setRows(previous);
-      setSavedKey(previousKey);
-      setError(e instanceof Error ? e.message : "Save failed.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleSave() {
-    await persistCatalog(
-      rows,
-      "Promos saved live — Android home syncs on next open.",
-    );
-  }
-
   function openAdd() {
+    if (rows.length >= MAX_PROMOS) {
+      push("error", PROMOS_TOAST_TITLES.error, "Promo table is full (max 40).");
+      return;
+    }
     setFormMode("add");
     setEditingId(null);
     setFormInitial(emptyPromoForm(rows.length + 1));
@@ -188,60 +144,18 @@ export default function PromosPage() {
     setFormOpen(true);
   }
 
-  function savePromo(row: PromoRow) {
-    if (formMode === "add") {
-      if (rows.some((r) => r.id === row.id)) {
-        setNotice(`Promo id “${row.id}” already exists.`);
-        return;
-      }
-      setRows((prev) => reindexOrders([row, ...prev]));
-      setNotice(`Added promo “${row.title}”. Save to push live.`);
-      return;
+  async function saveForm(values: PromoFormValues): Promise<string | null> {
+    return persistPromo(values, formMode, rows, editingId, setRows, push);
+  }
+
+  async function runBusy(fn: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
     }
-    if (!editingId) return;
-    setRows((prev) =>
-      reindexOrders(
-        prev.map((r) => (r.id === editingId ? { ...row, id: editingId } : r)),
-      ),
-    );
-    setNotice(`Updated promo “${row.title}”. Save to push live.`);
-  }
-
-  function togglePromo(id: string) {
-    if (saving) return;
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    const next = rows.map((r) =>
-      r.id === id ? { ...r, enabled: !r.enabled } : r,
-    );
-    void persistCatalog(
-      next,
-      row.enabled
-        ? `Disabled “${row.title}” live — gone from app home on next open.`
-        : `Enabled “${row.title}” live.`,
-    );
-  }
-
-  function deletePromo(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    if (!window.confirm(`Delete promo “${row.title}”?`)) return;
-    setRows((prev) => reindexOrders(prev.filter((r) => r.id !== id)));
-    setNotice(`Deleted promo “${row.title}”. Save to push live.`);
-  }
-
-  function movePromo(id: string, dir: -1 | 1) {
-    setRows((prev) => {
-      const ordered = sortByOrder(prev);
-      const idx = ordered.findIndex((r) => r.id === id);
-      if (idx < 0) return prev;
-      const swap = idx + dir;
-      if (swap < 0 || swap >= ordered.length) return prev;
-      const next = [...ordered];
-      [next[idx], next[swap]] = [next[swap], next[idx]];
-      return next.map((row, i) => ({ ...row, sortOrder: i + 1 }));
-    });
-    setNotice("Promo order updated. Save to push live.");
   }
 
   if (!allowed) {
@@ -261,11 +175,19 @@ export default function PromosPage() {
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <PromosHeader
-        dirty={dirty}
-        saving={saving}
+        busy={loading || busy}
         onAdd={openAdd}
-        onSave={() => void handleSave()}
-        onReset={() => void load().then(() => setNotice("Reverted to server."))}
+        onRefresh={() =>
+          void load({ silent: true }).then((ok) => {
+            if (ok) {
+              push(
+                "success",
+                PROMOS_TOAST_TITLES.success,
+                "Promos refreshed from Nest.",
+              );
+            }
+          })
+        }
       />
       <PromosStats
         total={stats.total}
@@ -279,22 +201,6 @@ export default function PromosPage() {
         <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-[13px] text-slate-400">
           Loading promos…
         </p>
-      ) : null}
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
-        >
-          {error}
-        </div>
-      ) : null}
-      {notice ? (
-        <div
-          role="status"
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] font-medium text-amber-950"
-        >
-          {notice}
-        </div>
       ) : null}
 
       {!loading ? (
@@ -319,11 +225,17 @@ export default function PromosPage() {
             <>
               <PromosTable
                 rows={paged}
-                busy={saving}
+                busy={busy}
                 onEdit={openEdit}
-                onToggle={togglePromo}
-                onDelete={deletePromo}
-                onMove={movePromo}
+                onToggle={(id) => {
+                  void runBusy(() => togglePromoRow(id, rows, setRows, push));
+                }}
+                onDelete={(id) => {
+                  void runBusy(() => deletePromoRow(id, rows, setRows, push));
+                }}
+                onMove={(id, dir) => {
+                  void runBusy(() => movePromoRow(id, dir, rows, setRows, push));
+                }}
               />
               <PromosPagination
                 page={page}
@@ -343,7 +255,18 @@ export default function PromosPage() {
         mode={formMode}
         initial={formInitial}
         onClose={() => setFormOpen(false)}
-        onSave={savePromo}
+        onSave={saveForm}
+      />
+      <RedeemToastHost
+        toasts={toasts}
+        onDismiss={dismiss}
+        onAction={(id) => {
+          if (id === retryToastId) {
+            dismiss(id);
+            setRetryToastId(null);
+            void load();
+          }
+        }}
       />
     </section>
   );

@@ -13,10 +13,14 @@ export type SupportStatsPayload = {
 export async function fetchSupportThreads(opts?: {
   q?: string;
   status?: string;
+  subject?: string;
+  unread?: boolean;
 }): Promise<SupportThreadRow[]> {
   const params = new URLSearchParams();
   if (opts?.q?.trim()) params.set("q", opts.q.trim());
   if (opts?.status?.trim()) params.set("status", opts.status.trim());
+  if (opts?.subject?.trim()) params.set("subject", opts.subject.trim());
+  if (opts?.unread === true) params.set("unread", "1");
   const qs = params.toString();
   const path = qs
     ? `/api/v1/admin/support?${qs}`

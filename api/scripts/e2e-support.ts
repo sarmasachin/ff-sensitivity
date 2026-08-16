@@ -1,69 +1,22 @@
 /**
  * Support tickets admin + user e2e / security (local Postgres).
  */
-import { PrismaClient } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const API = process.env.API_BASE ?? 'http://127.0.0.1:4000';
-const prisma = new PrismaClient();
-
-function loadEnv() {
-  const raw = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
-  for (const line of raw.split(/\r?\n/)) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (!m) continue;
-    let v = m[2].trim();
-    if (
-      (v.startsWith('"') && v.endsWith('"')) ||
-      (v.startsWith("'") && v.endsWith("'"))
-    ) {
-      v = v.slice(1, -1);
-    }
-    if (!process.env[m[1]]) process.env[m[1]] = v;
-  }
-}
-
-type Check = { name: string; ok: boolean; detail?: string };
-const checks: Check[] = [];
-function pass(name: string, detail?: string) {
-  checks.push({ name, ok: true, detail });
-  console.log(`PASS  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-function fail(name: string, detail?: string) {
-  checks.push({ name, ok: false, detail });
-  console.log(`FAIL  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-
-async function req(
-  method: string,
-  pathName: string,
-  opts?: { token?: string; body?: unknown },
-) {
-  const res = await fetch(`${API}${pathName}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-    },
-    body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  });
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-  return { status: res.status, json };
-}
+import {
+  checks,
+  fail,
+  loadEnv,
+  pass,
+  prisma,
+  req,
+} from './e2e-support-lib';
 
 async function main() {
   loadEnv();
   const userSecret = process.env.JWT_USER_SECRET!;
   const adminEmail = process.env.SUPERADMIN_EMAIL ?? 'sharma.sachinctr@gmail.com';
-  const adminPassword = process.env.SUPERADMIN_PASSWORD ?? '123456';
 
   const user = await prisma.user.upsert({
     where: { email: 'e2e.support@example.com' },
@@ -202,11 +155,27 @@ async function main() {
       : fail('user_reply', `status=${r.status} ${r.json?.status}`);
   }
 
-  const login = await req('POST', '/api/v1/auth/login', {
-    body: { email: adminEmail, password: adminPassword },
+  const adminRow = await prisma.admin.findFirst({
+    where: {
+      email: adminEmail.trim().toLowerCase(),
+      isActive: true,
+    },
   });
-  const adminTok = login.json?.accessToken as string | undefined;
-  adminTok ? pass('admin_login') : fail('admin_login');
+  const adminTok = adminRow
+    ? jwt.sign(
+        { sub: adminRow.id, email: adminRow.email, role: adminRow.role },
+        process.env.JWT_ACCESS_SECRET!,
+        { expiresIn: '1h' },
+      )
+    : undefined;
+  adminTok && adminRow
+    ? pass('admin_login', 'minted jwt')
+    : fail('admin_login', 'active admin not found');
+  if (!adminTok) {
+    console.log(`\n${checks.filter((c) => c.ok).length}/${checks.length} passed`);
+    await prisma.$disconnect();
+    process.exit(1);
+  }
 
   {
     const r = await req('GET', '/api/v1/admin/support', { token: adminTok });
@@ -214,6 +183,65 @@ async function main() {
     r.status === 200 && hit
       ? pass('admin_list')
       : fail('admin_list', `status=${r.status}`);
+  }
+
+  {
+    const dataPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'admin',
+      'src',
+      'components',
+      'support',
+      'support-data.ts',
+    );
+    const src = fs.readFileSync(dataPath, 'utf8');
+    !src.includes('SUPPORT_DEMO_ROWS')
+      ? pass('admin_support_no_demo_rows')
+      : fail('admin_support_no_demo_rows');
+  }
+
+  {
+    const r = await req('GET', '/api/v1/admin/support/stats', { token: adminTok });
+    r.status === 200 && typeof r.json?.total === 'number' && r.json.unread >= 1
+      ? pass('admin_stats')
+      : fail('admin_stats', JSON.stringify(r.json));
+  }
+
+  {
+    const bug = await req('GET', '/api/v1/admin/support?subject=BUG', {
+      token: adminTok,
+    });
+    const feat = await req('GET', '/api/v1/admin/support?subject=FEATURE', {
+      token: adminTok,
+    });
+    const bugHit = (bug.json?.threads ?? []).some((t: any) => t.id === threadId);
+    const featHit = (feat.json?.threads ?? []).some(
+      (t: any) => t.id === threadId,
+    );
+    bug.status === 200 && bugHit && feat.status === 200 && !featHit
+      ? pass('admin_subject_filter')
+      : fail('admin_subject_filter', `bug=${bugHit} feat=${featHit}`);
+  }
+
+  {
+    const unread = await req('GET', '/api/v1/admin/support?unread=1', {
+      token: adminTok,
+    });
+    const hit = (unread.json?.threads ?? []).some((t: any) => t.id === threadId);
+    unread.status === 200 && hit
+      ? pass('admin_unread_filter')
+      : fail('admin_unread_filter', `status=${unread.status}`);
+  }
+
+  {
+    const r = await req('PATCH', `/api/v1/admin/support/${threadId}/read`, {
+      token: adminTok,
+    });
+    r.status === 200 && r.json?.unread === false
+      ? pass('admin_mark_read')
+      : fail('admin_mark_read', JSON.stringify(r.json));
   }
 
   {
@@ -286,6 +314,38 @@ async function main() {
     r.status === 403
       ? pass('module_guard_403')
       : fail('module_guard_403', `status=${r.status}`);
+  }
+
+  {
+    const listed = await req('GET', '/api/v1/admin/support', { token: adminTok });
+    const row = (listed.json?.threads ?? []).find((t: any) => t.id === threadId);
+    const userMsg = (row?.messages ?? []).find((m: any) => m.sender === 'USER');
+    if (!userMsg?.id) {
+      fail('admin_delete_user_message', 'no user message');
+    } else {
+      const r = await req(
+        'DELETE',
+        `/api/v1/admin/support/${threadId}/messages/${userMsg.id}`,
+        { token: adminTok },
+      );
+      const gone = !(r.json?.messages ?? []).some(
+        (m: any) => m.id === userMsg.id,
+      );
+      r.status === 200 && gone
+        ? pass('admin_delete_user_message')
+        : fail('admin_delete_user_message', `status=${r.status}`);
+    }
+  }
+
+  {
+    const r = await req('DELETE', `/api/v1/admin/support/${threadId}`, {
+      token: adminTok,
+    });
+    const listed = await req('GET', '/api/v1/admin/support', { token: adminTok });
+    const hit = (listed.json?.threads ?? []).some((t: any) => t.id === threadId);
+    r.status === 200 && r.json?.ok === true && !hit
+      ? pass('admin_delete_thread')
+      : fail('admin_delete_thread', `status=${r.status} hit=${hit}`);
   }
 
   {

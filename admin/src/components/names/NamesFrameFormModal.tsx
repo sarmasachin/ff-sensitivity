@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  formToFrame,
   previewTag,
   type NameFrameFormValues,
-  type NameFrameRow,
 } from "./names-data";
 
 type Props = {
@@ -13,7 +11,7 @@ type Props = {
   mode: "add" | "edit";
   initial: NameFrameFormValues;
   onClose: () => void;
-  onSave: (row: NameFrameRow) => void;
+  onSave: (values: NameFrameFormValues) => Promise<string | null>;
 };
 
 const fieldClass =
@@ -29,11 +27,13 @@ export function NamesFrameFormModal({
 }: Props) {
   const [values, setValues] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
       setValues(initial);
       setError(null);
+      setBusy(false);
     }
   }, [open, initial]);
 
@@ -47,18 +47,21 @@ export function NamesFrameFormModal({
     setError(null);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const result = formToFrame(
-      values,
-      `frame_${Date.now().toString(36)}`,
-    );
-    if ("error" in result) {
-      setError(result.error);
-      return;
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const err = await onSave(values);
+      if (err) {
+        setError(err);
+        return;
+      }
+      onClose();
+    } finally {
+      setBusy(false);
     }
-    onSave(result);
-    onClose();
   }
 
   const preview = previewTag(values.prefix, "GHOST", values.suffix);
@@ -69,7 +72,9 @@ export function NamesFrameFormModal({
         type="button"
         aria-label="Close dialog"
         className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
-        onClick={onClose}
+        onClick={() => {
+          if (!busy) onClose();
+        }}
       />
       <form
         onSubmit={handleSubmit}
@@ -86,7 +91,9 @@ export function NamesFrameFormModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (!busy) onClose();
+            }}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             aria-label="Close"
           >
@@ -176,16 +183,24 @@ export function NamesFrameFormModal({
         <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-3">
           <button
             type="button"
-            onClick={onClose}
-            className="h-9 rounded-lg border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50"
+            onClick={() => {
+              if (!busy) onClose();
+            }}
+            disabled={busy}
+            className="h-9 rounded-lg border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="h-9 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800"
+            disabled={busy}
+            className="h-9 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {mode === "add" ? "Add frame" : "Save changes"}
+            {busy
+              ? "Saving…"
+              : mode === "add"
+                ? "Add frame"
+                : "Save changes"}
           </button>
         </footer>
       </form>

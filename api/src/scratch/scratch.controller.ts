@@ -3,13 +3,12 @@ import { Throttle } from '@nestjs/throttler';
 import { UserJwtAuthGuard } from '../user-auth/user-jwt-auth.guard';
 import { CurrentUser } from '../user-auth/current-user.decorator';
 import type { AuthUser } from '../user-auth/current-user.decorator';
-import { ScratchService } from './scratch.service';
+import { ScratchUserService } from './scratch-user.service';
 
-// --- Start: Scratch live wire (Sachin) ---
 @Controller('api/v1/scratch')
 @UseGuards(UserJwtAuthGuard)
 export class ScratchController {
-  constructor(private readonly scratch: ScratchService) {}
+  constructor(private readonly scratch: ScratchUserService) {}
 
   @Get('config')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
@@ -23,4 +22,3 @@ export class ScratchController {
     return this.scratch.userRoll(user.id);
   }
 }
-// --- End: Scratch live wire (Sachin) ---

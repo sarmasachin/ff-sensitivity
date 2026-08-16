@@ -208,6 +208,197 @@ async function main() {
     ? pass('admin save challenge')
     : fail('admin save challenge', JSON.stringify(saved.json)?.slice(0, 200));
 
+  {
+    const r = await req('POST', '/api/v1/admin/challenge/quiz', {
+      body: {
+        id: 'e2e_noauth',
+        question: 'Should be blocked',
+        options: ['a', 'b', 'c', 'd'],
+        correctIndex: 0,
+        enabled: true,
+      },
+    });
+    r.status === 401
+      ? pass('quiz create requires admin auth', `HTTP ${r.status}`)
+      : fail('quiz create requires admin auth', `HTTP ${r.status}`);
+  }
+  {
+    const r = await req('POST', '/api/v1/admin/challenge/quiz', {
+      token: userToken,
+      body: {
+        id: 'e2e_userjwt',
+        question: 'Should be blocked',
+        options: ['a', 'b', 'c', 'd'],
+        correctIndex: 0,
+        enabled: true,
+      },
+    });
+    r.status === 401
+      ? pass('user JWT blocked on quiz create', `HTTP ${r.status}`)
+      : fail('user JWT blocked on quiz create', `HTTP ${r.status}`);
+  }
+
+  const persistId = `e2e_persist_${Date.now()}`;
+  const quizBody = {
+    id: persistId,
+    question: 'E2E does quiz persist without full save?',
+    options: ['no', 'yes', 'maybe', 'idk'],
+    correctIndex: 1,
+    enabled: true,
+  };
+  const createdQuiz = await req('POST', '/api/v1/admin/challenge/quiz', {
+    token: adminToken,
+    body: quizBody,
+  });
+  createdQuiz.status < 300 && createdQuiz.json?.id === persistId
+    ? pass('admin create quiz row')
+    : fail(
+        'admin create quiz row',
+        `HTTP ${createdQuiz.status} ${JSON.stringify(createdQuiz.json)?.slice(0, 180)}`,
+      );
+
+  const afterCreate = await req('GET', '/api/v1/admin/challenge', {
+    token: adminToken,
+  });
+  Array.isArray(afterCreate.json?.quiz) &&
+  afterCreate.json.quiz.some((q: { id?: string }) => q.id === persistId)
+    ? pass('created quiz present on GET')
+    : fail(
+        'created quiz present on GET',
+        JSON.stringify(afterCreate.json?.quiz)?.slice(0, 180),
+      );
+
+  const updatedQuiz = await req(
+    'PUT',
+    `/api/v1/admin/challenge/quiz/${persistId}`,
+    {
+      token: adminToken,
+      body: {
+        ...quizBody,
+        question: 'E2E edited question stays after reload',
+        enabled: false,
+      },
+    },
+  );
+  const afterUpdate = await req('GET', '/api/v1/admin/challenge', {
+    token: adminToken,
+  });
+  const updatedRow = afterUpdate.json?.quiz?.find(
+    (q: { id?: string }) => q.id === persistId,
+  );
+  updatedQuiz.status < 300 &&
+  updatedRow?.question === 'E2E edited question stays after reload' &&
+  updatedRow?.enabled === false
+    ? pass('admin update+toggle quiz persists')
+    : fail(
+        'admin update+toggle quiz persists',
+        `HTTP ${updatedQuiz.status} ${JSON.stringify(updatedRow)?.slice(0, 180)}`,
+      );
+
+  const dup = await req('POST', '/api/v1/admin/challenge/quiz', {
+    token: adminToken,
+    body: quizBody,
+  });
+  dup.status === 409 && dup.json?.error?.code === 'CHALLENGE_DUP_QUIZ'
+    ? pass('duplicate quiz id rejected')
+    : fail(
+        'duplicate quiz id rejected',
+        `HTTP ${dup.status} ${JSON.stringify(dup.json)?.slice(0, 160)}`,
+      );
+
+  const persistMsId = `e2e_ms_${Date.now()}`;
+  const createdMs = await req('POST', '/api/v1/admin/challenge/milestones', {
+    token: adminToken,
+    body: {
+      id: persistMsId,
+      days: 364,
+      title: 'E2E Persist Gate',
+      rewardLabel: '+1',
+      coinReward: 1,
+      badge: null,
+      enabled: true,
+    },
+  });
+  createdMs.status < 300 && createdMs.json?.id === persistMsId
+    ? pass('admin create milestone row')
+    : fail(
+        'admin create milestone row',
+        `HTTP ${createdMs.status} ${JSON.stringify(createdMs.json)?.slice(0, 180)}`,
+      );
+
+  const updatedMs = await req(
+    'PUT',
+    `/api/v1/admin/challenge/milestones/${persistMsId}`,
+    {
+      token: adminToken,
+      body: {
+        id: persistMsId,
+        days: 364,
+        title: 'E2E Persist Gate Edited',
+        rewardLabel: '+2',
+        coinReward: 2,
+        badge: null,
+        enabled: false,
+      },
+    },
+  );
+  const afterMsUpdate = await req('GET', '/api/v1/admin/challenge', {
+    token: adminToken,
+  });
+  const msRow = afterMsUpdate.json?.milestones?.find(
+    (m: { id?: string }) => m.id === persistMsId,
+  );
+  updatedMs.status < 300 &&
+  msRow?.title === 'E2E Persist Gate Edited' &&
+  msRow?.enabled === false &&
+  msRow?.coinReward === 2
+    ? pass('admin update+toggle milestone persists')
+    : fail(
+        'admin update+toggle milestone persists',
+        `HTTP ${updatedMs.status} ${JSON.stringify(msRow)?.slice(0, 180)}`,
+      );
+
+  const rulesOnly = await req('PUT', '/api/v1/admin/challenge', {
+    token: adminToken,
+    body: { rules: saveBody.rules },
+  });
+  const afterRules = await req('GET', '/api/v1/admin/challenge', {
+    token: adminToken,
+  });
+  rulesOnly.status < 300 &&
+  afterRules.json?.quiz?.some((q: { id?: string }) => q.id === persistId) &&
+  afterRules.json?.quiz?.some((q: { id?: string }) => q.id === 'e2e_q1') &&
+  afterRules.json?.milestones?.some((m: { id?: string }) => m.id === persistMsId) &&
+  afterRules.json?.milestones?.some((m: { id?: string }) => m.id === 'e2e_m7')
+    ? pass('rules-only save keeps quiz + milestones')
+    : fail(
+        'rules-only save keeps quiz + milestones',
+        `HTTP ${rulesOnly.status} quiz=${JSON.stringify(afterRules.json?.quiz)?.slice(0, 120)} ms=${JSON.stringify(afterRules.json?.milestones)?.slice(0, 120)}`,
+      );
+
+  const deletedQuiz = await req(
+    'DELETE',
+    `/api/v1/admin/challenge/quiz/${persistId}`,
+    { token: adminToken },
+  );
+  const deletedMs = await req(
+    'DELETE',
+    `/api/v1/admin/challenge/milestones/${persistMsId}`,
+    { token: adminToken },
+  );
+  const afterDelete = await req('GET', '/api/v1/admin/challenge', {
+    token: adminToken,
+  });
+  deletedQuiz.status < 300 &&
+  deletedMs.status < 300 &&
+  !afterDelete.json?.quiz?.some((q: { id?: string }) => q.id === persistId) &&
+  !afterDelete.json?.milestones?.some((m: { id?: string }) => m.id === persistMsId)
+    ? pass('admin delete quiz + milestone rows')
+    : fail(
+        'admin delete quiz + milestone rows',
+        `HTTP quiz=${deletedQuiz.status} ms=${deletedMs.status}`,
+      );
+
   // Admin response includes correctIndex; user today must NOT
   const today = await req('GET', '/api/v1/challenge/today', { token: userToken });
   const q = today.json?.question;

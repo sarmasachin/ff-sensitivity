@@ -1,33 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ScratchCapabilities } from "@/components/scratch/ScratchCapabilities";
-import { ScratchEmptyState } from "@/components/scratch/ScratchEmptyState";
 import { ScratchFormModal } from "@/components/scratch/ScratchFormModal";
 import { ScratchHeader } from "@/components/scratch/ScratchHeader";
 import { ScratchOutcomeOddsCard } from "@/components/scratch/ScratchOutcomeOddsCard";
-import { ScratchPagination } from "@/components/scratch/ScratchPagination";
 import { ScratchPolicyCard } from "@/components/scratch/ScratchPolicyCard";
+import { ScratchPrizesSection } from "@/components/scratch/ScratchPrizesSection";
 import { ScratchStats } from "@/components/scratch/ScratchStats";
-import { ScratchTable } from "@/components/scratch/ScratchTable";
 import {
   ScratchTabs,
   type ScratchTabId,
 } from "@/components/scratch/ScratchTabs";
+import type { ScratchFilterKey } from "@/components/scratch/ScratchToolbar";
 import {
-  ScratchToolbar,
-  type ScratchFilterKey,
-} from "@/components/scratch/ScratchToolbar";
+  canAccessScratch,
+  snapshotScratchKey,
+} from "@/components/scratch/scratch-access";
 import {
   fetchScratchBundle,
   saveScratchBundle,
 } from "@/components/scratch/scratch-api";
 import {
+  persistPrize,
+  deletePrizeRow,
+  togglePrizeRow,
+} from "@/components/scratch/scratch-page-mutations";
+import {
   SCRATCH_DEFAULT_OUTCOME_ODDS,
   SCRATCH_DEFAULT_POLICY,
   computeScratchStats,
   emptyScratchForm,
-  formToRow,
   rowToForm,
   validateOutcomeOdds,
   type ScratchFormValues,
@@ -35,35 +37,11 @@ import {
   type ScratchPolicy,
   type ScratchPrizeRow,
 } from "@/components/scratch/scratch-data";
+import { SCRATCH_TOAST_TITLES } from "@/components/scratch/scratch-toast";
+import { RedeemToastHost } from "@/components/redeem/RedeemToastHost";
+import { useRedeemToasts } from "@/components/redeem/useRedeemToasts";
 
 const PAGE_SIZE = 12;
-
-function snapKey(
-  odds: ScratchOutcomeOdds,
-  policy: ScratchPolicy,
-  prizes: ScratchPrizeRow[],
-) {
-  return JSON.stringify({ odds, policy, prizes });
-}
-
-function canAccessScratch(): boolean {
-  if (typeof window === "undefined") return false;
-  const raw =
-    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
-  if (!raw) return false;
-  try {
-    const admin = JSON.parse(raw) as {
-      role?: string;
-      allowedModules?: string[];
-    };
-    if (admin.role === "SUPER_ADMIN") return true;
-    return Array.isArray(admin.allowedModules)
-      ? admin.allowedModules.includes("scratch")
-      : false;
-  } catch {
-    return false;
-  }
-}
 
 export default function ScratchPage() {
   const [allowed, setAllowed] = useState(true);
@@ -76,20 +54,19 @@ export default function ScratchPage() {
     SCRATCH_DEFAULT_OUTCOME_ODDS,
   );
   const [savedKey, setSavedKey] = useState(() =>
-    snapKey(SCRATCH_DEFAULT_OUTCOME_ODDS, SCRATCH_DEFAULT_POLICY, []),
+    snapshotScratchKey(SCRATCH_DEFAULT_OUTCOME_ODDS, SCRATCH_DEFAULT_POLICY),
   );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ScratchFilterKey>("all");
   const [page, setPage] = useState(1);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formInitial, setFormInitial] = useState(emptyScratchForm());
+  const [retryToastId, setRetryToastId] = useState<string | null>(null);
+  const { toasts, push, dismiss } = useRedeemToasts();
 
-  const dirty = snapKey(outcomeOdds, policy, rows) !== savedKey;
+  const dirty = snapshotScratchKey(outcomeOdds, policy) !== savedKey;
   const stats = useMemo(() => computeScratchStats(rows), [rows]);
 
   useEffect(() => {
@@ -98,21 +75,24 @@ export default function ScratchPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const bundle = await fetchScratchBundle();
       setOutcomeOdds(bundle.outcomeOdds);
       setPolicy(bundle.policy);
       setRows(bundle.prizes);
-      setSavedKey(
-        snapKey(bundle.outcomeOdds, bundle.policy, bundle.prizes),
-      );
+      setSavedKey(snapshotScratchKey(bundle.outcomeOdds, bundle.policy));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load scratch.");
+      const message =
+        e instanceof Error ? e.message : "Failed to load scratch.";
+      const id = push("error", SCRATCH_TOAST_TITLES.loadError, message, {
+        actionLabel: "Retry",
+        durationMs: 0,
+      });
+      setRetryToastId(id);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [push]);
 
   useEffect(() => {
     if (!allowed) {
@@ -162,30 +142,37 @@ export default function ScratchPage() {
   async function handleSave() {
     const oddsErr = validateOutcomeOdds(outcomeOdds);
     if (oddsErr) {
-      setError(oddsErr);
+      push("error", SCRATCH_TOAST_TITLES.error, oddsErr);
       return;
     }
     setSaving(true);
-    setError(null);
     try {
-      const saved = await saveScratchBundle({
-        outcomeOdds,
-        policy,
-        prizes: rows,
-      });
+      const saved = await saveScratchBundle({ outcomeOdds, policy });
       setOutcomeOdds(saved.outcomeOdds);
       setPolicy(saved.policy);
       setRows(saved.prizes);
-      setSavedKey(snapKey(saved.outcomeOdds, saved.policy, saved.prizes));
-      setNotice("Scratch config saved live — Android syncs on next open.");
+      setSavedKey(snapshotScratchKey(saved.outcomeOdds, saved.policy));
+      push(
+        "success",
+        SCRATCH_TOAST_TITLES.success,
+        "Odds & policy live — Android syncs on next open.",
+      );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed.");
+      push(
+        "error",
+        SCRATCH_TOAST_TITLES.error,
+        e instanceof Error ? e.message : "Save failed.",
+      );
     } finally {
       setSaving(false);
     }
   }
 
   function openAdd() {
+    if (rows.length >= 200) {
+      push("error", SCRATCH_TOAST_TITLES.error, "Prize table is full (max 200).");
+      return;
+    }
     setTab("prizes");
     setFormMode("add");
     setEditingId(null);
@@ -202,24 +189,8 @@ export default function ScratchPage() {
     setFormOpen(true);
   }
 
-  function saveForm(values: ScratchFormValues): string | null {
-    if (formMode === "add") {
-      const id = values.id.trim() || `prize_${Date.now()}`;
-      if (rows.some((r) => r.id === id)) {
-        return "A prize with this ID already exists.";
-      }
-      const result = formToRow(values, id);
-      if ("error" in result) return result.error;
-      setRows((prev) => [result, ...prev]);
-      setNotice(`Added “${result.title}”. Save to push live.`);
-      return null;
-    }
-    if (!editingId) return "Nothing to edit.";
-    const result = formToRow({ ...values, id: editingId }, editingId);
-    if ("error" in result) return result.error;
-    setRows((prev) => prev.map((r) => (r.id === editingId ? result : r)));
-    setNotice(`Updated “${result.title}”. Save to push live.`);
-    return null;
+  async function saveForm(values: ScratchFormValues): Promise<string | null> {
+    return persistPrize(values, formMode, rows, editingId, setRows, push);
   }
 
   if (!allowed) {
@@ -239,7 +210,11 @@ export default function ScratchPage() {
         dirty={dirty}
         saving={saving}
         onSave={() => void handleSave()}
-        onReset={() => void load().then(() => setNotice("Reverted to server."))}
+        onReset={() => {
+          void load().then(() =>
+            push("success", SCRATCH_TOAST_TITLES.success, "Reverted to last saved odds & policy."),
+          );
+        }}
       />
       <ScratchStats
         live={stats.live}
@@ -248,112 +223,59 @@ export default function ScratchPage() {
         oddsSum={stats.oddsSum}
       />
       <ScratchTabs active={tab} onChange={setTab} />
-
       {loading ? (
         <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-[13px] text-slate-400">
-          Loading scratch config…
+          Loading live scratch config…
         </p>
       ) : null}
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
-        >
-          {error}
-        </div>
-      ) : null}
-      {notice ? (
-        <div
-          role="status"
-          className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-[13px] font-medium text-violet-950"
-        >
-          {notice}
-        </div>
-      ) : null}
-
       {!loading && tab === "odds" ? (
         <ScratchOutcomeOddsCard
           odds={outcomeOdds}
-          onSave={(next) => {
-            setOutcomeOdds(next);
-            setNotice(
-              `Odds draft — Coins ${next.coinsPercent}% · Redeem ${next.redeemPercent}%. Save to push.`,
-            );
-          }}
+          onSave={(next) => setOutcomeOdds(next)}
         />
       ) : null}
-
       {!loading && tab === "history" ? (
-        <ScratchPolicyCard
-          policy={policy}
-          onChange={(next) => {
-            setPolicy(next);
-            setNotice(
-              `Policy draft → ${next.retentionDays}d. Save to push live.`,
-            );
+        <ScratchPolicyCard policy={policy} onChange={setPolicy} />
+      ) : null}
+      {!loading && tab === "prizes" ? (
+        <ScratchPrizesSection
+          query={query}
+          filter={filter}
+          page={page}
+          pageSize={PAGE_SIZE}
+          rows={rows}
+          filtered={filtered}
+          paged={paged}
+          onQuery={setQuery}
+          onFilter={setFilter}
+          onPage={setPage}
+          onAdd={openAdd}
+          onEdit={openEdit}
+          onToggle={(id) => {
+            void togglePrizeRow(id, rows, setRows, push);
+          }}
+          onDelete={(id) => {
+            void deletePrizeRow(id, rows, setRows, push);
           }}
         />
       ) : null}
-
-      {!loading && tab === "prizes" ? (
-        <>
-          <ScratchToolbar
-            query={query}
-            filter={filter}
-            onQuery={setQuery}
-            onFilter={setFilter}
-            onAdd={openAdd}
-          />
-          {rows.length === 0 ? (
-            <ScratchEmptyState kind="inventory" onAdd={openAdd} />
-          ) : filtered.length === 0 ? (
-            <ScratchEmptyState
-              kind="filter"
-              onClearFilter={() => {
-                setFilter("all");
-                setQuery("");
-              }}
-            />
-          ) : (
-            <ScratchTable
-              rows={paged}
-              notice={null}
-              onEdit={openEdit}
-              onDelete={(id) => {
-                const row = rows.find((r) => r.id === id);
-                if (!row) return;
-                if (!window.confirm(`Delete “${row.title}”?`)) return;
-                setRows((prev) => prev.filter((r) => r.id !== id));
-                setNotice(`Deleted “${row.title}”. Save to push live.`);
-              }}
-              onToggle={(id) => {
-                setRows((prev) =>
-                  prev.map((r) =>
-                    r.id === id ? { ...r, enabled: !r.enabled } : r,
-                  ),
-                );
-                setNotice("Prize status updated. Save to push live.");
-              }}
-              footer={
-                <ScratchPagination
-                  page={page}
-                  pageSize={PAGE_SIZE}
-                  total={filtered.length}
-                  onPage={setPage}
-                />
-              }
-            />
-          )}
-          <ScratchCapabilities />
-        </>
-      ) : null}
-
       <ScratchFormModal
         open={formOpen}
         mode={formMode}
         initial={formInitial}
         onClose={() => setFormOpen(false)}
         onSubmit={saveForm}
+      />
+      <RedeemToastHost
+        toasts={toasts}
+        onDismiss={dismiss}
+        onAction={(id) => {
+          if (id === retryToastId) {
+            dismiss(id);
+            setRetryToastId(null);
+            void load();
+          }
+        }}
       />
     </section>
   );

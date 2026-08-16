@@ -49,90 +49,9 @@ export const PROMOS_CAPABILITIES = [
   },
   {
     title: "Order & kill switch",
-    body: "Sort order drives carousel priority. Disable instantly without deleting the creative.",
+    body: "Add, edit, disable, delete, and reorder persist immediately. Sort order drives carousel priority.",
   },
 ] as const;
-
-export const PROMOS_DEMO_ROWS: PromoRow[] = [
-  {
-    id: "promo_challenge_week",
-    title: "Daily Challenge week",
-    subtitle: "Complete quizzes for bonus coins before Sunday reset.",
-    imageLabel: "challenge-hero",
-    deepLink: "ffops://challenge",
-    placement: "HOME_BANNER",
-    sortOrder: 1,
-    enabled: true,
-    startsAt: "2026-08-01 00:00",
-    endsAt: "2026-08-10 23:59",
-    updatedAt: "2026-08-02 11:20",
-  },
-  {
-    id: "promo_scratch_boost",
-    title: "Scratch boost",
-    subtitle: "Higher redeem odds on milestone cards this weekend.",
-    imageLabel: "scratch-gold",
-    deepLink: "ffops://scratch",
-    placement: "HOME_BANNER",
-    sortOrder: 2,
-    enabled: true,
-    startsAt: "2026-08-02 08:00",
-    endsAt: "2026-08-05 23:59",
-    updatedAt: "2026-08-02 09:05",
-  },
-  {
-    id: "promo_shop_pack",
-    title: "Coin shop pack",
-    subtitle: "Starter packs restocked — limited inventory.",
-    imageLabel: "shop-pack",
-    deepLink: "ffops://shop",
-    placement: "HOME_STRIP",
-    sortOrder: 3,
-    enabled: true,
-    startsAt: "2026-08-01 00:00",
-    endsAt: "2026-08-31 23:59",
-    updatedAt: "2026-07-30 16:40",
-  },
-  {
-    id: "promo_names_frames",
-    title: "New name frames",
-    subtitle: "Premium wraps landed in Stylish Names.",
-    imageLabel: "names-frames",
-    deepLink: "ffops://names",
-    placement: "HOME_STRIP",
-    sortOrder: 4,
-    enabled: false,
-    startsAt: "2026-08-04 10:00",
-    endsAt: "2026-08-20 23:59",
-    updatedAt: "2026-08-01 14:12",
-  },
-  {
-    id: "promo_redeem_help",
-    title: "Redeem tips",
-    subtitle: "How to claim codes without copy failures.",
-    imageLabel: "redeem-tips",
-    deepLink: "ffops://redeem",
-    placement: "HOME_BANNER",
-    sortOrder: 5,
-    enabled: true,
-    startsAt: "2026-08-08 00:00",
-    endsAt: "2026-08-15 23:59",
-    updatedAt: "2026-08-03 08:30",
-  },
-  {
-    id: "promo_legacy_event",
-    title: "July event (archived)",
-    subtitle: "Season wrap — kept for audit reference.",
-    imageLabel: "july-event",
-    deepLink: "ffops://home",
-    placement: "HOME_BANNER",
-    sortOrder: 6,
-    enabled: true,
-    startsAt: "2026-07-01 00:00",
-    endsAt: "2026-07-31 23:59",
-    updatedAt: "2026-08-01 01:00",
-  },
-];
 
 /** Parse "YYYY-MM-DD HH:mm" as local wall time. */
 export function parsePromoStamp(stamp: string): number | null {
@@ -199,7 +118,15 @@ export function computePromoStats(rows: PromoRow[], nowMs: number = Date.now()) 
   };
 }
 
+export function formatPromoStamp(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function emptyPromoForm(nextOrder: number): PromoFormValues {
+  const start = new Date();
+  const end = new Date();
+  end.setDate(end.getDate() + 30);
   return {
     id: "",
     title: "",
@@ -209,8 +136,8 @@ export function emptyPromoForm(nextOrder: number): PromoFormValues {
     placement: "HOME_BANNER",
     sortOrder: String(nextOrder),
     enabled: true,
-    startsAt: "2026-08-03 00:00",
-    endsAt: "2026-08-31 23:59",
+    startsAt: formatPromoStamp(start),
+    endsAt: formatPromoStamp(end),
   };
 }
 
@@ -236,6 +163,10 @@ export function formToPromo(
 ): PromoRow | { error: string } {
   const title = values.title.trim();
   if (!title) return { error: "Title is required." };
+  if (title.length > 80) return { error: "Title must be 80 characters or less." };
+  if (values.subtitle.trim().length > 160) {
+    return { error: "Subtitle must be 160 characters or less." };
+  }
   const deepLink = values.deepLink.trim();
   if (!deepLink) return { error: "Deep link is required." };
   if (!/^ffops:\/\/[a-z0-9_]+$/i.test(deepLink)) {
@@ -244,8 +175,8 @@ export function formToPromo(
     };
   }
   const sortOrder = Number(values.sortOrder);
-  if (!Number.isFinite(sortOrder) || sortOrder < 1) {
-    return { error: "Sort order must be a number ≥ 1." };
+  if (!Number.isFinite(sortOrder) || sortOrder < 1 || sortOrder > 100) {
+    return { error: "Sort order must be a number from 1 to 100." };
   }
   if (!parsePromoStamp(values.startsAt)) {
     return { error: "Start must be YYYY-MM-DD HH:mm." };
@@ -257,15 +188,26 @@ export function formToPromo(
   const end = parsePromoStamp(values.endsAt)!;
   if (end <= start) return { error: "End must be after start." };
 
-  const id =
-    values.id.trim() ||
-    fallbackId.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
+  const id = (values.id.trim() || fallbackId)
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 64);
+  if (!id) return { error: "Promo id is required." };
+
+  const imageLabel =
+    values.imageLabel
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9_-]/g, "")
+      .slice(0, 64) || "untitled";
 
   return {
     id,
     title,
     subtitle: values.subtitle.trim(),
-    imageLabel: values.imageLabel.trim() || "untitled",
+    imageLabel,
     deepLink,
     placement: values.placement,
     sortOrder: Math.floor(sortOrder),

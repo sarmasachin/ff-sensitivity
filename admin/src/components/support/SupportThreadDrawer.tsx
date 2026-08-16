@@ -33,8 +33,12 @@ export function SupportThreadDrawer({
   useEffect(() => {
     if (!open || !row) return;
     setDraft("");
-    if (row.unread) onMarkRead(row.id);
-  }, [open, row, onMarkRead]);
+  }, [open, row?.id]);
+
+  useEffect(() => {
+    if (!open || !row?.id || !row.unread) return;
+    onMarkRead(row.id);
+  }, [open, row?.id, row?.unread, onMarkRead]);
 
   if (!open || !row) return null;
 

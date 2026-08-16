@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  formToPromo,
   type PromoFormValues,
   type PromoPlacement,
-  type PromoRow,
 } from "./promo-data";
 
 type Props = {
@@ -13,18 +11,12 @@ type Props = {
   mode: "add" | "edit";
   initial: PromoFormValues;
   onClose: () => void;
-  onSave: (row: PromoRow) => void;
+  onSave: (values: PromoFormValues) => Promise<string | null>;
 };
 
 const fieldClass =
   "mt-1 h-10 w-full rounded-lg border border-slate-200/90 bg-white px-3 text-[13px] text-slate-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10";
 const labelClass = "block text-[11px] font-semibold text-slate-600";
-
-function nowStamp(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export function PromosFormModal({
   open,
@@ -35,11 +27,13 @@ export function PromosFormModal({
 }: Props) {
   const [values, setValues] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
       setValues(initial);
       setError(null);
+      setBusy(false);
     }
   }, [open, initial]);
 
@@ -53,19 +47,21 @@ export function PromosFormModal({
     setError(null);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const result = formToPromo(
-      values,
-      `promo_${Date.now().toString(36)}`,
-      nowStamp(),
-    );
-    if ("error" in result) {
-      setError(result.error);
-      return;
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const err = await onSave(values);
+      if (err) {
+        setError(err);
+        return;
+      }
+      onClose();
+    } finally {
+      setBusy(false);
     }
-    onSave(result);
-    onClose();
   }
 
   return (
@@ -74,7 +70,9 @@ export function PromosFormModal({
         type="button"
         aria-label="Close dialog"
         className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
-        onClick={onClose}
+        onClick={() => {
+          if (!busy) onClose();
+        }}
       />
       <form
         onSubmit={handleSubmit}
@@ -91,8 +89,11 @@ export function PromosFormModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            onClick={() => {
+              if (!busy) onClose();
+            }}
+            disabled={busy}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
             aria-label="Close"
           >
             ✕
@@ -107,7 +108,7 @@ export function PromosFormModal({
               value={values.id}
               onChange={(e) => patch("id", e.target.value)}
               placeholder="promo_challenge_week"
-              disabled={mode === "edit"}
+              disabled={mode === "edit" || busy}
             />
           </label>
           <label className={labelClass}>
@@ -118,6 +119,7 @@ export function PromosFormModal({
               onChange={(e) => patch("title", e.target.value)}
               placeholder="Daily Challenge week"
               required
+              disabled={busy}
             />
           </label>
           <label className={labelClass}>
@@ -127,6 +129,7 @@ export function PromosFormModal({
               value={values.subtitle}
               onChange={(e) => patch("subtitle", e.target.value)}
               placeholder="Short supporting line for the banner"
+              disabled={busy}
             />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -137,6 +140,7 @@ export function PromosFormModal({
                 value={values.imageLabel}
                 onChange={(e) => patch("imageLabel", e.target.value)}
                 placeholder="challenge-hero"
+                disabled={busy}
               />
             </label>
             <label className={labelClass}>
@@ -148,6 +152,7 @@ export function PromosFormModal({
                 value={values.sortOrder}
                 onChange={(e) => patch("sortOrder", e.target.value)}
                 required
+                disabled={busy}
               />
             </label>
           </div>
@@ -159,6 +164,7 @@ export function PromosFormModal({
               onChange={(e) => patch("deepLink", e.target.value)}
               placeholder="ffops://challenge"
               required
+              disabled={busy}
             />
           </label>
           <label className={labelClass}>
@@ -169,6 +175,7 @@ export function PromosFormModal({
               onChange={(e) =>
                 patch("placement", e.target.value as PromoPlacement)
               }
+              disabled={busy}
             >
               <option value="HOME_BANNER">Home banner</option>
               <option value="HOME_STRIP">Home strip</option>
@@ -183,6 +190,7 @@ export function PromosFormModal({
                 onChange={(e) => patch("startsAt", e.target.value)}
                 placeholder="2026-08-03 00:00"
                 required
+                disabled={busy}
               />
             </label>
             <label className={labelClass}>
@@ -193,6 +201,7 @@ export function PromosFormModal({
                 onChange={(e) => patch("endsAt", e.target.value)}
                 placeholder="2026-08-31 23:59"
                 required
+                disabled={busy}
               />
             </label>
           </div>
@@ -202,6 +211,7 @@ export function PromosFormModal({
               checked={values.enabled}
               onChange={(e) => patch("enabled", e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-amber-700 focus:ring-amber-500/30"
+              disabled={busy}
             />
             Enabled (eligible when inside schedule)
           </label>
@@ -215,16 +225,24 @@ export function PromosFormModal({
         <footer className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-3">
           <button
             type="button"
-            onClick={onClose}
-            className="h-9 rounded-lg px-3.5 text-[13px] font-semibold text-slate-600 hover:bg-slate-100"
+            onClick={() => {
+              if (!busy) onClose();
+            }}
+            disabled={busy}
+            className="h-9 rounded-lg px-3.5 text-[13px] font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-40"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="h-9 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800"
+            disabled={busy}
+            className="h-9 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800 disabled:opacity-40"
           >
-            {mode === "add" ? "Create promo" : "Save changes"}
+            {busy
+              ? "Saving…"
+              : mode === "add"
+                ? "Create promo"
+                : "Save changes"}
           </button>
         </footer>
       </form>

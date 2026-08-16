@@ -14,45 +14,29 @@ import {
   type SupportFilterKey,
 } from "@/components/support/SupportToolbar";
 import {
-  closeSupportThread,
-  deleteSupportThread,
-  deleteSupportUserMessage,
   fetchSupportStats,
   fetchSupportThreads,
-  markSupportRead,
-  replySupportThread,
   type SupportStatsPayload,
 } from "@/components/support/support-api";
+import { canAccessSupport } from "@/components/support/support-access";
+import { supportConfirmCopy, type SupportPendingAction } from "@/components/support/support-confirm";
 import {
   computeSupportStats,
+  supportListQuery,
   type SupportThreadRow,
 } from "@/components/support/support-data";
+import {
+  closeThreadRow,
+  deleteThreadRow,
+  deleteUserMessageRow,
+  markThreadRead,
+  replyThreadRow,
+} from "@/components/support/support-page-mutations";
+import { SUPPORT_TOAST_TITLES } from "@/components/support/support-toast";
+import { RedeemToastHost } from "@/components/redeem/RedeemToastHost";
+import { useRedeemToasts } from "@/components/redeem/useRedeemToasts";
 
 const PAGE_SIZE = 12;
-
-type PendingAction =
-  | { kind: "close"; threadId: string }
-  | { kind: "delete-thread"; threadId: string }
-  | { kind: "delete-message"; threadId: string; messageId: string };
-
-function canAccessSupport(): boolean {
-  if (typeof window === "undefined") return false;
-  const raw =
-    sessionStorage.getItem("ffops_admin") ?? localStorage.getItem("ffops_admin");
-  if (!raw) return false;
-  try {
-    const admin = JSON.parse(raw) as {
-      role?: string;
-      allowedModules?: string[];
-    };
-    if (admin.role === "SUPER_ADMIN") return true;
-    return Array.isArray(admin.allowedModules)
-      ? admin.allowedModules.includes("support")
-      : false;
-  } catch {
-    return false;
-  }
-}
 
 export default function SupportPage() {
   const [allowed, setAllowed] = useState(true);
@@ -63,34 +47,54 @@ export default function SupportPage() {
     null,
   );
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [filter, setFilter] = useState<SupportFilterKey>("all");
   const [page, setPage] = useState(1);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [inspectId, setInspectId] = useState<string | null>(null);
-  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [pending, setPending] = useState<SupportPendingAction | null>(null);
+  const [retryToastId, setRetryToastId] = useState<string | null>(null);
   const confirmingRef = useRef(false);
+  const loadedOnce = useRef(false);
+  const { toasts, push, dismiss } = useRedeemToasts();
 
   useEffect(() => {
     setAllowed(canAccessSupport());
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [threads, stats] = await Promise.all([
-        fetchSupportThreads(),
-        fetchSupportStats(),
-      ]);
-      setRows(threads);
-      setServerStats(stats);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load support inbox.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query), 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = opts?.silent ?? loadedOnce.current;
+      if (!silent) setLoading(true);
+      try {
+        const listOpts = supportListQuery(filter, debouncedQuery);
+        const [threads, stats] = await Promise.all([
+          fetchSupportThreads(listOpts),
+          fetchSupportStats(),
+        ]);
+        setRows(threads);
+        setServerStats(stats);
+        loadedOnce.current = true;
+        return true;
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Failed to load support inbox.";
+        const id = push("error", SUPPORT_TOAST_TITLES.loadError, message, {
+          actionLabel: "Retry",
+          durationMs: 0,
+        });
+        setRetryToastId(id);
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [filter, debouncedQuery, push],
+  );
 
   useEffect(() => {
     if (!allowed) {
@@ -102,42 +106,10 @@ export default function SupportPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filter, query]);
+  }, [filter, debouncedQuery]);
 
-  const localStats = useMemo(() => computeSupportStats(rows), [rows]);
-  const stats = serverStats ?? localStats;
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (filter === "open") {
-        if (row.status !== "OPEN" && row.status !== "PENDING_REPLY") {
-          return false;
-        }
-      }
-      if (filter === "unread" && !row.unread) return false;
-      if (filter === "replied" && row.status !== "REPLIED") return false;
-      if (filter === "closed" && row.status !== "CLOSED") return false;
-      if (filter === "bug" && row.subject !== "BUG") return false;
-      if (filter === "redeem" && row.subject !== "REDEEM_CODE_ISSUE") {
-        return false;
-      }
-      if (!q) return true;
-      const hay = [
-        row.name,
-        row.email,
-        row.subject,
-        row.deviceLabel,
-        row.appVersion,
-        ...row.messages.map((m) => m.text),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [rows, query, filter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const stats = serverStats ?? computeSupportStats(rows);
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -145,104 +117,32 @@ export default function SupportPage() {
 
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
+    return rows.slice(start, start + PAGE_SIZE);
+  }, [rows, page]);
 
   const inspectRow = inspectId
     ? (rows.find((r) => r.id === inspectId) ?? null)
     : null;
 
-  function upsertRow(next: SupportThreadRow) {
-    setRows((prev) => {
-      const idx = prev.findIndex((r) => r.id === next.id);
-      if (idx < 0) return [next, ...prev];
-      const copy = [...prev];
-      copy[idx] = next;
-      return copy;
-    });
-  }
+  const markRead = useCallback(
+    (id: string) => {
+      void markThreadRead(id, setRows, setServerStats);
+    },
+    [],
+  );
 
-  async function closeThread(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row || busy) return;
+  async function runBusy(work: () => Promise<void>) {
+    if (busy) return;
     setBusy(true);
-    setError(null);
     try {
-      const next = await closeSupportThread(id);
-      upsertRow(next);
-      setServerStats(await fetchSupportStats());
-      setNotice(`Closed thread with ${row.name}.`);
-      if (inspectId === id) setInspectId(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Close failed.");
+      await work();
+      await load({ silent: true });
     } finally {
       setBusy(false);
     }
   }
 
-  async function markRead(id: string) {
-    try {
-      const next = await markSupportRead(id);
-      upsertRow(next);
-      setServerStats(await fetchSupportStats());
-    } catch {
-      // Non-blocking — drawer still usable.
-    }
-  }
-
-  async function reply(id: string, text: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await replySupportThread(id, text);
-      upsertRow(next);
-      setServerStats(await fetchSupportStats());
-      setNotice(`Replied to ${row.name}.`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Reply failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteThread(id: string) {
-    const row = rows.find((r) => r.id === id);
-    if (!row || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await deleteSupportThread(id);
-      setRows((prev) => prev.filter((r) => r.id !== id));
-      setServerStats(await fetchSupportStats());
-      setNotice(`Deleted conversation with ${row.name}.`);
-      if (inspectId === id) setInspectId(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteUserMessage(threadId: string, messageId: string) {
-    const row = rows.find((r) => r.id === threadId);
-    if (!row || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await deleteSupportUserMessage(threadId, messageId);
-      upsertRow(next);
-      setServerStats(await fetchSupportStats());
-      setNotice("User message deleted.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not delete message.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function askConfirm(action: PendingAction) {
+  function askConfirm(action: SupportPendingAction) {
     if (busy || confirmingRef.current || pending) return;
     setPending(action);
   }
@@ -252,13 +152,39 @@ export default function SupportPage() {
     confirmingRef.current = true;
     const action = pending;
     try {
-      if (action.kind === "close") {
-        await closeThread(action.threadId);
-      } else if (action.kind === "delete-thread") {
-        await deleteThread(action.threadId);
-      } else {
-        await deleteUserMessage(action.threadId, action.messageId);
-      }
+      await runBusy(async () => {
+        if (action.kind === "close") {
+          await closeThreadRow(
+            action.threadId,
+            rows,
+            setRows,
+            setServerStats,
+            push,
+            (id) => {
+              if (inspectId === id) setInspectId(null);
+            },
+          );
+        } else if (action.kind === "delete-thread") {
+          await deleteThreadRow(
+            action.threadId,
+            rows,
+            setRows,
+            setServerStats,
+            push,
+            (id) => {
+              if (inspectId === id) setInspectId(null);
+            },
+          );
+        } else {
+          await deleteUserMessageRow(
+            action.threadId,
+            action.messageId,
+            setRows,
+            setServerStats,
+            push,
+          );
+        }
+      });
     } finally {
       confirmingRef.current = false;
       setPending(null);
@@ -268,49 +194,8 @@ export default function SupportPage() {
   const pendingRow = pending
     ? (rows.find((r) => r.id === pending.threadId) ?? null)
     : null;
-
-  const confirmCopy = (() => {
-    if (!pending || !pendingRow) return null;
-    const who = `${pendingRow.name} · ${pendingRow.email}`;
-    if (pending.kind === "close") {
-      return {
-        tone: "neutral" as const,
-        eyebrow: "Close thread",
-        title: "Mark this conversation resolved?",
-        description:
-          "The user can no longer reply in this thread. They can still start a new conversation from the app.",
-        detail: who,
-        note: undefined,
-        confirmLabel: "Close thread",
-        busyLabel: "Closing…",
-      };
-    }
-    if (pending.kind === "delete-thread") {
-      return {
-        tone: "danger" as const,
-        eyebrow: "Delete conversation",
-        title: "Permanently delete this conversation?",
-        description:
-          "The whole thread and every message inside it will be removed from the support inbox.",
-        detail: who,
-        note: "This cannot be undone. The action is recorded in the audit log.",
-        confirmLabel: "Delete forever",
-        busyLabel: "Deleting…",
-      };
-    }
-    const target = pendingRow.messages.find((m) => m.id === pending.messageId);
-    return {
-      tone: "danger" as const,
-      eyebrow: "Delete message",
-      title: "Delete this user message?",
-      description:
-        "Only this single message is removed. The rest of the conversation stays intact.",
-      detail: target ? `“${target.text.slice(0, 140)}”` : who,
-      note: "This cannot be undone. The action is recorded in the audit log.",
-      confirmLabel: "Delete message",
-      busyLabel: "Deleting…",
-    };
-  })();
+  const confirmCopy =
+    pending && pendingRow ? supportConfirmCopy(pending, pendingRow) : null;
 
   if (!allowed) {
     return (
@@ -323,14 +208,22 @@ export default function SupportPage() {
     );
   }
 
-  const queueEmpty = !loading && rows.length === 0;
-  const filterEmpty = !queueEmpty && filtered.length === 0;
+  const queueEmpty = !loading && stats.total === 0;
+  const filterEmpty = !loading && stats.total > 0 && rows.length === 0;
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <SupportHeader
         onRefresh={() =>
-          void load().then(() => setNotice("Inbox refreshed from Nest."))
+          void load({ silent: false }).then((ok) => {
+            if (ok) {
+              push(
+                "success",
+                SUPPORT_TOAST_TITLES.success,
+                "Inbox refreshed from Nest.",
+              );
+            }
+          })
         }
       />
       <SupportStats
@@ -345,22 +238,6 @@ export default function SupportPage() {
         <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-[13px] text-slate-400">
           Loading support inbox…
         </p>
-      ) : null}
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[13px] font-medium text-rose-900"
-        >
-          {error}
-        </div>
-      ) : null}
-      {notice ? (
-        <div
-          role="status"
-          className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-[13px] font-medium text-sky-950"
-        >
-          {notice}
-        </div>
       ) : null}
 
       {!loading ? (
@@ -397,7 +274,7 @@ export default function SupportPage() {
               <SupportPagination
                 page={page}
                 totalPages={totalPages}
-                totalItems={filtered.length}
+                totalItems={rows.length}
                 pageSize={PAGE_SIZE}
                 onPage={setPage}
               />
@@ -413,8 +290,12 @@ export default function SupportPage() {
         row={inspectRow}
         busy={busy}
         onClose={() => setInspectId(null)}
-        onReply={(id, text) => void reply(id, text)}
-        onMarkRead={(id) => void markRead(id)}
+        onReply={(id, text) =>
+          void runBusy(() =>
+            replyThreadRow(id, text, rows, setRows, setServerStats, push),
+          )
+        }
+        onMarkRead={markRead}
         onDeleteUserMessage={(threadId, messageId) =>
           askConfirm({ kind: "delete-message", threadId, messageId })
         }
@@ -441,6 +322,18 @@ export default function SupportPage() {
           onConfirm={() => void runPending()}
         />
       ) : null}
+
+      <RedeemToastHost
+        toasts={toasts}
+        onDismiss={dismiss}
+        onAction={(id) => {
+          if (id === retryToastId) {
+            dismiss(id);
+            setRetryToastId(null);
+            void load();
+          }
+        }}
+      />
     </section>
   );
 }

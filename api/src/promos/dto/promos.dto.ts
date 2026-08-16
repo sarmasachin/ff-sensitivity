@@ -70,4 +70,12 @@ export class SavePromosDto {
   @Type(() => PromoDto)
   promos!: PromoDto[];
 }
+
+export class ReorderPromosDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(40)
+  @IsString({ each: true })
+  ids!: string[];
+}
 // --- End: Promos live wire (Sachin) ---

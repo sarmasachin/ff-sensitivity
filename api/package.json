@@ -26,6 +26,7 @@
     "e2e:names": "ts-node --transpile-only scripts/e2e-names.ts",
     "e2e:support": "ts-node --transpile-only scripts/e2e-support.ts",
     "e2e:promos": "ts-node --transpile-only scripts/e2e-promos.ts",
+    "e2e:promos:extra": "ts-node --transpile-only scripts/e2e-promos-extra.ts",
     "e2e:profile": "ts-node --transpile-only scripts/e2e-profile.ts",
     "e2e:push": "ts-node --transpile-only scripts/e2e-push.ts",
     "e2e:app": "ts-node --transpile-only scripts/e2e-app.ts",

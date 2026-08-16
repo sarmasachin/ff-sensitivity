@@ -140,16 +140,20 @@ export class SaveChallengeDto {
   @Type(() => ChallengeRulesDto)
   rules!: ChallengeRulesDto;
 
+  /** Omit to leave the quiz bank unchanged. Send [] to wipe. */
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(1500)
   @ValidateNested({ each: true })
   @Type(() => QuizQuestionDto)
-  quiz!: QuizQuestionDto[];
+  quiz?: QuizQuestionDto[];
 
+  /** Omit to leave milestones unchanged. Send [] to wipe. */
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MilestoneDto)
-  milestones!: MilestoneDto[];
+  milestones?: MilestoneDto[];
 }
 
 export class SubmitQuizDto {

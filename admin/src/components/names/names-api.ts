@@ -1,7 +1,6 @@
 import { apiFetch } from "@/lib/api";
 import type { NameFontRow, NameFrameRow, NamesPolicy } from "./names-data";
 
-// --- Start: Names live wire (Sachin) ---
 export type NamesBundle = {
   policy: NamesPolicy;
   frames: NameFrameRow[];
@@ -17,12 +16,21 @@ export async function fetchNamesBundle(): Promise<NamesBundle> {
   };
 }
 
-export async function saveNamesBundle(
-  bundle: NamesBundle,
-): Promise<NamesBundle> {
+export async function saveNamesBundle(bundle: {
+  policy: NamesPolicy;
+  frames?: NameFrameRow[];
+  fonts?: NameFontRow[];
+}): Promise<NamesBundle> {
+  const body: {
+    policy: NamesPolicy;
+    frames?: NameFrameRow[];
+    fonts?: NameFontRow[];
+  } = { policy: bundle.policy };
+  if (bundle.frames !== undefined) body.frames = bundle.frames;
+  if (bundle.fonts !== undefined) body.fonts = bundle.fonts;
   const data = await apiFetch<NamesBundle>("/api/v1/admin/names", {
     method: "PUT",
-    body: JSON.stringify(bundle),
+    body: JSON.stringify(body),
   });
   return {
     policy: data.policy,
@@ -30,4 +38,44 @@ export async function saveNamesBundle(
     fonts: data.fonts ?? [],
   };
 }
-// --- End: Names live wire (Sachin) ---
+
+export async function createNameFrame(
+  row: NameFrameRow,
+): Promise<NameFrameRow> {
+  return apiFetch<NameFrameRow>("/api/v1/admin/names/frames", {
+    method: "POST",
+    body: JSON.stringify(row),
+  });
+}
+
+export async function updateNameFrame(
+  id: string,
+  row: NameFrameRow,
+): Promise<NameFrameRow> {
+  return apiFetch<NameFrameRow>(
+    `/api/v1/admin/names/frames/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ ...row, id }),
+    },
+  );
+}
+
+export async function deleteNameFrame(id: string): Promise<void> {
+  await apiFetch(`/api/v1/admin/names/frames/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function updateNameFont(
+  id: string,
+  row: NameFontRow,
+): Promise<NameFontRow> {
+  return apiFetch<NameFontRow>(
+    `/api/v1/admin/names/fonts/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ ...row, id }),
+    },
+  );
+}

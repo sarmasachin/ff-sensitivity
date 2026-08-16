@@ -318,83 +318,7 @@ async function main() {
       showExpired: false,
     },
   });
-
-  const scratchPrizeCount = await prisma.scratchPrize.count();
-  if (scratchPrizeCount === 0) {
-    await prisma.scratchPrize.createMany({
-      data: [
-        {
-          id: 'gift_coins_50',
-          title: 'Lucky +50',
-          detail: 'Small coin drop from the gift scratch pool.',
-          kind: 'GIFT',
-          rewardLabel: '+50 coins',
-          coinReward: 50,
-          oddsPercent: 35,
-          enabled: true,
-          sortOrder: 0,
-        },
-        {
-          id: 'gift_coins_150',
-          title: 'Lucky +150',
-          detail: 'Medium coin drop from the gift scratch pool.',
-          kind: 'GIFT',
-          rewardLabel: '+150 coins',
-          coinReward: 150,
-          oddsPercent: 20,
-          enabled: true,
-          sortOrder: 1,
-        },
-        {
-          id: 'gift_vault_hint',
-          title: 'Vault Hint',
-          detail: 'Foil tease ? small coin consolation.',
-          kind: 'GIFT',
-          rewardLabel: '+10 coins',
-          coinReward: 10,
-          oddsPercent: 8,
-          enabled: true,
-          sortOrder: 2,
-        },
-        {
-          id: 'milestone_7',
-          title: 'Week Warrior',
-          detail: 'Day-7 streak scratch card grant.',
-          kind: 'MILESTONE',
-          rewardLabel: '+50 coins ? Scratch',
-          coinReward: 50,
-          oddsPercent: 100,
-          enabled: true,
-          streakDays: 7,
-          sortOrder: 10,
-        },
-        {
-          id: 'redeem_unlock',
-          title: 'Redeem Unlock Foil',
-          detail: 'Scratch to reveal a claimed redeem gift code.',
-          kind: 'REDEEM',
-          rewardLabel: 'CODE',
-          coinReward: 0,
-          oddsPercent: 100,
-          enabled: true,
-          sortOrder: 20,
-        },
-        {
-          id: 'shop_token',
-          title: 'Shop Win Token',
-          detail: 'Archive entry from Bonus Scratch Token purchase.',
-          kind: 'SHOP',
-          rewardLabel: 'TOKEN',
-          coinReward: 0,
-          oddsPercent: 100,
-          enabled: true,
-          sortOrder: 30,
-        },
-      ],
-    });
-    // eslint-disable-next-line no-console
-    console.log('Scratch prizes seeded.');
-  }
+  // Prize table is admin-managed — no dummy gift/milestone seed.
   // --- End: Scratch live wire (Sachin) ---
 
   // --- Start: Names live wire (Sachin) ---
@@ -412,30 +336,7 @@ async function main() {
     },
   });
 
-  const nameFrameCount = await prisma.nameFrame.count();
-  if (nameFrameCount === 0) {
-    await prisma.nameFrame.createMany({
-      data: [
-        { id: 'classic', label: 'Classic', prefix: '?', suffix: '?', premium: true, enabled: true, sortOrder: 0 },
-        { id: 'diamond', label: 'Diamond', prefix: '??', suffix: '??', premium: true, enabled: true, sortOrder: 1 },
-        { id: 'tibetan', label: 'Tibetan', prefix: '??', suffix: '??', premium: true, enabled: true, sortOrder: 2 },
-        { id: 'star_flow', label: 'Star Flow', prefix: '??', suffix: '??', premium: false, enabled: true, sortOrder: 3 },
-        { id: 'jp_corner', label: 'JP Corner', prefix: '?', suffix: '?', premium: false, enabled: true, sortOrder: 4 },
-        { id: 'square', label: 'Square', prefix: '?', suffix: '?', premium: false, enabled: true, sortOrder: 5 },
-        { id: 'royal', label: 'Royal', prefix: '?', suffix: '?', premium: true, enabled: true, sortOrder: 6 },
-        { id: 'skull', label: 'Skull', prefix: '?', suffix: '?', premium: true, enabled: true, sortOrder: 7 },
-        { id: 'bolt', label: 'Bolt', prefix: '?', suffix: '?', premium: false, enabled: true, sortOrder: 8 },
-        { id: 'blade', label: 'Blade', prefix: '?', suffix: '?', premium: true, enabled: true, sortOrder: 9 },
-        { id: 'dark', label: 'Dark Elite', prefix: '???', suffix: '???', premium: true, enabled: true, sortOrder: 10 },
-        { id: 'vip_tag', label: 'VIP Tag', prefix: '?VIP?', suffix: '', premium: false, enabled: true, sortOrder: 11 },
-        { id: 'ff_tag', label: 'FF Tag', prefix: '?FF?', suffix: '', premium: false, enabled: false, sortOrder: 12 },
-        { id: 'shadow', label: 'Shadow', prefix: '??', suffix: '??', premium: false, enabled: true, sortOrder: 13 },
-        { id: 'clan', label: 'Clan Bars', prefix: '?', suffix: '?', premium: false, enabled: true, sortOrder: 14 },
-      ],
-    });
-    // eslint-disable-next-line no-console
-    console.log('Name frames seeded (15).');
-  }
+  // Frames are admin-managed — no dummy catalog seed.
 
   const nameFontCount = await prisma.nameFont.count();
   if (nameFontCount === 0) {
@@ -460,67 +361,7 @@ async function main() {
   // --- End: Names live wire (Sachin) ---
 
   // --- Start: Promos live wire (Sachin) ---
-  const promoCount = await prisma.promo.count();
-  if (promoCount === 0) {
-    const start = new Date();
-    start.setMonth(start.getMonth() - 1);
-    const end = new Date();
-    end.setMonth(end.getMonth() + 2);
-    await prisma.promo.createMany({
-      data: [
-        {
-          id: 'promo_challenge_week',
-          title: 'Daily Challenge week',
-          subtitle: 'Complete quizzes for bonus coins.',
-          imageLabel: 'challenge-hero',
-          deepLink: 'ffops://challenge',
-          placement: 'HOME_BANNER',
-          sortOrder: 1,
-          enabled: true,
-          startsAt: start,
-          endsAt: end,
-        },
-        {
-          id: 'promo_scratch_boost',
-          title: 'Scratch boost',
-          subtitle: 'Open your daily scratch after check-in.',
-          imageLabel: 'scratch-gold',
-          deepLink: 'ffops://scratch',
-          placement: 'HOME_BANNER',
-          sortOrder: 2,
-          enabled: true,
-          startsAt: start,
-          endsAt: end,
-        },
-        {
-          id: 'promo_shop_pack',
-          title: 'Coin shop pack',
-          subtitle: 'Spend coins on packs & unlocks.',
-          imageLabel: 'shop-pack',
-          deepLink: 'ffops://shop',
-          placement: 'HOME_STRIP',
-          sortOrder: 3,
-          enabled: true,
-          startsAt: start,
-          endsAt: end,
-        },
-        {
-          id: 'promo_names_frames',
-          title: 'Stylish Names',
-          subtitle: 'New frames in the catalog.',
-          imageLabel: 'names-frames',
-          deepLink: 'ffops://names',
-          placement: 'HOME_STRIP',
-          sortOrder: 4,
-          enabled: true,
-          startsAt: start,
-          endsAt: end,
-        },
-      ],
-    });
-    // eslint-disable-next-line no-console
-    console.log('Promos seeded (4).');
-  }
+  // Promos are admin-managed — no dummy catalog seed.
   // --- End: Promos live wire (Sachin) ---
 
   // --- Start: Push live wire (Sachin) ---

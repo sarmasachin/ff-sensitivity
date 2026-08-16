@@ -5,7 +5,6 @@ import type {
   ScratchPrizeRow,
 } from "./scratch-data";
 
-// --- Start: Scratch live wire (Sachin) ---
 export type ScratchBundle = {
   outcomeOdds: ScratchOutcomeOdds;
   policy: ScratchPolicy;
@@ -21,12 +20,23 @@ export async function fetchScratchBundle(): Promise<ScratchBundle> {
   };
 }
 
-export async function saveScratchBundle(
-  bundle: ScratchBundle,
-): Promise<ScratchBundle> {
+export async function saveScratchBundle(bundle: {
+  outcomeOdds: ScratchOutcomeOdds;
+  policy: ScratchPolicy;
+  prizes?: ScratchPrizeRow[];
+}): Promise<ScratchBundle> {
+  const body: {
+    outcomeOdds: ScratchOutcomeOdds;
+    policy: ScratchPolicy;
+    prizes?: ScratchPrizeRow[];
+  } = {
+    outcomeOdds: bundle.outcomeOdds,
+    policy: bundle.policy,
+  };
+  if (bundle.prizes !== undefined) body.prizes = bundle.prizes;
   const data = await apiFetch<ScratchBundle>("/api/v1/admin/scratch", {
     method: "PUT",
-    body: JSON.stringify(bundle),
+    body: JSON.stringify(body),
   });
   return {
     outcomeOdds: data.outcomeOdds,
@@ -34,4 +44,31 @@ export async function saveScratchBundle(
     prizes: data.prizes ?? [],
   };
 }
-// --- End: Scratch live wire (Sachin) ---
+
+export async function createScratchPrize(
+  row: ScratchPrizeRow,
+): Promise<ScratchPrizeRow> {
+  return apiFetch<ScratchPrizeRow>("/api/v1/admin/scratch/prizes", {
+    method: "POST",
+    body: JSON.stringify(row),
+  });
+}
+
+export async function updateScratchPrize(
+  id: string,
+  row: ScratchPrizeRow,
+): Promise<ScratchPrizeRow> {
+  return apiFetch<ScratchPrizeRow>(
+    `/api/v1/admin/scratch/prizes/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ ...row, id }),
+    },
+  );
+}
+
+export async function deleteScratchPrize(id: string): Promise<void> {
+  await apiFetch(`/api/v1/admin/scratch/prizes/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}

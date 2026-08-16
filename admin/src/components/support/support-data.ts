@@ -49,198 +49,28 @@ export const SUPPORT_STATUS_LABEL: Record<SupportStatus, string> = {
   CLOSED: "Closed",
 };
 
-export const SUPPORT_DEMO_ROWS: SupportThreadRow[] = [
-  {
-    id: "sup_01",
-    name: "Arjun K",
-    email: "arjun.k@mail.test",
-    subject: "REDEEM_CODE_ISSUE",
-    status: "PENDING_REPLY",
-    appVersion: "2.4.1",
-    deviceLabel: "Pixel 7 · Android 14",
-    createdAt: "2026-08-03 09:12",
-    updatedAt: "2026-08-03 09:14",
-    unread: true,
-    messages: [
-      {
-        id: "m1",
-        sender: "USER",
-        text: "Redeem code unlocks but Copy does nothing. Claim never appears.",
-        createdAt: "2026-08-03 09:12",
-      },
-      {
-        id: "m2",
-        sender: "USER",
-        text: "Tried twice on Wi‑Fi and mobile data.",
-        createdAt: "2026-08-03 09:14",
-      },
-    ],
-  },
-  {
-    id: "sup_02",
-    name: "Neha S",
-    email: "neha.s@mail.test",
-    subject: "BUG",
-    status: "OPEN",
-    appVersion: "2.4.0",
-    deviceLabel: "Samsung A54 · Android 13",
-    createdAt: "2026-08-02 18:40",
-    updatedAt: "2026-08-02 18:40",
-    unread: true,
-    messages: [
-      {
-        id: "m1",
-        sender: "USER",
-        text: "Daily Challenge quiz countdown freezes after wrong answer.",
-        createdAt: "2026-08-02 18:40",
-      },
-    ],
-  },
-  {
-    id: "sup_03",
-    name: "Vikram R",
-    email: "vikram.r@mail.test",
-    subject: "FEATURE",
-    status: "REPLIED",
-    appVersion: "2.4.1",
-    deviceLabel: "OnePlus 11 · Android 14",
-    createdAt: "2026-08-01 11:05",
-    updatedAt: "2026-08-01 15:22",
-    unread: false,
-    messages: [
-      {
-        id: "m1",
-        sender: "USER",
-        text: "Can we export sensitivity presets as a shareable link?",
-        createdAt: "2026-08-01 11:05",
-      },
-      {
-        id: "m2",
-        sender: "ADMIN",
-        text: "Thanks — shareable links are on the roadmap for next release.",
-        createdAt: "2026-08-01 15:22",
-      },
-    ],
-  },
-  {
-    id: "sup_04",
-    name: "Priya M",
-    email: "priya.m@mail.test",
-    subject: "REPORT",
-    status: "PENDING_REPLY",
-    appVersion: "2.3.9",
-    deviceLabel: "Redmi Note 12 · Android 13",
-    createdAt: "2026-07-31 21:18",
-    updatedAt: "2026-07-31 21:20",
-    unread: true,
-    messages: [
-      {
-        id: "m1",
-        sender: "USER",
-        text: "Community post with fake FF ID spam — please remove.",
-        createdAt: "2026-07-31 21:18",
-      },
-    ],
-  },
-  {
-    id: "sup_05",
-    name: "Omar H",
-    email: "omar.h@mail.test",
-    subject: "FEEDBACK",
-    status: "CLOSED",
-    appVersion: "2.4.1",
-    deviceLabel: "iQOO Neo · Android 14",
-    createdAt: "2026-07-28 08:02",
-    updatedAt: "2026-07-29 10:11",
-    unread: false,
-    messages: [
-      {
-        id: "m1",
-        sender: "USER",
-        text: "Names studio looks good. Font filter could be sticky.",
-        createdAt: "2026-07-28 08:02",
-      },
-      {
-        id: "m2",
-        sender: "ADMIN",
-        text: "Appreciate the note — logged for UX polish.",
-        createdAt: "2026-07-29 10:11",
-      },
-    ],
-  },
-  {
-    id: "sup_06",
-    name: "Sara L",
-    email: "sara.l@mail.test",
-    subject: "OTHER",
-    status: "OPEN",
-    appVersion: "2.4.1",
-    deviceLabel: "Motorola G84 · Android 14",
-    createdAt: "2026-08-03 07:55",
-    updatedAt: "2026-08-03 07:55",
-    unread: true,
-    messages: [
-      {
-        id: "m1",
-        sender: "USER",
-        text: "Account deleted request — remove my shared cards please.",
-        createdAt: "2026-08-03 07:55",
-      },
-    ],
-  },
-  {
-    id: "sup_07",
-    name: "Dev Team",
-    email: "qa.bot@mail.test",
-    subject: "BUG",
-    status: "REPLIED",
-    appVersion: "2.4.1-debug",
-    deviceLabel: "Emulator · API 34",
-    createdAt: "2026-08-02 12:00",
-    updatedAt: "2026-08-02 16:40",
-    unread: false,
-    messages: [
-      {
-        id: "m1",
-        sender: "USER",
-        text: "Scratch foil layer sometimes stays after claim on slow devices.",
-        createdAt: "2026-08-02 12:00",
-      },
-      {
-        id: "m2",
-        sender: "ADMIN",
-        text: "Reproduced — fix queued in next build.",
-        createdAt: "2026-08-02 16:40",
-      },
-    ],
-  },
-  {
-    id: "sup_08",
-    name: "Karan P",
-    email: "karan.p@mail.test",
-    subject: "REDEEM_CODE_ISSUE",
-    status: "CLOSED",
-    appVersion: "2.4.0",
-    deviceLabel: "Vivo V29 · Android 14",
-    createdAt: "2026-07-25 19:33",
-    updatedAt: "2026-07-26 09:01",
-    unread: false,
-    messages: [
-      {
-        id: "m1",
-        sender: "USER",
-        text: "Code already claimed by another device in my house.",
-        createdAt: "2026-07-25 19:33",
-      },
-      {
-        id: "m2",
-        sender: "ADMIN",
-        text: "Policy is one claim per code. Closed after confirmation.",
-        createdAt: "2026-07-26 09:01",
-      },
-    ],
-  },
-];
+export type SupportListQuery = {
+  q?: string;
+  status?: string;
+  subject?: string;
+  unread?: boolean;
+};
+
+export function supportListQuery(
+  filter: "all" | "open" | "unread" | "replied" | "closed" | "bug" | "redeem",
+  q: string,
+): SupportListQuery {
+  const opts: SupportListQuery = {};
+  const query = q.trim();
+  if (query) opts.q = query;
+  if (filter === "open") opts.status = "open";
+  if (filter === "replied") opts.status = "REPLIED";
+  if (filter === "closed") opts.status = "CLOSED";
+  if (filter === "unread") opts.unread = true;
+  if (filter === "bug") opts.subject = "BUG";
+  if (filter === "redeem") opts.subject = "REDEEM_CODE_ISSUE";
+  return opts;
+}
 
 export function computeSupportStats(rows: SupportThreadRow[]) {
   const open = rows.filter(

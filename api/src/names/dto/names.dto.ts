@@ -91,18 +91,20 @@ export class SaveNamesDto {
   @Type(() => NamesPolicyDto)
   policy!: NamesPolicyDto;
 
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(0)
   @ArrayMaxSize(80)
   @ValidateNested({ each: true })
   @Type(() => NameFrameDto)
-  frames!: NameFrameDto[];
+  frames?: NameFrameDto[];
 
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(20)
   @ValidateNested({ each: true })
   @Type(() => NameFontDto)
-  fonts!: NameFontDto[];
+  fonts?: NameFontDto[];
 }
 // --- End: Names live wire (Sachin) ---

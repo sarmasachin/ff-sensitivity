@@ -77,9 +77,29 @@ fun DailyChallengeTodayTab(
         }
         result.onSuccess { payload ->
             payload.question?.let { question = it }
+            if (payload.question == null) {
+                onError(
+                    ChallengeUiError(
+                        code = "CHALLENGE_NO_QUIZ",
+                        title = "No quiz today",
+                        message = "Admin quiz bank has no live question for today.",
+                        retryKind = ChallengeRetryKind.REFRESH_SNAPSHOT
+                    )
+                )
+            }
         }.onFailure {
             AppLog.e("Challenge sync on today tab failed", it)
             ChallengeRemoteCache.todayQuestion?.let { question = it }
+            if (ChallengeRemoteCache.todayQuestion == null) {
+                onError(
+                    ChallengeUiError(
+                        code = "CHALLENGE_SYNC_FAILED",
+                        title = "Couldn’t load quiz",
+                        message = "Check connection and try again.",
+                        retryKind = ChallengeRetryKind.REFRESH_SNAPSHOT
+                    )
+                )
+            }
         }
     }
     val quizOptions = remember(question) { question.options }

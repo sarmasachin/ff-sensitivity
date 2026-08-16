@@ -14,8 +14,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentAdmin } from '../auth/current-admin.decorator';
 import type { AuthAdmin } from '../auth/current-admin.decorator';
 import { AppError } from '../common/errors/app-error';
+import { SupportAdminInboxService } from './support-admin-inbox.service';
 import { SupportModuleGuard } from './support-module.guard';
-import { SupportService } from './support.service';
 import { AdminSupportReplyDto } from './dto/support.dto';
 
 function assertSupportId(id: string, label = 'thread') {
@@ -29,12 +29,17 @@ function assertSupportId(id: string, label = 'thread') {
 @Controller('api/v1/admin/support')
 @UseGuards(JwtAuthGuard, SupportModuleGuard)
 export class SupportAdminController {
-  constructor(private readonly support: SupportService) {}
+  constructor(private readonly support: SupportAdminInboxService) {}
 
   @Get()
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
-  list(@Query('q') q?: string, @Query('status') status?: string) {
-    return this.support.adminList(q, status);
+  list(
+    @Query('q') q?: string,
+    @Query('status') status?: string,
+    @Query('subject') subject?: string,
+    @Query('unread') unread?: string,
+  ) {
+    return this.support.adminList(q, status, subject, unread);
   }
 
   @Get('stats')

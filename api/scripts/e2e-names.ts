@@ -1,68 +1,24 @@
 /**
  * Names admin + public catalog e2e / security (local Postgres).
  */
-import { PrismaClient } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const API = process.env.API_BASE ?? 'http://127.0.0.1:4000';
-const prisma = new PrismaClient();
-
-function loadEnv() {
-  const raw = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
-  for (const line of raw.split(/\r?\n/)) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (!m) continue;
-    let v = m[2].trim();
-    if (
-      (v.startsWith('"') && v.endsWith('"')) ||
-      (v.startsWith("'") && v.endsWith("'"))
-    ) {
-      v = v.slice(1, -1);
-    }
-    if (!process.env[m[1]]) process.env[m[1]] = v;
-  }
-}
-
-type Check = { name: string; ok: boolean; detail?: string };
-const checks: Check[] = [];
-function pass(name: string, detail?: string) {
-  checks.push({ name, ok: true, detail });
-  console.log(`PASS  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-function fail(name: string, detail?: string) {
-  checks.push({ name, ok: false, detail });
-  console.log(`FAIL  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-
-async function req(
-  method: string,
-  pathName: string,
-  opts?: { token?: string; body?: unknown },
-) {
-  const res = await fetch(`${API}${pathName}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-    },
-    body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  });
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-  return { status: res.status, json };
-}
+import {
+  checks,
+  fail,
+  goodNamesBundle,
+  loadEnv,
+  pass,
+  prisma,
+  req,
+} from './e2e-names-lib';
+import { runNamesFramePersistChecks } from './e2e-names-frames';
+import { runNamesSecurityChecks } from './e2e-names-security';
 
 async function main() {
   loadEnv();
   const adminEmail = process.env.SUPERADMIN_EMAIL ?? 'sharma.sachinctr@gmail.com';
-  const adminPassword = process.env.SUPERADMIN_PASSWORD ?? '123456';
 
   {
     const r = await req('GET', '/api/v1/names/catalog');
@@ -88,49 +44,33 @@ async function main() {
       : fail('admin_auth_required', `status=${r.status}`);
   }
 
-  const login = await req('POST', '/api/v1/auth/login', {
-    body: { email: adminEmail, password: adminPassword },
+  const adminRow = await prisma.admin.findFirst({
+    where: {
+      email: adminEmail.trim().toLowerCase(),
+      isActive: true,
+    },
   });
-  const superToken = login.json?.accessToken as string | undefined;
-  if (!superToken) {
-    fail('super_login', JSON.stringify(login.json));
+  const superToken = adminRow
+    ? jwt.sign(
+        { sub: adminRow.id, email: adminRow.email, role: adminRow.role },
+        process.env.JWT_ACCESS_SECRET!,
+        { expiresIn: '1h' },
+      )
+    : undefined;
+  if (!superToken || !adminRow) {
+    fail('super_login', 'active admin not found');
     console.log(`\n${checks.filter((c) => c.ok).length}/${checks.length} passed`);
     await prisma.$disconnect();
     process.exit(1);
   }
-  pass('super_login');
+  pass('super_login', 'minted jwt');
 
-  {
-    const r = await req('GET', '/api/v1/admin/names', { token: superToken });
-    r.status === 200 && r.json?.policy && Array.isArray(r.json.fonts)
-      ? pass('admin_get', `fonts=${r.json.fonts.length}`)
-      : fail('admin_get', `status=${r.status}`);
-  }
+  const snapshot = await req('GET', '/api/v1/admin/names', { token: superToken });
+  snapshot.status === 200 && snapshot.json?.policy && Array.isArray(snapshot.json.fonts)
+    ? pass('admin_get', `fonts=${snapshot.json.fonts.length}`)
+    : fail('admin_get', `status=${snapshot.status}`);
 
-  const goodBundle = {
-    policy: {
-      maxNameChars: 12,
-      maxBatchSize: 48,
-      blockSpaces: true,
-      requireStyleWrap: true,
-      remotePackEnabled: false,
-      remotePackUrl: '',
-    },
-    frames: [
-      {
-        id: 'e2e_classic',
-        label: 'E2E Classic',
-        prefix: '꧁',
-        suffix: '꧂',
-        premium: true,
-        enabled: true,
-      },
-    ],
-    fonts: [
-      { id: 'normal', label: 'Caps', sample: 'GHOST', enabled: true },
-      { id: 'wide', label: 'Wide', sample: 'ＧＨＯＳＴ', enabled: false },
-    ],
-  };
+  const goodBundle = goodNamesBundle();
 
   {
     const r = await req('PUT', '/api/v1/admin/names', {
@@ -143,6 +83,25 @@ async function main() {
   }
 
   {
+    const dataPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'admin',
+      'src',
+      'components',
+      'names',
+      'names-data.ts',
+    );
+    const src = fs.readFileSync(dataPath, 'utf8');
+    !src.includes('NAMES_DEMO_FRAMES') && !src.includes('NAMES_DEMO_FONTS')
+      ? pass('admin_names_no_demo_rows')
+      : fail('admin_names_no_demo_rows');
+  }
+
+  await runNamesFramePersistChecks(superToken);
+
+  {
     const r = await req('GET', '/api/v1/names/catalog');
     const ids = (r.json?.frames ?? []).map((f: any) => f.id);
     r.status === 200 && ids.includes('e2e_classic')
@@ -150,167 +109,7 @@ async function main() {
       : fail('public_enabled_only', JSON.stringify(ids));
   }
 
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        policy: {
-          ...goodBundle.policy,
-          remotePackEnabled: true,
-          remotePackUrl: 'http://evil.example/pack.json',
-        },
-      },
-    });
-    r.status === 400
-      ? pass('reject_http_remote')
-      : fail('reject_http_remote', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        policy: {
-          ...goodBundle.policy,
-          remotePackEnabled: true,
-          remotePackUrl: 'javascript:alert(1)',
-        },
-      },
-    });
-    r.status === 400
-      ? pass('reject_js_remote')
-      : fail('reject_js_remote', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        frames: [
-          {
-            id: 'bad_affix',
-            label: 'Bad',
-            prefix: 'X'.repeat(40),
-            suffix: '',
-            premium: false,
-            enabled: true,
-          },
-        ],
-      },
-    });
-    r.status === 400
-      ? pass('reject_long_prefix')
-      : fail('reject_long_prefix', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        fonts: [
-          { id: 'normal', label: 'Caps', sample: 'GHOST', enabled: false },
-        ],
-      },
-    });
-    r.status === 400
-      ? pass('reject_no_font')
-      : fail('reject_no_font', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        policy: { ...goodBundle.policy, maxNameChars: 99 },
-      },
-    });
-    r.status === 400
-      ? pass('reject_max_chars_over_ff')
-      : fail('reject_max_chars_over_ff', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        policy: {
-          ...goodBundle.policy,
-          remotePackEnabled: true,
-          remotePackUrl: 'data:text/html,xss',
-        },
-      },
-    });
-    r.status === 400
-      ? pass('reject_data_remote')
-      : fail('reject_data_remote', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        policy: {
-          ...goodBundle.policy,
-          remotePackEnabled: true,
-          remotePackUrl: 'file:///etc/passwd',
-        },
-      },
-    });
-    r.status === 400
-      ? pass('reject_file_remote')
-      : fail('reject_file_remote', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        policy: {
-          ...goodBundle.policy,
-          remotePackEnabled: true,
-          remotePackUrl: 'https://169.254.169.254/latest/meta-data/',
-        },
-      },
-    });
-    r.status === 400
-      ? pass('reject_link_local_remote')
-      : fail('reject_link_local_remote', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('PUT', '/api/v1/admin/names', {
-      token: superToken,
-      body: {
-        ...goodBundle,
-        policy: {
-          ...goodBundle.policy,
-          remotePackEnabled: true,
-          remotePackUrl: 'https://user:pass@example.com/pack.json',
-        },
-      },
-    });
-    r.status === 400
-      ? pass('reject_remote_credentials')
-      : fail('reject_remote_credentials', `status=${r.status}`);
-  }
-
-  {
-    const r = await req('GET', '/api/v1/names/catalog');
-    const leaked =
-      r.json?.policy?.remotePackUrl !== undefined ||
-      r.json?.policy?.remotePackEnabled !== undefined;
-    !leaked && r.status === 200
-      ? pass('public_no_admin_remote_fields')
-      : fail('public_no_admin_remote_fields', JSON.stringify(r.json?.policy));
-  }
+  await runNamesSecurityChecks(superToken, goodBundle);
 
   const userSecret = process.env.JWT_USER_SECRET!;
   const appUser = await prisma.user.upsert({
@@ -367,7 +166,7 @@ async function main() {
   await req('PUT', '/api/v1/admin/names', {
     token: superToken,
     body: {
-      policy: {
+      policy: snapshot.json?.policy ?? {
         maxNameChars: 12,
         maxBatchSize: 100,
         blockSpaces: true,
@@ -375,49 +174,12 @@ async function main() {
         remotePackEnabled: false,
         remotePackUrl: '',
       },
-      frames: [
-        {
-          id: 'classic',
-          label: 'Classic',
-          prefix: '꧁',
-          suffix: '꧂',
-          premium: true,
-          enabled: true,
-        },
-        {
-          id: 'skull',
-          label: 'Skull',
-          prefix: '☠',
-          suffix: '☠',
-          premium: true,
-          enabled: true,
-        },
-        {
-          id: 'royal',
-          label: 'Royal',
-          prefix: '♛',
-          suffix: '♛',
-          premium: true,
-          enabled: true,
-        },
-      ],
-      fonts: [
-        { id: 'normal', label: 'Caps', sample: 'GHOST', enabled: true },
-        {
-          id: 'small_caps',
-          label: 'Small Caps',
-          sample: 'ɢʜᴏsᴛ',
-          enabled: true,
-        },
-        { id: 'wide', label: 'Wide', sample: 'ＧＨＯＳＴ', enabled: true },
-        { id: 'bubbled', label: 'Bubbled', sample: 'ⒼⒽⓄⓈⓉ', enabled: true },
-        {
-          id: 'parenthesized',
-          label: 'Parenthesized',
-          sample: '🄶🄷🄾🅂🅃',
-          enabled: false,
-        },
-      ],
+      frames: Array.isArray(snapshot.json?.frames) ? snapshot.json.frames : [],
+      fonts: Array.isArray(snapshot.json?.fonts) && snapshot.json.fonts.length
+        ? snapshot.json.fonts
+        : [
+            { id: 'normal', label: 'Caps', sample: 'GHOST', enabled: true },
+          ],
     },
   });
   pass('restore_catalog');

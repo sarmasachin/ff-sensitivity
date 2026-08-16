@@ -45,32 +45,6 @@ export const NAMES_DEFAULT_POLICY: NamesPolicy = {
   remotePackEnabled: false,
 };
 
-export const NAMES_DEMO_FRAMES: NameFrameRow[] = [
-  { id: "classic", label: "Classic", prefix: "꧁", suffix: "꧂", enabled: true, premium: true },
-  { id: "diamond", label: "Diamond", prefix: "꧁༒", suffix: "༒꧂", enabled: true, premium: true },
-  { id: "tibetan", label: "Tibetan", prefix: "꧁༺", suffix: "༻꧂", enabled: true, premium: true },
-  { id: "star_flow", label: "Star Flow", prefix: "★彡", suffix: "彡★", enabled: true, premium: false },
-  { id: "jp_corner", label: "JP Corner", prefix: "『", suffix: "』", enabled: true, premium: false },
-  { id: "square", label: "Square", prefix: "【", suffix: "】", enabled: true, premium: false },
-  { id: "royal", label: "Royal", prefix: "♛", suffix: "♛", enabled: true, premium: true },
-  { id: "skull", label: "Skull", prefix: "☠", suffix: "☠", enabled: true, premium: true },
-  { id: "bolt", label: "Bolt", prefix: "⚡", suffix: "⚡", enabled: true, premium: false },
-  { id: "blade", label: "Blade", prefix: "⚔", suffix: "⚔", enabled: true, premium: true },
-  { id: "dark", label: "Dark Elite", prefix: "꧁༒☬", suffix: "☬༒꧂", enabled: true, premium: true },
-  { id: "vip_tag", label: "VIP Tag", prefix: "『VIP』", suffix: "", enabled: true, premium: false },
-  { id: "ff_tag", label: "FF Tag", prefix: "『FF』", suffix: "", enabled: false, premium: false },
-  { id: "shadow", label: "Shadow", prefix: "꧁丨", suffix: "丨꧂", enabled: true, premium: false },
-  { id: "clan", label: "Clan Bars", prefix: "丨", suffix: "丨", enabled: true, premium: false },
-];
-
-export const NAMES_DEMO_FONTS: NameFontRow[] = [
-  { id: "normal", label: "Caps", sample: "GHOST", enabled: true },
-  { id: "small_caps", label: "Small Caps", sample: "ɢʜᴏsᴛ", enabled: true },
-  { id: "wide", label: "Wide", sample: "ＧＨＯＳＴ", enabled: true },
-  { id: "bubbled", label: "Bubbled", sample: "ⒼⒽⓄⓈⓉ", enabled: true },
-  { id: "parenthesized", label: "Parenthesized", sample: "🄶🄷🄾🅂🅃", enabled: false },
-];
-
 export function emptyFrameForm(): NameFrameFormValues {
   return {
     id: "",

@@ -198,88 +198,6 @@ export function computeChallengeStats(
   };
 }
 
-/** Android dailyQuizBank sample. */
-export const QUIZ_DEMO_ROWS: QuizQuestionRow[] = [
-  {
-    id: "q1",
-    question: "Approx Free Fire nickname character limit is?",
-    options: ["6", "12", "20", "30"],
-    correctIndex: 1,
-    enabled: true,
-  },
-  {
-    id: "q2",
-    question: "Which setting mainly affects aim drag feel?",
-    options: ["DPI only", "Sensitivity", "Brightness", "Volume"],
-    correctIndex: 1,
-    enabled: true,
-  },
-  {
-    id: "q3",
-    question: "Higher refresh rate usually means?",
-    options: ["Smoother motion", "More storage", "Better battery always", "Lower RAM"],
-    correctIndex: 0,
-    enabled: true,
-  },
-  {
-    id: "q4",
-    question: "Safe DPI tip helps avoid?",
-    options: ["Friend requests", "Crash / black screen risk", "Name change", "Clan join"],
-    correctIndex: 1,
-    enabled: true,
-  },
-  {
-    id: "q5",
-    question: "Red Dot sensitivity is usually set?",
-    options: [
-      "Far above General",
-      "Near / slightly under General",
-      "Always 0",
-      "Only for snipers",
-    ],
-    correctIndex: 1,
-    enabled: true,
-  },
-  {
-    id: "q6",
-    question: "HUD fire button size depends most on?",
-    options: ["Wallpaper", "Screen size + fingers", "Clan level", "Server ping only"],
-    correctIndex: 1,
-    enabled: true,
-  },
-  {
-    id: "q7",
-    question: "Best practice before sharing sensi?",
-    options: ["Hide device info", "Test in training", "Set everything to 200", "Disable touch"],
-    correctIndex: 1,
-    enabled: true,
-  },
-];
-
-/** Android streakMilestones (enabled by default). */
-export const MILESTONE_DEMO_ROWS: MilestoneRow[] = [
-  { id: "m7", days: 7, title: "Week Warrior", rewardLabel: "+50 coins · Scratch", coinReward: 50, badge: null, enabled: true },
-  { id: "m15", days: 15, title: "Rising Pro", rewardLabel: "+75 coins · Scratch", coinReward: 75, badge: null, enabled: true },
-  { id: "m20", days: 20, title: "Solid Start", rewardLabel: "+100 coins · Scratch", coinReward: 100, badge: null, enabled: true },
-  { id: "m30", days: 30, title: "Monthly Elite", rewardLabel: "+150 coins · Badge · Scratch", coinReward: 150, badge: "Monthly Elite", enabled: true },
-  { id: "m45", days: 45, title: "Focus Fire", rewardLabel: "+200 coins · Scratch", coinReward: 200, badge: null, enabled: true },
-  { id: "m60", days: 60, title: "Two Month Ace", rewardLabel: "+250 coins · Scratch", coinReward: 250, badge: null, enabled: true },
-  { id: "m75", days: 75, title: "Sharp Shooter", rewardLabel: "+300 coins · Scratch", coinReward: 300, badge: null, enabled: true },
-  { id: "m90", days: 90, title: "Quarter Legend", rewardLabel: "+400 coins · Badge · Scratch", coinReward: 400, badge: "Quarter Legend", enabled: true },
-  { id: "m100", days: 100, title: "Century Club", rewardLabel: "+500 coins · Scratch", coinReward: 500, badge: null, enabled: true },
-  { id: "m120", days: 120, title: "Iron Streak", rewardLabel: "+600 coins · Scratch", coinReward: 600, badge: null, enabled: true },
-  { id: "m150", days: 150, title: "Half-Year Heat", rewardLabel: "+750 coins · Scratch", coinReward: 750, badge: null, enabled: true },
-  { id: "m180", days: 180, title: "Season Master", rewardLabel: "+1000 coins · Badge · Scratch", coinReward: 1000, badge: "Season Master", enabled: true },
-  { id: "m200", days: 200, title: "200 Club", rewardLabel: "+1200 coins · Scratch", coinReward: 1200, badge: null, enabled: true },
-  { id: "m240", days: 240, title: "Unbroken", rewardLabel: "+1500 coins · Scratch", coinReward: 1500, badge: null, enabled: true },
-  { id: "m260", days: 260, title: "Hardcore", rewardLabel: "+1700 coins · Scratch", coinReward: 1700, badge: null, enabled: true },
-  { id: "m290", days: 290, title: "Near Immortal", rewardLabel: "+2000 coins · Scratch", coinReward: 2000, badge: null, enabled: true },
-  { id: "m300", days: 300, title: "300 Crown", rewardLabel: "+2200 coins · Badge · Scratch", coinReward: 2200, badge: "300 Crown", enabled: true },
-  { id: "m350", days: 350, title: "Final Push", rewardLabel: "+2500 coins · Scratch", coinReward: 2500, badge: null, enabled: true },
-  { id: "m360", days: 360, title: "Almost Eternal", rewardLabel: "+2800 coins · Scratch", coinReward: 2800, badge: null, enabled: true },
-  { id: "m365", days: 365, title: "Year Legend", rewardLabel: "+5000 coins · Legend · Scratch", coinReward: 5000, badge: "Year Legend", enabled: true },
-];
-
 export const CHALLENGE_CAPABILITIES = [
   {
     title: "Daily task rules",
@@ -299,7 +217,7 @@ export const CHALLENGE_CAPABILITIES = [
   },
   {
     title: "Quiz bank",
-    body: "Remote question pool — up to 1500 questions; one new question / UTC day (full-bank rotate).",
+    body: "Questions save immediately to Nest. Android rotates one live question per UTC day.",
   },
   {
     title: "Streak milestones",
@@ -307,6 +225,6 @@ export const CHALLENGE_CAPABILITIES = [
   },
   {
     title: "Live Nest sync",
-    body: "Save pushes rules + quiz + milestones to Nest. Android loads GET /api/v1/challenge/today.",
+    body: "Save draft writes rules only. Quiz and milestones persist on add/edit/delete.",
   },
 ] as const;

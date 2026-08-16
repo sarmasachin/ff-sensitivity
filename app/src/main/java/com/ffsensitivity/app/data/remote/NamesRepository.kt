@@ -21,7 +21,7 @@ object NamesCatalogCache {
 }
 
 object NamesRepository {
-    /** Public Nest catalog — no JWT. Falls back to offline local frames/fonts. */
+    /** Public Nest catalog — no JWT. Offline builtin frames only if catalog never synced. */
     fun syncCatalog(context: Context): Result<NamesCatalogPayload> {
         // Keep local assets warm even when remote fails.
         runCatching { StylishNameCatalog.ensureLoaded(context) }

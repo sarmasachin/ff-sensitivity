@@ -464,7 +464,7 @@ object DailyChallengeStore {
      */
     fun precheckMilestoneScratch(context: Context, days: Int): Result {
         return runCatching {
-            streakMilestones.firstOrNull { it.days == days }
+            liveMilestoneByDays(days)
                 ?: return Result(false, "Unknown milestone", snapshot(context))
             val token =
                 com.ffsensitivity.app.data.UserSessionStore(context).accessToken()
@@ -499,7 +499,7 @@ object DailyChallengeStore {
 
     fun claimMilestone(context: Context, days: Int): Result {
         return runCatching {
-            val milestone = streakMilestones.firstOrNull { it.days == days }
+            val milestone = liveMilestoneByDays(days)
                 ?: return Result(false, "Unknown milestone", snapshot(context))
             synchronized(this) {
                 val prefs = prefs(context)

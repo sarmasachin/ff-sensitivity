@@ -146,13 +146,73 @@ async function main() {
       );
   const tid = r.json?.id as string;
 
-  const login = await req('POST', '/api/v1/auth/login', {
-    body: {
-      email: process.env.SUPERADMIN_EMAIL ?? 'sharma.sachinctr@gmail.com',
-      password: process.env.SUPERADMIN_PASSWORD ?? '123456',
+  const adminEmail = process.env.SUPERADMIN_EMAIL ?? 'sharma.sachinctr@gmail.com';
+  const adminRow = await prisma.admin.findFirst({
+    where: {
+      email: adminEmail.trim().toLowerCase(),
+      isActive: true,
     },
   });
-  const at = login.json?.accessToken as string;
+  const at = adminRow
+    ? jwt.sign(
+        { sub: adminRow.id, email: adminRow.email, role: adminRow.role },
+        process.env.JWT_ACCESS_SECRET!,
+        { expiresIn: '1h' },
+      )
+    : undefined;
+  if (!at) {
+    fail('admin_login', 'active admin not found');
+    console.log(`\n${checks.filter((c) => c.ok).length}/${checks.length} passed`);
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+
+  r = await req('POST', `/api/v1/admin/support/${tid}/reply`, {
+    token: at,
+    body: { message: '   ' },
+  });
+  r.status === 400
+    ? pass('admin_empty_reply')
+    : fail('admin_empty_reply', String(r.status));
+
+  r = await req('POST', `/api/v1/admin/support/${'x'.repeat(80)}/reply`, {
+    token: at,
+    body: { message: 'x' },
+  });
+  r.status === 400
+    ? pass('admin_bad_id')
+    : fail('admin_bad_id', String(r.status));
+
+  r = await req('PATCH', '/api/v1/admin/support/missingthreadid000/close', {
+    token: at,
+  });
+  r.status === 404
+    ? pass('admin_close_not_found')
+    : fail('admin_close_not_found', String(r.status));
+
+  const listed = await req('GET', '/api/v1/admin/support?status=open', {
+    token: at,
+  });
+  const openHit = (listed.json?.threads ?? []).some((t: any) => t.id === tid);
+  const ack = (listed.json?.threads ?? [])
+    .find((t: any) => t.id === tid)
+    ?.messages?.find((m: any) => m.sender === 'ADMIN');
+  listed.status === 200 && openHit
+    ? pass('admin_open_status_filter')
+    : fail('admin_open_status_filter', `hit=${openHit}`);
+
+  if (!ack?.id) {
+    fail('admin_delete_staff_message_forbidden', 'no admin ack');
+  } else {
+    r = await req(
+      'DELETE',
+      `/api/v1/admin/support/${tid}/messages/${ack.id}`,
+      { token: at },
+    );
+    r.status === 403
+      ? pass('admin_delete_staff_message_forbidden')
+      : fail('admin_delete_staff_message_forbidden', String(r.status));
+  }
 
   r = await req('POST', `/api/v1/admin/support/${tid}/reply`, {
     token: at,
@@ -171,6 +231,14 @@ async function main() {
     : fail('path_traversal', String(r.status));
 
   await req('PATCH', `/api/v1/admin/support/${tid}/close`, { token: at });
+  r = await req('POST', `/api/v1/admin/support/${tid}/reply`, {
+    token: at,
+    body: { message: 'Should fail on closed' },
+  });
+  r.status === 409
+    ? pass('admin_reply_closed')
+    : fail('admin_reply_closed', String(r.status));
+
   r = await req('POST', '/api/v1/support/thread', {
     token: tok,
     body: {

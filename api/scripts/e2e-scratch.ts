@@ -63,7 +63,6 @@ async function main() {
   loadEnv();
   const userSecret = process.env.JWT_USER_SECRET!;
   const adminEmail = process.env.SUPERADMIN_EMAIL ?? 'sharma.sachinctr@gmail.com';
-  const adminPassword = process.env.SUPERADMIN_PASSWORD ?? '123456';
   const day = new Date().toISOString().slice(0, 10);
 
   const user = await prisma.user.upsert({
@@ -132,12 +131,24 @@ async function main() {
       : fail('roll requires auth', `HTTP ${r.status}`);
   }
 
-  const login = await req('POST', '/api/v1/auth/login', {
-    body: { email: adminEmail, password: adminPassword },
+  // Admin API auth: mint JWT (password login is cookie/OTP — not headless).
+  const adminRow = await prisma.admin.findFirst({
+    where: {
+      email: adminEmail.trim().toLowerCase(),
+      isActive: true,
+    },
   });
-  const adminToken = login.json?.accessToken as string | undefined;
-  adminToken ? pass('admin login') : fail('admin login');
-  if (!adminToken) throw new Error('no admin');
+  const adminToken = adminRow
+    ? jwt.sign(
+        { sub: adminRow.id, email: adminRow.email, role: adminRow.role },
+        process.env.JWT_ACCESS_SECRET!,
+        { expiresIn: '1h' },
+      )
+    : undefined;
+  adminToken
+    ? pass('admin login', 'minted jwt')
+    : fail('admin login', 'active admin not found');
+  if (!adminToken || !adminRow) throw new Error('no admin');
 
   const get = await req('GET', '/api/v1/admin/scratch', { token: adminToken });
   get.status < 300 && get.json?.outcomeOdds
@@ -179,6 +190,138 @@ async function main() {
   saved.status < 300 && saved.json?.policy?.retentionDays === 21
     ? pass('admin save scratch')
     : fail('admin save scratch', JSON.stringify(saved.json)?.slice(0, 180));
+
+  {
+    const pagePath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'admin',
+      'src',
+      'components',
+      'scratch',
+      'scratch-data.ts',
+    );
+    const pageSrc = fs.readFileSync(pagePath, 'utf8');
+    !pageSrc.includes('SCRATCH_DEMO_ROWS')
+      ? pass('admin scratch has no demo rows')
+      : fail('admin scratch has no demo rows');
+  }
+
+  const persistId = `e2e_prize_${Date.now()}`;
+  const prizeBody = {
+    id: persistId,
+    title: 'E2E Persist Gift',
+    detail: 'Stays after reload',
+    kind: 'GIFT',
+    rewardLabel: '+7 coins',
+    coinReward: 7,
+    oddsPercent: 10,
+    enabled: true,
+    streakDays: null,
+  };
+  {
+    const r = await req('POST', '/api/v1/admin/scratch/prizes');
+    r.status === 401
+      ? pass('prize create requires admin auth')
+      : fail('prize create requires admin auth', `HTTP ${r.status}`);
+  }
+  {
+    const r = await req('POST', '/api/v1/admin/scratch/prizes', {
+      token: userToken,
+      body: prizeBody,
+    });
+    r.status === 401
+      ? pass('user JWT blocked on prize create')
+      : fail('user JWT blocked on prize create', `HTTP ${r.status}`);
+  }
+  const createdPrize = await req('POST', '/api/v1/admin/scratch/prizes', {
+    token: adminToken,
+    body: prizeBody,
+  });
+  createdPrize.status < 300 && createdPrize.json?.id === persistId
+    ? pass('admin create prize row')
+    : fail(
+        'admin create prize row',
+        `HTTP ${createdPrize.status} ${JSON.stringify(createdPrize.json)?.slice(0, 180)}`,
+      );
+
+  const afterCreate = await req('GET', '/api/v1/admin/scratch', {
+    token: adminToken,
+  });
+  Array.isArray(afterCreate.json?.prizes) &&
+  afterCreate.json.prizes.some((p: { id?: string }) => p.id === persistId)
+    ? pass('created prize present on GET')
+    : fail(
+        'created prize present on GET',
+        JSON.stringify(afterCreate.json?.prizes)?.slice(0, 180),
+      );
+
+  const updatedPrize = await req(
+    'PUT',
+    `/api/v1/admin/scratch/prizes/${persistId}`,
+    {
+      token: adminToken,
+      body: { ...prizeBody, title: 'E2E Persist Gift Edited', enabled: false },
+    },
+  );
+  const afterUpdate = await req('GET', '/api/v1/admin/scratch', {
+    token: adminToken,
+  });
+  const updatedRow = afterUpdate.json?.prizes?.find(
+    (p: { id?: string }) => p.id === persistId,
+  );
+  updatedPrize.status < 300 &&
+  updatedRow?.title === 'E2E Persist Gift Edited' &&
+  updatedRow?.enabled === false
+    ? pass('admin update+toggle prize persists')
+    : fail(
+        'admin update+toggle prize persists',
+        `HTTP ${updatedPrize.status} ${JSON.stringify(updatedRow)?.slice(0, 180)}`,
+      );
+
+  const dup = await req('POST', '/api/v1/admin/scratch/prizes', {
+    token: adminToken,
+    body: prizeBody,
+  });
+  dup.status === 409 && dup.json?.error?.code === 'SCRATCH_DUP_PRIZE'
+    ? pass('duplicate prize id rejected')
+    : fail(
+        'duplicate prize id rejected',
+        `HTTP ${dup.status} ${JSON.stringify(dup.json)?.slice(0, 160)}`,
+      );
+
+  const oddsOnly = await req('PUT', '/api/v1/admin/scratch', {
+    token: adminToken,
+    body: {
+      outcomeOdds: { coinsPercent: 100, redeemPercent: 0, coinAmount: 40 },
+      policy: { retentionDays: 21, autoPurge: true, showExpired: false },
+    },
+  });
+  const afterOdds = await req('GET', '/api/v1/admin/scratch', {
+    token: adminToken,
+  });
+  oddsOnly.status < 300 &&
+  afterOdds.json?.prizes?.some((p: { id?: string }) => p.id === persistId) &&
+  afterOdds.json?.prizes?.some((p: { id?: string }) => p.id === 'e2e_gift')
+    ? pass('odds-only save keeps prize table')
+    : fail(
+        'odds-only save keeps prize table',
+        `HTTP ${oddsOnly.status} ${JSON.stringify(afterOdds.json?.prizes)?.slice(0, 180)}`,
+      );
+
+  const deletedPrize = await req(
+    'DELETE',
+    `/api/v1/admin/scratch/prizes/${persistId}`,
+    { token: adminToken },
+  );
+  const afterDelete = await req('GET', '/api/v1/admin/scratch', {
+    token: adminToken,
+  });
+  deletedPrize.status < 300 &&
+  !afterDelete.json?.prizes?.some((p: { id?: string }) => p.id === persistId)
+    ? pass('admin delete prize row')
+    : fail('admin delete prize row', `HTTP ${deletedPrize.status}`);
 
   const cfg = await req('GET', '/api/v1/scratch/config', { token: userToken });
   cfg.status < 300 &&
@@ -280,7 +423,7 @@ async function main() {
       : fail('scratch module guard 403', `HTTP ${r.status}`);
   }
 
-  // Restore usable defaults
+  // Restore odds/policy + original prize table (wipes e2e_gift if snapshot was empty)
   await req('PUT', '/api/v1/admin/scratch', {
     token: adminToken,
     body: {
@@ -290,9 +433,7 @@ async function main() {
         autoPurge: true,
         showExpired: false,
       },
-      prizes: get.json?.prizes?.length
-        ? get.json.prizes
-        : saved.json?.prizes ?? [],
+      prizes: Array.isArray(get.json?.prizes) ? get.json.prizes : [],
     },
   });
 

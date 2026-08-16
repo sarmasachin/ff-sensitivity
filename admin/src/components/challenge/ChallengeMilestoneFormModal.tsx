@@ -8,7 +8,7 @@ type Props = {
   mode: "add" | "edit";
   initial: MilestoneFormValues;
   onClose: () => void;
-  onSubmit: (values: MilestoneFormValues) => string | null;
+  onSubmit: (values: MilestoneFormValues) => Promise<string | null>;
 };
 
 const fieldClass =
@@ -24,11 +24,13 @@ export function ChallengeMilestoneFormModal({
 }: Props) {
   const [values, setValues] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
       setValues(initial);
       setError(null);
+      setBusy(false);
     }
   }, [open, initial]);
 
@@ -41,14 +43,21 @@ export function ChallengeMilestoneFormModal({
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const err = onSubmit(values);
-    if (err) {
-      setError(err);
-      return;
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const err = await onSubmit(values);
+      if (err) {
+        setError(err);
+        return;
+      }
+      onClose();
+    } finally {
+      setBusy(false);
     }
-    onClose();
   }
 
   return (
@@ -57,7 +66,9 @@ export function ChallengeMilestoneFormModal({
         type="button"
         className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]"
         aria-label="Close dialog"
-        onClick={onClose}
+        onClick={() => {
+          if (!busy) onClose();
+        }}
       />
       <form
         onSubmit={handleSubmit}
@@ -72,7 +83,9 @@ export function ChallengeMilestoneFormModal({
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (!busy) onClose();
+            }}
             className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 text-white hover:bg-white/25"
             aria-label="Close"
           >
@@ -132,11 +145,24 @@ export function ChallengeMilestoneFormModal({
         </div>
 
         <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-3">
-          <button type="button" onClick={onClose} className="h-9 rounded-lg border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="h-9 rounded-lg border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
             Cancel
           </button>
-          <button type="submit" className="h-9 rounded-lg bg-orange-600 px-4 text-[13px] font-semibold text-white hover:bg-orange-500">
-            {mode === "add" ? "Add milestone" : "Save changes"}
+          <button
+            type="submit"
+            disabled={busy}
+            className="h-9 rounded-lg bg-orange-600 px-4 text-[13px] font-semibold text-white hover:bg-orange-500 disabled:opacity-50"
+          >
+            {busy
+              ? "Saving…"
+              : mode === "add"
+                ? "Add milestone"
+                : "Save changes"}
           </button>
         </footer>
       </form>

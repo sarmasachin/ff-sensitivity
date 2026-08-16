@@ -35,8 +35,8 @@ export function ChallengeHeader({
             Challenge
           </h1>
           <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-white/90">
-            Daily check-in, quiz bank, streak milestones, and scratch unlock
-            rules for Android — local draft until Challenge API connects.
+            Daily check-in, quiz bank, and streak milestones — live on Nest.
+            Android loads GET /api/v1/challenge/today.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

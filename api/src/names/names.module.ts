@@ -4,12 +4,11 @@ import { NamesAdminController } from './names-admin.controller';
 import { NamesController } from './names.controller';
 import { NamesModuleGuard } from './names-module.guard';
 import { NamesService } from './names.service';
+import { NamesAdminItemsService } from './names-admin-items.service';
 
-// --- Start: Names live wire (Sachin) ---
 @Module({
   imports: [AuthModule],
   controllers: [NamesController, NamesAdminController],
-  providers: [NamesService, NamesModuleGuard],
+  providers: [NamesService, NamesAdminItemsService, NamesModuleGuard],
 })
 export class NamesModule {}
-// --- End: Names live wire (Sachin) ---

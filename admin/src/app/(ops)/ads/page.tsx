@@ -192,7 +192,6 @@ export default function AdsPage() {
 
       if (challengeBundle) {
         const saved = await saveChallengeBundle({
-          ...challengeBundle,
           rules: {
             ...challengeBundle.rules,
             adBonusOptional: adBonus.enabled,

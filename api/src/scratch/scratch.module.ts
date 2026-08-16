@@ -7,12 +7,17 @@ import { ScratchAdminController } from './scratch-admin.controller';
 import { ScratchController } from './scratch.controller';
 import { ScratchModuleGuard } from './scratch-module.guard';
 import { ScratchService } from './scratch.service';
+import { ScratchAdminPrizesService } from './scratch-admin-prizes.service';
+import { ScratchUserService } from './scratch-user.service';
 
-// --- Start: Scratch live wire (Sachin) ---
 @Module({
   imports: [AuthModule, EconomyModule, RedeemModule, AnalyticsModule],
   controllers: [ScratchController, ScratchAdminController],
-  providers: [ScratchService, ScratchModuleGuard],
+  providers: [
+    ScratchService,
+    ScratchAdminPrizesService,
+    ScratchUserService,
+    ScratchModuleGuard,
+  ],
 })
 export class ScratchModule {}
-// --- End: Scratch live wire (Sachin) ---
