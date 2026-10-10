@@ -45,4 +45,13 @@ export async function patchCommunityStatus(
     },
   );
 }
+
+export async function deleteCommunityPost(
+  id: string,
+): Promise<{ ok: boolean; id: string }> {
+  return apiFetch<{ ok: boolean; id: string }>(
+    `/api/v1/admin/community/posts/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
 // --- End: Community live wire (Sachin) ---

@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.RedeemCodeItem
@@ -346,12 +347,19 @@ internal fun RedeemCodeCard(
             ActionPill(
                 pillModifier = Modifier.weight(1f),
                 label = when {
+                    item.isScratchReward && item.canScratch -> "SCRATCH"
+                    item.isScratchReward && item.needsAd -> "WATCH AD"
+                    item.isScratchReward -> "WAIT"
                     unlocked -> "UNLOCKED"
                     !redeemActionLabel.isNullOrBlank() -> redeemActionLabel
                     else -> "REDEEM NOW"
                 },
                 icon = Icons.Outlined.RocketLaunch,
-                enabled = active && !unlocked,
+                enabled = if (item.isScratchReward) {
+                    active && (item.canScratch || item.needsAd)
+                } else {
+                    active && !unlocked
+                },
                 filled = true,
                 onClick = onRedeem
             )
@@ -493,15 +501,25 @@ private fun ActionPill(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = fg, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, null, tint = fg, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = label,
                 color = fg,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.6.sp
+                letterSpacing = 0.2.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
             )
         }
     }

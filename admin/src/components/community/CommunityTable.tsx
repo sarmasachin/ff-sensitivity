@@ -15,6 +15,7 @@ type Props = {
   onFeature: (id: string) => void;
   onHide: (id: string) => void;
   onUnhide: (id: string) => void;
+  onDelete: (id: string) => void;
 };
 
 function StatusPill({ status }: { status: CommunityStatus }) {
@@ -45,6 +46,7 @@ export function CommunityTable({
   onFeature,
   onHide,
   onUnhide,
+  onDelete,
 }: Props) {
   return (
     <div className="overflow-hidden rounded-2xl border border-[#e8eaee] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
@@ -158,13 +160,22 @@ export function CommunityTable({
                         Hide
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => onUnhide(row.id)}
-                        className={`${btn} bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50`}
-                      >
-                        Restore
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onUnhide(row.id)}
+                          className={`${btn} bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50`}
+                        >
+                          Restore
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete(row.id)}
+                          className={`${btn} bg-rose-600 text-white hover:bg-rose-500`}
+                        >
+                          Delete
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>

@@ -73,7 +73,7 @@ export class UserAuthService {
       where: { googleSub },
       update: {
         email,
-        displayName,
+        googleName: displayName,
         photoUrl,
         lastLoginAt: new Date(),
       },
@@ -81,6 +81,7 @@ export class UserAuthService {
         googleSub,
         email,
         displayName,
+        googleName: displayName,
         photoUrl,
         lastLoginAt: new Date(),
       },
@@ -105,7 +106,8 @@ export class UserAuthService {
       },
       {
         secret: this.config.getOrThrow<string>('JWT_USER_SECRET'),
-        expiresIn: 60 * 60 * 24 * 7,
+        // 90d — logout/suspend still revoke via tokenVersion. 7d was kicking daily users out.
+        expiresIn: 60 * 60 * 24 * 90,
       },
     );
 

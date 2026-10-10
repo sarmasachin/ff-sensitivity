@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as fs from 'fs';
 import * as path from 'path';
+import { labelToRedeemDefId } from '../../admin/src/components/redeem/redeem-data';
 
 const API = process.env.API_BASE ?? 'http://127.0.0.1:4000';
 const prisma = new PrismaClient();
@@ -105,6 +106,31 @@ async function main() {
   formInv.includes('enabledCadences.map')
     ? pass('admin_form_dynamic_type_cadence_ui')
     : fail('admin_form_dynamic_type_cadence_ui');
+
+  formDefs.includes('ID (auto)') &&
+  formDefs.includes('readOnly') &&
+  formDefs.includes('labelToRedeemDefId') &&
+  !formDefs.includes('NEW_TYPE id') &&
+  !formDefs.includes('NEW_CADENCE id')
+    ? pass('admin_form_def_id_is_auto')
+    : fail('admin_form_def_id_is_auto');
+
+  labelToRedeemDefId('Play Gift') === 'PLAY_GIFT' &&
+  labelToRedeemDefId('Weekly') === 'WEEKLY' &&
+  labelToRedeemDefId('2x weekend') === 'X2X_WEEKEND'
+    ? pass('label_to_def_id')
+    : fail(
+        'label_to_def_id',
+        `${labelToRedeemDefId('Play Gift')} ${labelToRedeemDefId('2x weekend')}`,
+      );
+
+  const apiSrc = readRepo('admin/src/components/redeem/redeem-api.ts');
+  apiSrc.includes('if (mode === "add") body.mode = "SCRATCH_REWARD"') &&
+  apiSrc.includes('if (mode === "add") body.mode = "SINGLE"') &&
+  !apiSrc.includes('mode: "SCRATCH_REWARD"') &&
+  !apiSrc.includes('mode: "SINGLE"')
+    ? pass('edit_body_omits_mode')
+    : fail('edit_body_omits_mode');
 
   !form.includes('<option value="GOOGLE_PLAY">Play Gift</option>') &&
   !form.includes('<option value="DAILY">Daily</option>') &&
@@ -217,6 +243,19 @@ async function main() {
     ? pass('create_type_rejects_bad_id')
     : fail('create_type_rejects_bad_id', `status=${badType.status}`);
 
+  const autoLabel = `E2E Auto ${stamp}`;
+  const autoId = labelToRedeemDefId(autoLabel);
+  const autoType = await req('POST', '/api/v1/admin/redeem/types', {
+    token: adminTok,
+    body: { id: autoId, label: autoLabel },
+  });
+  autoType.status < 300 && autoType.json?.id === autoId
+    ? pass('create_type_from_auto_id', autoId)
+    : fail(
+        'create_type_from_auto_id',
+        `id=${autoId} status=${autoType.status} ${JSON.stringify(autoType.json).slice(0, 160)}`,
+      );
+
   const createCadence = await req('POST', '/api/v1/admin/redeem/cadences', {
     token: adminTok,
     body: {
@@ -277,6 +316,33 @@ async function main() {
       'create_code_with_dynamic_type_cadence',
       `status=${created.status} ${JSON.stringify(created.json).slice(0, 200)}`,
     );
+  }
+
+  if (codeId) {
+    const withMode = await req('PATCH', `/api/v1/admin/redeem/${codeId}`, {
+      token: adminTok,
+      body: { mode: 'SINGLE', title: `E2E Dynamic ${stamp}` },
+    });
+    withMode.status === 400 &&
+    /mode/i.test(JSON.stringify(withMode.json ?? {}))
+      ? pass('edit_rejects_mode_property')
+      : fail(
+          'edit_rejects_mode_property',
+          `status=${withMode.status} ${JSON.stringify(withMode.json).slice(0, 160)}`,
+        );
+    const noMode = await req('PATCH', `/api/v1/admin/redeem/${codeId}`, {
+      token: adminTok,
+      body: { title: `E2E Dynamic ${stamp}` },
+    });
+    noMode.status === 200 && noMode.json?.title === `E2E Dynamic ${stamp}`
+      ? pass('edit_ok_without_mode')
+      : fail(
+          'edit_ok_without_mode',
+          `status=${noMode.status} ${JSON.stringify(noMode.json).slice(0, 160)}`,
+        );
+  } else {
+    fail('edit_rejects_mode_property', 'no code id');
+    fail('edit_ok_without_mode', 'no code id');
   }
 
   const inUseType = await req(
@@ -363,6 +429,15 @@ async function main() {
   delCadence.status === 200 || delCadence.json?.ok
     ? pass('delete_cadence_after_unused')
     : fail('delete_cadence_after_unused', `status=${delCadence.status}`);
+
+  const delAuto = await req(
+    'DELETE',
+    `/api/v1/admin/redeem/types/${encodeURIComponent(autoId)}`,
+    { token: adminTok },
+  );
+  delAuto.status === 200 || delAuto.json?.ok
+    ? pass('delete_auto_type')
+    : fail('delete_auto_type', `status=${delAuto.status}`);
 
   printSummary();
   await prisma.$disconnect();

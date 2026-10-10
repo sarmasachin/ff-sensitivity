@@ -177,6 +177,11 @@ model User {
   isRestricted   Boolean   @default(false) @map("is_restricted")
   accountNote    String    @default("") @map("account_note")
   // --- End: Users admin live wire (Sachin) ---
+  googleName     String    @default("") @map("google_name")
+  ffUid          String    @default("") @map("ff_uid")
+  playRole       String    @default("") @map("play_role")
+  region         String    @default("")
+  notifyPush     Boolean   @default(true) @map("notify_push")
   // --- Start: App analytics P2 logout (Sachin) ---
   tokenVersion   Int       @default(0) @map("token_version")
   // --- End: App analytics P2 logout (Sachin) ---

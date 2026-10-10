@@ -19,14 +19,14 @@ val localProps = Properties().apply {
 
 android {
     namespace = "com.ffsensitivity.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.ffsensitivity.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 6
-        versionName = "1.0.5"
+        targetSdk = 36
+        versionCode = 8
+        versionName = "1.0.7"
 
         val googleServerClientId = localProps.getProperty("GOOGLE_SERVER_CLIENT_ID", "")
         buildConfigField(

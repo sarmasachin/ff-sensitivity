@@ -14,11 +14,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -33,17 +34,16 @@ import com.ffsensitivity.app.data.remote.AppRemoteGate
 import com.ffsensitivity.app.data.remote.PushInboxBadge
 import com.ffsensitivity.app.data.remote.PushRepository
 import com.ffsensitivity.app.data.remote.ScreenSessionTracker
+import com.ffsensitivity.app.data.remote.SessionExpiry
 import com.ffsensitivity.app.presentation.components.AppDrawerContent
 import com.ffsensitivity.app.presentation.components.AppRemoteGateOverlay
 import com.ffsensitivity.app.presentation.components.OverlayAppDrawer
-import com.ffsensitivity.app.presentation.components.SignOutConfirmDialog
 import com.ffsensitivity.app.presentation.theme.FFSensitivityTheme
 import com.ffsensitivity.app.presentation.theme.VoidBlack
 import com.ffsensitivity.app.push.FfFirebaseMessagingService
 import com.ffsensitivity.app.push.PushDeepLinkBus
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.CrashReporting
-import com.ffsensitivity.app.util.SafeOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,20 +77,31 @@ class MainActivity : ComponentActivity() {
             FFSensitivityTheme {
                 val navController = rememberNavController()
                 val backStack by navController.currentBackStackEntryAsState()
-                val scope = rememberCoroutineScope()
                 val context = LocalContext.current
                 val sessionStore = remember { UserSessionStore(context) }
+                // Cold-start only — do NOT retie to signedIn. Changing startDestination
+                // after Google login recreates the Nav graph and can flash bottom bar
+                // while login is still showing its loading spinner.
+                val startDestination = remember {
+                    val signed = sessionStore.isSignedIn()
+                    val token = sessionStore.accessToken()
+                    if (SessionExpiry.shouldExpireLocally(token, signed)) {
+                        SessionExpiry.notifyExpired()
+                        sessionStore.signOut()
+                        PushInboxBadge.clear()
+                        CrashReporting.clearUser()
+                        "login"
+                    } else if (signed) {
+                        "home"
+                    } else {
+                        "login"
+                    }
+                }
                 var signedIn by remember { mutableStateOf(sessionStore.isSignedIn()) }
                 var showSignOutConfirm by remember { mutableStateOf(false) }
                 var menuOpen by remember { mutableStateOf(false) }
                 val e2eOpenMenu = remember {
                     BuildConfig.DEBUG && intent.getBooleanExtra("e2e_open_menu", false)
-                }
-                // Cold-start only — do NOT retie to signedIn. Changing startDestination
-                // after Google login recreates the Nav graph and can flash bottom bar
-                // while login is still showing its loading spinner.
-                val startDestination = remember {
-                    if (sessionStore.isSignedIn()) "home" else "login"
                 }
                 // Never fall back to startDestination for chrome — null back stack
                 // during a graph swap would wrongly show the bottom bar on login.
@@ -179,6 +190,26 @@ class MainActivity : ComponentActivity() {
                     }.onFailure { AppLog.e("Navigate login failed", it) }
                 }
 
+                fun applySessionExpired() {
+                    if (!sessionStore.isSignedIn() && route == "login") return
+                    sessionStore.signOut()
+                    PushInboxBadge.clear()
+                    CrashReporting.clearUser()
+                    signedIn = false
+                    menuOpen = false
+                    goLogin()
+                }
+
+                val expireAction = rememberUpdatedState { applySessionExpired() }
+                DisposableEffect(Unit) {
+                    SessionExpiry.setHandler { expireAction.value() }
+                    SessionExpiry.checkLocalToken(
+                        sessionStore.accessToken(),
+                        sessionStore.isSignedIn()
+                    )
+                    onDispose { SessionExpiry.setHandler(null) }
+                }
+
                 fun openMenu() {
                     // Overlay drawer — home stays visible (no content slide / black peek).
                     menuOpen = true
@@ -203,41 +234,19 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                if (showSignOutConfirm) {
-                    SignOutConfirmDialog(
-                        onDismiss = { showSignOutConfirm = false },
-                        onConfirm = {
-                            showSignOutConfirm = false
-                            scope.launch {
-                                runCatching {
-                                    // Keep the local session until Nest revokes the
-                                    // JWT, else the old token stays valid for days.
-                                    val revoked = withContext(Dispatchers.IO) {
-                                        screenSessionTracker.checkpoint()?.let {
-                                            AnalyticsRepository.trackScreenVisit(context, it)
-                                        }
-                                        AnalyticsRepository.revokeSession(context)
-                                    }
-                                    if (revoked) {
-                                        sessionStore.signOut()
-                                        PushInboxBadge.clear()
-                                        CrashReporting.clearUser()
-                                        signedIn = false
-                                        goLogin()
-                                    } else {
-                                        SafeOps.toast(
-                                            context,
-                                            "Could not end session. Check your connection and try again."
-                                        )
-                                    }
-                                }.onFailure {
-                                    AppLog.e("Sign out failed", it)
-                                    SafeOps.toast(context, "Could not sign out")
-                                }
-                            }
-                        }
-                    )
-                }
+                MainSignOutDialog(
+                    visible = showSignOutConfirm,
+                    onDismiss = { showSignOutConfirm = false },
+                    onRequestShow = { showSignOutConfirm = true },
+                    sessionStore = sessionStore,
+                    screenSessionTracker = screenSessionTracker,
+                    context = context,
+                    onLocalSignedOut = {
+                        signedIn = false
+                        menuOpen = false
+                        goLogin()
+                    }
+                )
 
                 if (signedIn && remoteGate !is AppRemoteGate.None) {
                     AppRemoteGateOverlay(gate = remoteGate)
@@ -285,7 +294,11 @@ class MainActivity : ComponentActivity() {
                             appVersion = appVersion,
                             activity = this@MainActivity,
                             sessionStore = sessionStore,
-                            onSignedIn = { signedIn = true },
+                            onSignedIn = {
+                                SessionExpiry.reset()
+                                signedIn = true
+                            },
+                            onSessionExpired = { applySessionExpired() },
                             openMenu = { openMenu() },
                             goHome = { goHome() }
                         )
@@ -294,6 +307,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val session = UserSessionStore(this)
+        SessionExpiry.checkLocalToken(session.accessToken(), session.isSignedIn())
     }
 
     override fun onStart() {
@@ -350,24 +369,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-private val ANALYTICS_SCREENS = setOf(
-    "home",
-    "redeem",
-    "redeem_comments",
-    "stylish",
-    "contact",
-    "about",
-    "push_inbox",
-    "scratch_cards",
-    "coin_shop",
-    "share_sensi",
-    "daily_challenge",
-    "device_fetch",
-    "wizard",
-    "results",
-    "compare_sensi",
-    "dpi_result"
-)
-
-private const val SCREEN_CHECKPOINT_MS = 5 * 60 * 1_000L

@@ -86,7 +86,7 @@ internal object RedeemScreenClaim {
                     code = wonCode ?: target.code,
                     serverUnlocked = wonCode != null || target.serverUnlocked,
                     status = RedeemStatus.ACTIVE,
-                    needsAd = true,
+                    needsAd = false,
                     canScratch = false,
                     poolLeft = target.poolLeft?.let { left ->
                         if (wonCode != null) (left - 1).coerceAtLeast(0) else left
@@ -109,18 +109,14 @@ internal object RedeemScreenClaim {
                 }
                 clearError()
                 val toast = if (wonCode != null) {
-                    "+${scratch.coinsGranted} coins · bonus code unlocked"
+                    "Code unlocked"
                 } else {
                     "+${scratch.coinsGranted} coins"
                 }
                 SafeOps.toast(context, toast)
                 ScratchClaimUiResult(
                     ok = true,
-                    message = if (wonCode != null) {
-                        "+${scratch.coinsGranted} coins · code unlocked"
-                    } else {
-                        "+${scratch.coinsGranted} coins"
-                    },
+                    message = toast,
                     revealedCode = wonCode,
                     coinsGranted = scratch.coinsGranted
                 )

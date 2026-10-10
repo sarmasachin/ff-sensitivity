@@ -104,7 +104,8 @@ internal object RedeemScreenScratch {
             )
         }
 
-        // Type B: ad only when server says needsAd (re-scratch / more coins).
+        // Type B: first scratch free; after coins, lock for admin window;
+        // next window requires ad, then coins again.
         if (item.isScratchReward) {
             if (!item.needsAd) {
                 proceed(isBusy)

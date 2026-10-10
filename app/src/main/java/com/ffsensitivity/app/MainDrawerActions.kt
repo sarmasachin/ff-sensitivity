@@ -19,6 +19,16 @@ internal fun handleDrawerAction(
     closeMenu()
     when (action) {
         AppDrawerAction.HOME -> goHome()
+        AppDrawerAction.PROFILE -> {
+            runCatching {
+                navController.navigate("profile") {
+                    launchSingleTop = true
+                }
+            }.onFailure {
+                AppLog.e("Open profile failed", it)
+                SafeOps.toast(context, "Could not open Profile")
+            }
+        }
         AppDrawerAction.NOTIFICATIONS -> {
             runCatching {
                 navController.navigate("push_inbox") {

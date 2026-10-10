@@ -171,6 +171,17 @@ object DailyChallengeStore {
                                 .putLong(KEY_QUIZ_OPEN_UNTIL, 0L)
                         }
                     }
+                    else -> {
+                        // New UTC day: server has no quiz rows for today. Yesterday's
+                        // closed/lock must not hide today's question.
+                        editor.putBoolean(KEY_QUIZ_CLOSED, false)
+                            .putBoolean(KEY_QUIZ_SECOND_UNLOCKED, false)
+                            .putLong(KEY_QUIZ_LOCK_UNTIL, 0L)
+                            .putLong(KEY_QUIZ_OPEN_UNTIL, 0L)
+                        if (prefs.getString(KEY_QUIZ, null) != today) {
+                            editor.remove(KEY_QUIZ)
+                        }
+                    }
                 }
 
                 payload.claimedMilestoneDays?.let { remoteClaimed ->
@@ -617,7 +628,7 @@ object DailyChallengeStore {
         if (quizOk == true) {
             return QuizTiming(QuizUiPhase.DONE_CORRECT, 0L, countsAsDone = true)
         }
-        if (prefs.getBoolean(KEY_QUIZ_CLOSED, false)) {
+        if (quizToday && prefs.getBoolean(KEY_QUIZ_CLOSED, false)) {
             return QuizTiming(QuizUiPhase.CLOSED, 0L, countsAsDone = false)
         }
         val now = System.currentTimeMillis()

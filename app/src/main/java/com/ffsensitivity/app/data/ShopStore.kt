@@ -143,7 +143,7 @@ object ShopStore {
         if (coins < item.priceCoins) return false to "Need ${item.priceCoins - coins} more coins"
         if (item.oneTime && item.id in ShopStoreIo.readOwned(context)) return false to "Already owned"
         val limit = item.stockLimit
-        if (limit != null && buyCount(context, item.id) >= limit) {
+        if (limit != null && item.stockSold >= limit) {
             return false to "Out of stock"
         }
         return true to "OK"
@@ -179,6 +179,9 @@ object ShopStore {
             val paid = remote.getOrElse { err ->
                 AppLog.e("Shop economy purchase failed", err)
                 val api = err as? com.ffsensitivity.app.data.remote.ApiException
+                if (api?.code == "SHOP_OUT_OF_STOCK") {
+                    ShopCatalogCache.markSoldOut(item.id)
+                }
                 if (api?.code == "SHOP_ALREADY_OWNED") {
                     // Reinstall / desync: restore local one-time ownership without charging again.
                     runCatching {
@@ -223,6 +226,7 @@ object ShopStore {
                             ID_BOOST_CHECKIN_PLUS -> refreshBoosts = true
                         }
                     } else {
+                        ShopCatalogCache.recordSale(item.id)
                         val owned = ShopStoreIo.readOwned(context).toMutableSet()
                         if (item.oneTime) owned.add(item.id)
                         val counts = ShopStoreIo.readCounts(context).toMutableMap()

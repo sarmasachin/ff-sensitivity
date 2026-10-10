@@ -12,6 +12,7 @@ export type UserJwtPayload = {
   aud: 'user';
   /** Token version — must match User.tokenVersion or JWT is revoked. */
   tv?: number;
+  exp?: number;
 };
 
 @Injectable()
@@ -22,12 +23,22 @@ export class UserJwtStrategy extends PassportStrategy(Strategy, 'user-jwt') {
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
+      // Check exp in validate() so clients get AUTH_REQUIRED, not Passport's "Unauthorized".
+      ignoreExpiration: true,
       secretOrKey: config.getOrThrow<string>('JWT_USER_SECRET'),
     });
   }
 
   async validate(payload: UserJwtPayload) {
+    const expMs =
+      typeof payload.exp === 'number' ? payload.exp * 1000 : Number.NaN;
+    if (!Number.isFinite(expMs) || Date.now() > expMs + 30_000) {
+      throw new AppError(
+        'AUTH_REQUIRED',
+        'Session expired. Sign in again.',
+        401,
+      );
+    }
     if (payload.aud !== 'user') {
       throw new AppError('AUTH_INVALID', 'Invalid token audience.', 401);
     }

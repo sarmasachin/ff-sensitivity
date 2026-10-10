@@ -89,7 +89,7 @@ fun PushInboxMessageCard(
 ) {
     val title = message.title.trim().ifBlank { "Notification" }
     val body = message.body.trim()
-    val whenLabel = formatPushSentAt(message.sentAt)
+    val whenLabel = formatPushSentAt(message.sentAt, message.sentAtMs)
 
     Row(
         modifier = modifier
@@ -159,8 +159,35 @@ fun PushInboxMessageCard(
     }
 }
 
-/** Prefer API stamp as-is when short; otherwise show a compact fallback. */
-fun formatPushSentAt(raw: String?): String {
+/** Device-local clock from sentAtMs (IST instant). Stamp string is fallback. */
+fun formatPushSentAt(raw: String?, sentAtMs: Long? = null): String {
+    val ms = sentAtMs?.takeIf { it > 0L }
+    if (ms != null) {
+        val now = System.currentTimeMillis()
+        val diff = now - ms
+        if (diff in 0 until 60_000L) return "Just now"
+        if (diff in 60_000L until 3_600_000L) {
+            val mins = (diff / 60_000L).toInt().coerceAtLeast(1)
+            return "$mins min ago"
+        }
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = ms }
+        val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val mi = cal.get(java.util.Calendar.MINUTE)
+        val clock = "%02d:%02d".format(h, mi)
+        val today = java.util.Calendar.getInstance()
+        val sameDay =
+            cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+                cal.get(java.util.Calendar.DAY_OF_YEAR) ==
+                today.get(java.util.Calendar.DAY_OF_YEAR)
+        if (sameDay) return "Today $clock"
+        val months = arrayOf(
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        )
+        val mon = months[cal.get(java.util.Calendar.MONTH)]
+        val day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+        return "$day $mon, $clock"
+    }
     val s = raw?.trim().orEmpty()
     if (s.isBlank()) return ""
     return s.take(32)

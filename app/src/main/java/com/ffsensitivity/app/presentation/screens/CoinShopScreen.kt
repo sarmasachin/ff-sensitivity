@@ -255,7 +255,7 @@ fun CoinShopScreen(
                             "SHOP_BAD_REQUEST" ->
                                 ShopStore.clearPendingRequestId(context, item.id)
                         }
-                        if (code == "SHOP_ALREADY_OWNED") {
+                        if (code == "SHOP_ALREADY_OWNED" || code == "SHOP_OUT_OF_STOCK") {
                             runCatching { applyLocalSnapshot() }
                         }
                         showError(

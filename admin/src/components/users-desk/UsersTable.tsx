@@ -88,6 +88,9 @@ export function UsersTable({
                         <p className="mt-0.5 truncate text-[12px] text-slate-500">
                           {row.email}
                         </p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                          {row.ffUid} · {row.playRole}
+                        </p>
                       </div>
                     </div>
                   </td>

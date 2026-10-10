@@ -32,6 +32,17 @@ object ApiClient {
         .readTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(20, TimeUnit.SECONDS)
         .callTimeout(25, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val req = chain.request()
+            val resp = chain.proceed(req)
+            val hadBearer = req.header("Authorization")?.startsWith("Bearer ") == true
+            SessionExpiry.notifyIfUnauthorized(
+                httpCode = resp.code,
+                requestPath = req.url.encodedPath,
+                hadBearer = hadBearer
+            )
+            resp
+        }
         .build()
 
     fun baseUrl(): String {
@@ -53,15 +64,19 @@ object ApiClient {
         return runCatching {
             val root = JSONObject(body.orEmpty())
             val err = root.optJSONObject("error")
-            val code = err?.optString("code").orEmpty().ifBlank { "HTTP_$httpCode" }
-            val message = err?.optString("message").orEmpty().ifBlank {
-                "Something went wrong. Please try again."
-            }
+            val rawCode = err?.optString("code").orEmpty().ifBlank { "HTTP_$httpCode" }
+            val rawMessage = err?.optString("message").orEmpty()
             val details = err?.optJSONObject("details")?.toString()
+            val (code, message) = normalizeApiError(rawCode, rawMessage, httpCode)
             ApiException(code, message, details)
         }.getOrElse {
             AppLog.e("API error parse failed", it)
-            ApiException("HTTP_$httpCode", "Couldn't reach the server. Try again.")
+            val (code, message) = normalizeApiError("HTTP_$httpCode", "", httpCode)
+            if (code == "AUTH_REQUIRED") {
+                ApiException(code, message)
+            } else {
+                ApiException("HTTP_$httpCode", "Couldn't reach the server. Try again.")
+            }
         }
     }
 
@@ -77,6 +92,17 @@ object ApiClient {
         val b = Request.Builder()
             .url("${baseUrl()}$path")
             .post(jsonBody(body))
+            .header("Content-Type", "application/json")
+        if (!bearer.isNullOrBlank()) {
+            b.header("Authorization", "Bearer $bearer")
+        }
+        return b.build()
+    }
+
+    fun patch(path: String, body: JSONObject, bearer: String?): Request {
+        val b = Request.Builder()
+            .url("${baseUrl()}$path")
+            .patch(jsonBody(body))
             .header("Content-Type", "application/json")
         if (!bearer.isNullOrBlank()) {
             b.header("Authorization", "Bearer $bearer")

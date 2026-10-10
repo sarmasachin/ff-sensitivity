@@ -21,5 +21,7 @@ data class ShopItem(
     val enabled: Boolean = true,
     val oneTime: Boolean = true,
     val stockLimit: Int? = null,
+    /** How many times this item has been bought by any user. */
+    val stockSold: Int = 0,
     val rewardTag: String
 )

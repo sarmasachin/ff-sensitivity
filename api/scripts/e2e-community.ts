@@ -224,16 +224,27 @@ async function main() {
       : fail('PENDING post hidden from public feed');
   }
 
-  // 5) admin login + approve
+  // 5) admin auth (mint JWT — password login is cookie/OTP, not headless)
   const adminEmail = process.env.SUPERADMIN_EMAIL ?? 'sharma.sachinctr@gmail.com';
-  const adminPassword = process.env.SUPERADMIN_PASSWORD ?? '123456';
-  const login = await req('POST', '/api/v1/auth/login', {
-    body: { email: adminEmail, password: adminPassword },
+  const accessSecret = process.env.JWT_ACCESS_SECRET;
+  if (!accessSecret) throw new Error('JWT_ACCESS_SECRET missing');
+
+  const adminRow = await prisma.admin.findFirst({
+    where: {
+      email: adminEmail.trim().toLowerCase(),
+      isActive: true,
+    },
   });
-  const adminToken = login.json?.accessToken as string | undefined;
+  const adminToken = adminRow
+    ? jwt.sign(
+        { sub: adminRow.id, email: adminRow.email, role: adminRow.role },
+        accessSecret,
+        { expiresIn: '1h' },
+      )
+    : undefined;
   adminToken
-    ? pass('admin login for moderation', `HTTP ${login.status}`)
-    : fail('admin login for moderation', `HTTP ${login.status}`);
+    ? pass('admin auth for moderation', 'minted jwt')
+    : fail('admin auth for moderation', 'active admin not found');
 
   if (!adminToken) throw new Error('No admin token');
 
@@ -337,6 +348,63 @@ async function main() {
     !hit
       ? pass('HIDDEN post removed from feed')
       : fail('HIDDEN post removed from feed');
+  }
+
+  // 8b) delete only when hidden
+  {
+    const r = await req('DELETE', `/api/v1/admin/community/posts/${postId}`, {
+      token: adminToken,
+    });
+    r.status >= 200 && r.status < 300 && r.json?.ok === true
+      ? pass('admin delete hidden post works')
+      : fail('admin delete hidden post works', `HTTP ${r.status}`);
+    const list = await req('GET', '/api/v1/admin/community/posts', {
+      token: adminToken,
+    });
+    const gone = Array.isArray(list.json)
+      ? !list.json.some((p: any) => p.id === postId)
+      : false;
+    gone
+      ? pass('deleted post removed from admin queue')
+      : fail('deleted post removed from admin queue');
+    const again = await req('DELETE', `/api/v1/admin/community/posts/${postId}`, {
+      token: adminToken,
+    });
+    again.status === 404
+      ? pass('double delete returns 404')
+      : fail('double delete returns 404', `HTTP ${again.status}`);
+    const delAudit = await prisma.auditLog.count({
+      where: { action: 'community.delete', entity: `community_post:${postId}` },
+    });
+    delAudit > 0
+      ? pass('delete writes audit_logs', `count=${delAudit}`)
+      : fail('delete writes audit_logs');
+  }
+
+  // 8c) delete non-hidden blocked — new post
+  {
+    const created = await req('POST', '/api/v1/community/posts', {
+      token: token1,
+      body: { ...samplePost, name: 'E2E_NoDel', freeFireId: '8222222222' },
+    });
+    const pid = created.json?.id;
+    if (pid) {
+      const userDel = await req('DELETE', `/api/v1/admin/community/posts/${pid}`, {
+        token: token1,
+      });
+      userDel.status === 401
+        ? pass('user JWT blocked on admin delete')
+        : fail('user JWT blocked on admin delete', `HTTP ${userDel.status}`);
+      const r = await req('DELETE', `/api/v1/admin/community/posts/${pid}`, {
+        token: adminToken,
+      });
+      r.status === 400 && r.json?.error?.code === 'COMMUNITY_DELETE_NOT_HIDDEN'
+        ? pass('delete blocked until hidden')
+        : fail('delete blocked until hidden', `HTTP ${r.status}`);
+      await prisma.communityPost.delete({ where: { id: pid } });
+    } else {
+      fail('delete blocked until hidden', 'no post id');
+    }
   }
 
   // 9) report pending blocked — create new pending

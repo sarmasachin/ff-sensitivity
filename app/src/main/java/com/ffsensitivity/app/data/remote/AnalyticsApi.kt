@@ -54,12 +54,15 @@ object AnalyticsRepository {
      * Ends the session on Nest (bumps tokenVersion, records the logout event).
      * Returns true only when the JWT is known dead server-side — the caller
      * must keep the local session until then, otherwise a stolen token stays
-     * usable for the rest of its 7-day lifetime.
+     * usable for the rest of its 90-day lifetime.
      */
     fun revokeSession(context: Context): Boolean {
         val session = UserSessionStore(context)
         val token = session.accessToken()
-        if (token.isBlank()) return true
+        // Blank / expired JWT cannot increment tokenVersion — clearing locally is the
+        // only way out. Calling Nest here returns AUTH_REQUIRED and used to toast
+        // "Could not end session".
+        if (token.isBlank() || SessionExpiry.isJwtExpired(token)) return true
         val installId = DeviceInstallStore.installId(context)
 
         for (attempt in 0 until REVOKE_ATTEMPTS) {
@@ -76,8 +79,8 @@ object AnalyticsRepository {
 
     /** 401 means the server already rejects this JWT — clearing locally is safe. */
     private fun isTokenAlreadyDead(e: Throwable): Boolean {
-        val code = (e as? ApiException)?.code ?: return false
-        return code == "AUTH_REVOKED" || code == "AUTH_INVALID" || code == "HTTP_401"
+        val api = e as? ApiException ?: return false
+        return api.isAuthFailure()
     }
 
     /** Sends only bounded, non-PII screen timing for a registered user install. */

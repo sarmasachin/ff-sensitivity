@@ -13,6 +13,7 @@ import {
   type CommunityFilterKey,
 } from "@/components/community/CommunityToolbar";
 import {
+  deleteCommunityPost,
   fetchCommunityPosts,
   fetchCommunityStats,
   patchCommunityStatus,
@@ -143,6 +144,36 @@ export default function CommunityPage() {
     ? (rows.find((r) => r.id === inspectId) ?? null)
     : null;
 
+  async function deletePost(id: string) {
+    const row = rows.find((r) => r.id === id);
+    if (!row || busyId) return;
+    if (row.status !== "HIDDEN") return;
+    const ok = window.confirm(
+      `Permanently delete “${row.name}” (FF ID ${row.freeFireId})? This cannot be undone.`,
+    );
+    if (!ok) return;
+
+    setBusyId(id);
+    setError(null);
+    try {
+      await deleteCommunityPost(id);
+      setRows((prev) => prev.filter((r) => r.id !== id));
+      setNotice(`Deleted “${row.name}”.`);
+      if (inspectId === id) setInspectId(null);
+      const nextStats = await fetchCommunityStats();
+      setStatsRemote({
+        pending: nextStats.pending,
+        live: nextStats.live,
+        featured: nextStats.featured,
+        flagged: nextStats.flagged,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function setStatus(id: string, status: CommunityStatus, label: string) {
     const row = rows.find((r) => r.id === id);
     if (!row || busyId) return;
@@ -238,6 +269,7 @@ export default function CommunityPage() {
           onUnhide={(id) =>
             void setStatus(id, "PENDING", "Restored to pending")
           }
+          onDelete={(id) => void deletePost(id)}
           footer={
             <CommunityPagination
               page={page}

@@ -145,11 +145,14 @@ object RedeemRepository {
         }
         return RedeemApi.scratch(token, item.id, attemptKey).mapCatching { result ->
             result.coinsRemaining?.let { remaining ->
-                DailyChallengeStore.setCoins(
-                    context,
-                    remaining,
+                val note = if (result.coinsGranted > 0) {
                     "+${result.coinsGranted} coins · ${item.title}"
-                )
+                } else if (!result.code.isNullOrBlank()) {
+                    "Code unlocked · ${item.title}"
+                } else {
+                    item.title
+                }
+                DailyChallengeStore.setCoins(context, remaining, note)
             }
             result
         }

@@ -64,6 +64,124 @@ Admin sets: odds %, streak length, expire policy, gift pool stock, coin reward r
 
 ---
 
+## User account profile (app + admin)
+
+> Alag cheez: upar wala **Profile + attachments** sensi formula wizard hai. Yeh **Google account profile** hai — name, Gmail, device, FF UID.
+
+Abhi: admin **Users** list + right drawer (masked email, 1 device, coins, 7d journey). App me Profile screen nahi — sirf Google name + Sign out.
+
+### 1. Admin — full user page (`/users/[id]`)
+
+List se click → dedicated page (drawer se zyada space). Super admin **poori Gmail** dekh sakta hai (staff ko mask reh sakta hai).
+
+| Block | Admin dekhega |
+|-------|----------------|
+| Identity | Name, full Gmail, Google photo, status, joined, last login, ops note |
+| Devices | Brand/model, Android, install id, app version, last seen, push on/off, blocked; multiple installs |
+| Economy | Coins, streak / last check-in, wallet frozen, claims, ledger, scratch rolls |
+| Usage | Last 7–30d screens + app_open / login / logout / scratch / redeem |
+| Support | Us user ke tickets |
+
+**Mat dikhao:** password (Google login), full FCM token, Google recovery.
+
+Actions (pehle se Users pe hain): Restrict / Suspend / Restore / Delete-after-suspend (Gmail banned).
+
+### 2. App — Profile (drawer se)
+
+Google se auto: name, Gmail (lock), photo.
+
+| User add/edit kare | Kyun |
+|--------------------|------|
+| Display name | In-app naam |
+| Free Fire UID / IGN | Redeem + support |
+| Role (Rush / Sniper / …) | Sensi suggest |
+| Region / server | India, BR, etc. |
+| Notification on/off | Push |
+
+Read-only: coins, streak. Actions: Sign out, Delete account (Play).
+
+**Mat lo:** phone, address, age, password.
+
+App save ↔ Nest ↔ admin page same fields.
+
+### Build order
+
+1. Admin full page + Super Admin unmask Gmail (data pehle se Nest me hai)  
+2. App Profile screen + drawer entry  
+3. FF UID / role / region save + admin pe dikhao  
+
+---
+
+## Auto notify on content update (admin-controlled)
+
+> Abhi Push desk **manual campaign** hai (compose → Send). Yeh **naya**: admin content save kare to users ko **auto FCM** jaaye — **sirf tab** jab checkbox ON ho. Notification ka **text admin edit** kare.
+
+### Admin UI (Push page pe block)
+
+| Control | Kya kare |
+|---------|----------|
+| **Auto notify users** (checkbox) | ON = eligible Save pe push; OFF = silent update, koi ping nahi |
+| **Title** | Tray heading — admin likhe / baad me edit kare |
+| **Body** | Tray text — admin likhe / baad me edit kare |
+| **Open screen** | Tap pe Redeem / Home / Challenge / Names / … |
+| **Save settings** | Checkbox + title + body pehle save; later content Saves **usi text** se bhejein |
+
+Har save pe naya campaign compose nahi. Text **template** hai. User ko jo dikhega woh **yahi title + body** hai.
+
+Default: checkbox **OFF** (galti se blast na ho). Title/body length = existing push limits.
+
+### Flow
+
+```
+Admin Redeem / Names / Challenge / Shop / Scratch / Promos / Copy  →  SAVE
+        ↓
+Content DB me save (pehle jaisa)
+        ↓
+Auto-notify OFF  →  stop (users ko kuch nahi)
+Auto-notify ON   →  FCM send
+        ↓
+Title + body jo admin ne last save kiya
+Audience: All devices with push token (pushEnabled)
+        ↓
+Phone tray + existing Push inbox
+Tap → chosen deep link screen
+```
+
+User kuch extra nahi karega. Device token app open pe pehle se register hota hai.
+
+### Kab bhejna (user-facing content)
+
+| Module | Trigger |
+|--------|---------|
+| Redeem | naya / edit / ACTIVE scratch ya code |
+| Names | naya name pack |
+| Daily challenge | naya quiz / reward |
+| Shop | naya item |
+| Scratch prizes | prize change |
+| Promos / copy | home copy change |
+
+### Kab nahi (spam + galat)
+
+- Users restrict / suspend / note
+- Ads on/off, coin min/max typo, paused/draft
+- Staff, audit, settings, devices
+- Har chhoti field pe ping
+
+### Safety
+
+- **Cooldown:** same module pe **1 auto-push / 60 min** (10 Saves = 1 notification)
+- FCM fail se **content save fail nahi** hona
+- Sirf `pushEnabled` devices
+- Reuse existing FCM + inbox + deep-link allowlist (naya app UI nahi)
+
+### Build order
+
+1. Admin: checkbox + editable title/body + open-screen + save  
+2. Nest: settings store + send-on-eligible-save + cooldown  
+3. E2E: OFF = no send; ON = send admin text; cooldown holds; save still OK if FCM down  
+
+---
+
 ## Suggested order
 
 1. Manual FPS + App Settings (quick user wins)  
@@ -71,6 +189,9 @@ Admin sets: odds %, streak length, expire policy, gift pool stock, coin reward r
 3. Saved presets + Apply guide  
 4. Admin + live redeem + community + push  
 5. Daily Challenge / scratch config (admin Phase 5)  
+6. **Admin full user page** (Gmail + device + economy + journey ek jagah)  
+7. **App Profile** (Google lock + FF UID / role / region + sign out / delete)  
+8. **Auto notify on content update** (checkbox + admin-editable title/body + cooldown)  
 
 ---
 

@@ -122,6 +122,7 @@ export class ShopAdminService {
       }),
     ]);
     const labelById = Object.fromEntries(cats.map((c) => [c.id, c.label]));
+    const sold = await this.salesByItemId();
     return {
       categories: cats.map((c) => ({
         id: c.id,
@@ -138,9 +139,37 @@ export class ShopAdminService {
         enabled: row.enabled,
         oneTime: row.oneTime,
         stockLimit: row.stockLimit,
+        stockSold: sold[row.id] ?? 0,
         rewardTag: row.rewardTag,
       })),
     };
+  }
+
+  /** Purchases of one item across every user. `stockLimit` is a global pool. */
+  async countItemSales(
+    itemId: string,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<number> {
+    return db.walletLedger.count({
+      where: { reason: `shop:${itemId}` },
+    });
+  }
+
+  private async salesByItemId(): Promise<Record<string, number>> {
+    const rows = await this.prisma.walletLedger.groupBy({
+      by: ['reason'],
+      where: { reason: { startsWith: 'shop:' } },
+      _count: { _all: true },
+    });
+    const sold: Record<string, number> = {};
+    for (const row of rows) {
+      const id = row.reason.startsWith('shop:')
+        ? row.reason.slice('shop:'.length)
+        : '';
+      if (!id) continue;
+      sold[id] = row._count._all;
+    }
+    return sold;
   }
 
   async findPurchaseItem(itemId: string) {

@@ -189,6 +189,40 @@ export class CommunityService {
     };
   }
 
+  async adminDeletePost(adminId: string, postId: string) {
+    const before = await this.prisma.communityPost.findUnique({
+      where: { id: postId },
+    });
+    if (!before) {
+      throw new AppError('COMMUNITY_NOT_FOUND', 'Post not found.', 404);
+    }
+    if (before.status !== CommunityPostStatus.HIDDEN) {
+      throw new AppError(
+        'COMMUNITY_DELETE_NOT_HIDDEN',
+        'Only hidden posts can be deleted. Hide the post first.',
+        400,
+      );
+    }
+
+    await this.prisma.communityPost.delete({ where: { id: postId } });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorAdminId: adminId,
+        action: 'community.delete',
+        entity: `community_post:${postId}`,
+        beforeJson: {
+          status: before.status,
+          name: before.name,
+          freeFireId: before.freeFireId,
+        },
+        afterJson: { deleted: true },
+      },
+    });
+
+    return { ok: true, id: postId };
+  }
+
   async adminSetStatus(
     adminId: string,
     postId: string,

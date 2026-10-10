@@ -3,6 +3,8 @@ export type UserAccountStatus = "ACTIVE" | "RESTRICTED" | "SUSPENDED" | "DELETED
 export type UserListRow = {
   id: string;
   displayName: string;
+  googleName: string;
+  photoUrl: string | null;
   email: string;
   googleSubMasked: string;
   status: UserAccountStatus;
@@ -14,9 +16,13 @@ export type UserListRow = {
   deviceLabel: string;
   appVersion: string;
   coinBalance: number;
+  streakDays: number;
   claimsCount: number;
   redeemUnlocks: number;
+  ffUid: string;
+  playRole: string;
   regionLabel: string;
+  notifyPush: boolean;
   note: string;
 };
 

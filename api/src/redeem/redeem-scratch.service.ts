@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
   Prisma,
-  RedeemCodeStatus,
   RedeemMode,
   RedeemSecretStatus,
 } from '@prisma/client';
@@ -12,22 +11,27 @@ import { maskRedeemCode } from './redeem-mask';
 import {
   REDEEM_SCRATCH_SAFE_TIP,
   assertScratchAttemptKey,
+  isScratchCooldownActive,
   rollScratchCoins,
-  scratchWindowIndex,
+  scratchWindowRange,
+  shouldAwardScratchCode,
 } from './redeem-scratch-math';
+import { assertRedeemSeat, assertScratchCardOpen } from './redeem-scratch-guards';
+import { RedeemScratchPassService } from './redeem-scratch-pass.service';
 
 @Injectable()
 export class RedeemScratchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly analytics: AnalyticsService,
+    private readonly pass: RedeemScratchPassService,
   ) {}
 
   static readonly SAFE_TIP = REDEEM_SCRATCH_SAFE_TIP;
 
   async scratch(userId: string, redeemCodeId: string, attemptKeyRaw: string) {
     const attemptKey = assertScratchAttemptKey(attemptKeyRaw);
-    await this.assertSeat(userId);
+    await assertRedeemSeat(this.prisma, userId);
 
     const prior = await this.prisma.redeemScratchRoll.findUnique({
       where: {
@@ -61,18 +65,43 @@ export class RedeemScratchService {
             409,
           );
         }
-        this.assertScratchCardOpen(code, new Date());
-
-        const pass = await tx.redeemScratchPass.findUnique({
-          where: {
-            userId_redeemCodeId: { userId, redeemCodeId },
-          },
+        const now = new Date();
+        assertScratchCardOpen(code, now);
+        const window = scratchWindowRange(
+          code.startsAt ?? code.createdAt,
+          code.windowMinutes,
+          now,
+        );
+        if (!window) {
+          throw new AppError(
+            'REDEEM_NOT_STARTED',
+            'This scratch card has not started yet.',
+            409,
+          );
+        }
+        const last = await tx.redeemScratchRoll.findFirst({
+          where: { userId, redeemCodeId },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
         });
-        const allowed = pass?.allowedAttempts ?? 1;
-        const used = await tx.redeemScratchRoll.count({
+        if (
+          last &&
+          isScratchCooldownActive(last.createdAt, code.windowMinutes, now)
+        ) {
+          throw new AppError(
+            'REDEEM_WINDOW_DONE',
+            'Already scratched this round. Wait for the next window.',
+            409,
+          );
+        }
+        const totalUsed = await tx.redeemScratchRoll.count({
           where: { userId, redeemCodeId },
         });
-        if (used >= allowed) {
+        const pass = await tx.redeemScratchPass.findUnique({
+          where: { userId_redeemCodeId: { userId, redeemCodeId } },
+        });
+        const allowed = pass?.allowedAttempts ?? 1;
+        if (totalUsed >= allowed) {
           throw new AppError(
             'REDEEM_NEED_AD',
             'Watch an ad to scratch again and earn more coins.',
@@ -80,32 +109,8 @@ export class RedeemScratchService {
           );
         }
 
-        const min = code.coinRewardMin ?? 5;
-        const max = code.coinRewardMax ?? Math.max(min, 20);
-        const coinsGranted = rollScratchCoins(min, max);
-
-        const updatedUser = await tx.user.update({
-          where: { id: userId },
-          data: { coins: { increment: coinsGranted } },
-          select: { coins: true },
-        });
-        await tx.walletLedger.create({
-          data: {
-            userId,
-            delta: coinsGranted,
-            balanceAfter: updatedUser.coins,
-            reason: 'earn:redeem_scratch',
-            idempotencyKey: `earn:redeem_scratch:${userId}:${redeemCodeId}:${attemptKey}`,
-          },
-        });
-
         let wonSecret: string | null = null;
-        const startsAt = code.startsAt ?? code.createdAt;
-        const wIdx = scratchWindowIndex(
-          startsAt,
-          code.windowMinutes,
-          new Date(),
-        );
+        const wIdx = window.index;
         if (wIdx >= 0) {
           const alreadyWon = await tx.redeemScratchRoll.findFirst({
             where: {
@@ -131,7 +136,23 @@ export class RedeemScratchService {
                 },
                 orderBy: { createdAt: 'asc' },
               });
-              if (unused) {
+              const scratchesInWindow = await tx.redeemScratchRoll.count({
+                where: {
+                  redeemCodeId,
+                  createdAt: { gte: window.start, lt: window.end },
+                },
+              });
+              const remainingSlots =
+                Math.max(1, code.codesPerWindow) - awardedInWindow;
+              const remainingMs = window.end.getTime() - now.getTime();
+              if (
+                unused &&
+                shouldAwardScratchCode({
+                  remainingSlots,
+                  scratchesInWindow,
+                  remainingMs,
+                })
+              ) {
                 const took = await tx.redeemCodeSecret.updateMany({
                   where: {
                     id: unused.id,
@@ -173,6 +194,34 @@ export class RedeemScratchService {
           }
         }
 
+        const min = code.coinRewardMin ?? 5;
+        const max = code.coinRewardMax ?? Math.max(min, 20);
+        const coinsGranted = wonSecret ? 0 : rollScratchCoins(min, max);
+        let coinsRemaining: number;
+        if (coinsGranted > 0) {
+          const updatedUser = await tx.user.update({
+            where: { id: userId },
+            data: { coins: { increment: coinsGranted } },
+            select: { coins: true },
+          });
+          await tx.walletLedger.create({
+            data: {
+              userId,
+              delta: coinsGranted,
+              balanceAfter: updatedUser.coins,
+              reason: 'earn:redeem_scratch',
+              idempotencyKey: `earn:redeem_scratch:${userId}:${redeemCodeId}:${attemptKey}`,
+            },
+          });
+          coinsRemaining = updatedUser.coins;
+        } else {
+          const held = await tx.user.findUniqueOrThrow({
+            where: { id: userId },
+            select: { coins: true },
+          });
+          coinsRemaining = held.coins;
+        }
+
         const roll = await tx.redeemScratchRoll.create({
           data: {
             userId,
@@ -183,7 +232,7 @@ export class RedeemScratchService {
           },
         });
 
-        return this.toScratchResult(roll, updatedUser.coins, false);
+        return this.toScratchResult(roll, coinsRemaining, false);
       });
 
       this.analytics.trackSafe({
@@ -222,146 +271,12 @@ export class RedeemScratchService {
     }
   }
 
-  async adUnlock(userId: string, redeemCodeId: string) {
-    await this.assertSeat(userId);
-
-    const code = await this.prisma.redeemCode.findUnique({
-      where: { id: redeemCodeId },
-    });
-    if (!code) {
-      throw new AppError('REDEEM_NOT_FOUND', 'Card not found.', 404);
-    }
-    if (code.mode !== RedeemMode.SCRATCH_REWARD) {
-      throw new AppError(
-        'REDEEM_WRONG_MODE',
-        'This card is not a scratch-reward card.',
-        409,
-      );
-    }
-    this.assertScratchCardOpen(code, new Date());
-
-    const used = await this.prisma.redeemScratchRoll.count({
-      where: { userId, redeemCodeId },
-    });
-    const pass = await this.prisma.redeemScratchPass.findUnique({
-      where: { userId_redeemCodeId: { userId, redeemCodeId } },
-    });
-    const allowed = pass?.allowedAttempts ?? 1;
-    if (used < allowed) {
-      return {
-        ok: true,
-        alreadyAllowed: true,
-        allowedAttempts: allowed,
-        usedAttempts: used,
-        needsAd: false,
-      };
-    }
-
-    const next = await this.prisma.redeemScratchPass.upsert({
-      where: { userId_redeemCodeId: { userId, redeemCodeId } },
-      create: {
-        userId,
-        redeemCodeId,
-        allowedAttempts: used + 1,
-      },
-      update: { allowedAttempts: { increment: 1 } },
-    });
-
-    this.analytics.trackSafe({
-      name: 'redeem_scratch_ad_unlock',
-      userId,
-      props: { redeem_id: redeemCodeId.slice(0, 40) },
-    });
-
-    return {
-      ok: true,
-      alreadyAllowed: false,
-      allowedAttempts: next.allowedAttempts,
-      usedAttempts: used,
-      needsAd: false,
-    };
+  adUnlock(userId: string, redeemCodeId: string) {
+    return this.pass.adUnlock(userId, redeemCodeId);
   }
 
-  async scratchMeta(userId: string, redeemCodeId: string) {
-    const [used, pass] = await Promise.all([
-      this.prisma.redeemScratchRoll.count({
-        where: { userId, redeemCodeId },
-      }),
-      this.prisma.redeemScratchPass.findUnique({
-        where: { userId_redeemCodeId: { userId, redeemCodeId } },
-      }),
-    ]);
-    const allowed = pass?.allowedAttempts ?? 1;
-    return {
-      usedAttempts: used,
-      allowedAttempts: allowed,
-      needsAd: used >= allowed,
-      canScratch: used < allowed,
-    };
-  }
-
-  private assertScratchCardOpen(
-    code: {
-      status: RedeemCodeStatus;
-      startsAt: Date | null;
-      endsAt: Date | null;
-      expiresAt: Date | null;
-      createdAt: Date;
-    },
-    now: Date,
-  ) {
-    if (code.status === RedeemCodeStatus.PAUSED) {
-      throw new AppError(
-        'REDEEM_PAUSED',
-        'This scratch card is paused right now.',
-        409,
-      );
-    }
-    if (
-      code.status === RedeemCodeStatus.EXPIRED ||
-      (code.expiresAt != null && code.expiresAt.getTime() <= now.getTime())
-    ) {
-      throw new AppError('REDEEM_EXPIRED', 'This scratch card has ended.', 409);
-    }
-    if (code.status !== RedeemCodeStatus.ACTIVE) {
-      throw new AppError(
-        'REDEEM_UNAVAILABLE',
-        'This scratch card is not available.',
-        409,
-      );
-    }
-    const start = code.startsAt ?? code.createdAt;
-    if (now.getTime() < start.getTime()) {
-      throw new AppError(
-        'REDEEM_NOT_STARTED',
-        'This scratch card has not started yet.',
-        409,
-      );
-    }
-    if (code.endsAt != null && now.getTime() > code.endsAt.getTime()) {
-      throw new AppError(
-        'REDEEM_SCHEDULE_ENDED',
-        'This scratch schedule has ended.',
-        409,
-      );
-    }
-  }
-
-  private async assertSeat(userId: string) {
-    const seat = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { isActive: true, isRestricted: true },
-    });
-    if (!seat || !seat.isActive) {
-      throw new AppError('AUTH_SUSPENDED', 'This account is suspended.', 403);
-    }
-    if (seat.isRestricted) {
-      throw new AppError(
-        'USER_RESTRICTED',
-        'Redeem is paused while this account is restricted.',
-        403,
-      );
-    }
+  scratchMeta(userId: string, redeemCodeId: string) {
+    return this.pass.scratchMeta(userId, redeemCodeId);
   }
 
   private toScratchResult(

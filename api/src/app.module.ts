@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 // --- Start: Redeem live wire (Sachin) ---
 import { UserAuthModule } from './user-auth/user-auth.module';
+import { UserProfileModule } from './user-profile/user-profile.module';
 import { RedeemModule } from './redeem/redeem.module';
 // --- End: Redeem live wire (Sachin) ---
 // --- Start: Economy live wire (Sachin) ---
@@ -81,6 +82,7 @@ import { SettingsAdminModule } from './settings/settings.module';
     AuthModule,
     // --- Start: Redeem live wire (Sachin) ---
     UserAuthModule,
+    UserProfileModule,
     RedeemModule,
     // --- End: Redeem live wire (Sachin) ---
     // --- Start: Economy live wire (Sachin) ---

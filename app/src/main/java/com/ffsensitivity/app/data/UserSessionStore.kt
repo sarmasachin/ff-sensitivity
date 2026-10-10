@@ -25,6 +25,10 @@ class UserSessionStore(context: Context) {
 
     fun displayName(): String = prefs.getString(KEY_NAME, "").orEmpty()
 
+    fun rename(displayName: String) {
+        prefs.edit().putString(KEY_NAME, displayName.trim()).apply()
+    }
+
     fun email(): String = prefs.getString(KEY_EMAIL, "").orEmpty()
 
     fun idToken(): String = prefs.getString(KEY_ID_TOKEN, "").orEmpty()

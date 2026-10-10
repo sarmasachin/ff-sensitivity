@@ -31,10 +31,7 @@ import com.ffsensitivity.app.data.AdBonusAdConfig
 import com.ffsensitivity.app.data.CheckInAdConfig
 import com.ffsensitivity.app.data.CheckInAdStore
 import com.ffsensitivity.app.data.DailyChallengeStore
-import com.ffsensitivity.app.data.QuizAdConfig
 import com.ffsensitivity.app.data.QuizAdStore
-import com.ffsensitivity.app.data.SecondChanceAdConfig
-import com.ffsensitivity.app.data.SecondChanceAdStore
 import com.ffsensitivity.app.data.QuizUiPhase
 import com.ffsensitivity.app.data.ShopStore
 import com.ffsensitivity.app.data.remote.ChallengeRemoteCache
@@ -48,7 +45,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 @Composable
 fun DailyChallengeTodayTab(
@@ -56,28 +52,34 @@ fun DailyChallengeTodayTab(
     onSnapshot: (DailyChallengeStore.Snapshot) -> Unit,
     onError: (ChallengeUiError) -> Unit,
     onClearError: () -> Unit,
+    quizSyncGen: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var question by remember {
-        mutableStateOf(
-            ChallengeRemoteCache.todayQuestion
-                ?: com.ffsensitivity.app.data.DailyQuizQuestion(
-                    id = "loading",
-                    question = "Loading today’s quiz…",
-                    options = listOf("…", "…", "…", "…"),
-                    correctIndex = -1
-                )
-        )
+        mutableStateOf(cachedReadyQuiz() ?: quizPlaceholderQuestion())
     }
-    LaunchedEffect(Unit) {
+    fun applyCachedQuiz() {
+        val cached = cachedReadyQuiz()
+        if (cached != null) {
+            question = cached
+        } else if (!ChallengeRemoteCache.isFreshToday() && quizQuestionReady(question.id)) {
+            question = quizPlaceholderQuestion()
+        }
+    }
+    LaunchedEffect(quizSyncGen) {
+        applyCachedQuiz()
+        if (cachedReadyQuiz() != null && quizSyncGen > 0) {
+            return@LaunchedEffect
+        }
         val result = withContext(Dispatchers.IO) {
             ChallengeRepository.syncToday(context)
         }
         result.onSuccess { payload ->
             payload.question?.let { question = it }
-            if (payload.question == null) {
+            applyCachedQuiz()
+            if (payload.question == null && !quizQuestionReady(question.id)) {
                 onError(
                     ChallengeUiError(
                         code = "CHALLENGE_NO_QUIZ",
@@ -89,20 +91,10 @@ fun DailyChallengeTodayTab(
             }
         }.onFailure {
             AppLog.e("Challenge sync on today tab failed", it)
-            ChallengeRemoteCache.todayQuestion?.let { question = it }
-            if (ChallengeRemoteCache.todayQuestion == null) {
-                onError(
-                    ChallengeUiError(
-                        code = "CHALLENGE_SYNC_FAILED",
-                        title = "Couldn’t load quiz",
-                        message = "Check connection and try again.",
-                        retryKind = ChallengeRetryKind.REFRESH_SNAPSHOT
-                    )
-                )
-            }
+            applyCachedQuiz()
+            challengeLoadError(it, quizQuestionReady(question.id))?.let(onError)
         }
     }
-    val quizOptions = remember(question) { question.options }
     var selectedOption by remember { mutableIntStateOf(-1) }
     var busy by remember { mutableStateOf(false) }
     var quizAdPassTick by remember { mutableIntStateOf(0) }
@@ -207,13 +199,7 @@ fun DailyChallengeTodayTab(
                 }
                 else -> {
                     onSnapshot(result.snapshot)
-                    onError(
-                        ChallengeUiError(
-                            code = failCode,
-                            title = failTitle,
-                            message = result.message.ifBlank { "Action was declined." }
-                        )
-                    )
+                    onError(challengeActionError(failCode, failTitle, result.message))
                 }
             }
         }
@@ -309,142 +295,26 @@ fun DailyChallengeTodayTab(
         )
         Spacer(modifier = Modifier.height(14.dp))
 
-        val quizCanSubmit = (
-            snapshot.quizPhase == QuizUiPhase.AVAILABLE ||
-                snapshot.quizPhase == QuizUiPhase.OPEN
-            ) &&
-            !busy &&
-            selectedOption in quizOptions.indices &&
-            quizOptions.size >= 2
-        val quizAwaitingAd = snapshot.quizPhase == QuizUiPhase.AWAITING_AD
-        val needsQuizAd = remember(snapshot.quizPhase, busy, quizAdPassTick) {
-            (snapshot.quizPhase == QuizUiPhase.AVAILABLE ||
-                snapshot.quizPhase == QuizUiPhase.OPEN) &&
-                QuizAdStore.needsAd(context)
-        }
-        val needsSecondChanceAd = remember(quizAwaitingAd, secondChanceAdPassTick) {
-            quizAwaitingAd && SecondChanceAdStore.needsAd(context)
-        }
-        DailyChallengeQuizCard(
-            question = question.question,
-            options = quizOptions,
+        DailyChallengeTodayQuizSection(
+            context = context,
+            scope = scope,
+            snapshot = snapshot,
+            question = question,
+            quizDouble = quizDouble,
             selectedOption = selectedOption,
-            onSelect = {
-                if (
-                    snapshot.quizPhase != QuizUiPhase.AVAILABLE &&
-                    snapshot.quizPhase != QuizUiPhase.OPEN
-                ) {
-                    return@DailyChallengeQuizCard
-                }
-                if (!busy) {
-                    onClearError()
-                    selectedOption = it
-                }
-            },
-            phase = snapshot.quizPhase,
-            countdownEndsAtMs = snapshot.quizCountdownEndsAtMs,
-            quizBoostReady = quizDouble > 0,
-            actionEnabled = if (quizAwaitingAd) !busy else quizCanSubmit,
-            submitLabel = when {
-                quizAwaitingAd && busy -> "Watch ad…"
-                quizAwaitingAd && needsSecondChanceAd -> SecondChanceAdConfig.buttonLabel
-                quizAwaitingAd -> "Unlock New Question"
-                busy && needsQuizAd -> "Watch ad…"
-                needsQuizAd -> QuizAdConfig.buttonLabel
-                else -> "Submit Answer"
-            },
-            onSubmit = {
-                if (quizAwaitingAd) {
-                    DailyChallengeSecondChanceGate.run(
-                        context = context,
-                        activity = context.findActivity(),
-                        busy = busy,
-                        scope = scope,
-                        setBusy = { busy = it },
-                        onClearError = onClearError,
-                        onError = onError,
-                        onQuestion = { q ->
-                            question = q
-                            selectedOption = -1
-                        },
-                        onSnapshot = onSnapshot,
-                        onPassTick = { secondChanceAdPassTick += 1 }
-                    )
-                    return@DailyChallengeQuizCard
-                }
-                if (selectedOption !in quizOptions.indices) {
-                    onError(
-                        ChallengeUiError(
-                            code = "CHALLENGE_QUIZ_VALIDATION",
-                            title = "Select an option",
-                            message = "Choose an answer before submitting the quiz."
-                        )
-                    )
-                    return@DailyChallengeQuizCard
-                }
-                fun doSubmit() {
-                    runAction("CHALLENGE_QUIZ_FAILED", "Quiz submit failed") {
-                        if (question.id.isBlank() || question.id == "loading") {
-                            DailyChallengeStore.Result(
-                                false,
-                                "Quiz not loaded yet. Reopen Daily Challenge.",
-                                DailyChallengeStore.snapshot(context)
-                            )
-                        } else {
-                            DailyChallengeStore.submitQuiz(context, question.id, selectedOption)
-                        }
-                    }
-                }
-                if (!QuizAdStore.needsAd(context)) {
-                    doSubmit()
-                    return@DailyChallengeQuizCard
-                }
-                val activity = context.findActivity()
-                if (activity == null) {
-                    onError(
-                        ChallengeUiError(
-                            code = "CHALLENGE_QUIZ_AD_NO_ACTIVITY",
-                            title = "Couldn’t show ad",
-                            message = "Restart the app and try again.",
-                            retryKind = ChallengeRetryKind.QUIZ
-                        )
-                    )
-                    return@DailyChallengeQuizCard
-                }
-                if (busy) {
-                    onError(
-                        ChallengeUiError(
-                            code = "CHALLENGE_BUSY",
-                            title = "Please wait",
-                            message = "Another action is already in progress."
-                        )
-                    )
-                    return@DailyChallengeQuizCard
-                }
-                onClearError()
-                busy = true
-                QuizInterstitialAds.show(
-                    activity = activity,
-                    onCompleted = {
-                        QuizAdStore.markShown(context)
-                        quizAdPassTick += 1
-                        busy = false
-                        doSubmit()
-                    },
-                    onNotCompleted = { message ->
-                        busy = false
-                        onError(
-                            ChallengeUiError(
-                                code = "CHALLENGE_QUIZ_AD_REQUIRED",
-                                title = "Ad required",
-                                message = message,
-                                retryKind = ChallengeRetryKind.QUIZ
-                            )
-                        )
-                    },
-                    incompleteMessage = QuizAdConfig.incompleteMessage
-                )
-            }
+            busy = busy,
+            quizAdPassTick = quizAdPassTick,
+            secondChanceAdPassTick = secondChanceAdPassTick,
+            applyCachedQuiz = { applyCachedQuiz() },
+            onSelectOption = { selectedOption = it },
+            onQuestion = { question = it },
+            onQuizAdPassTick = { quizAdPassTick += 1 },
+            onSecondChancePassTick = { secondChanceAdPassTick += 1 },
+            setBusy = { busy = it },
+            runAction = { code, title, block -> runAction(code, title, block) },
+            onError = onError,
+            onClearError = onClearError,
+            onSnapshot = onSnapshot
         )
         Spacer(modifier = Modifier.height(14.dp))
 
@@ -482,24 +352,5 @@ fun DailyChallengeTodayTab(
             }
         )
         Spacer(modifier = Modifier.height(28.dp))
-    }
-}
-
-private fun formatAdCooldown(ms: Long): String {
-    val totalMin = ((ms + 59_999L) / 60_000L).coerceAtLeast(0L)
-    val hours = totalMin / 60L
-    val mins = totalMin % 60L
-    return when {
-        hours <= 0L && mins <= 0L -> "a moment"
-        hours <= 0L -> if (mins == 1L) "1 min" else "$mins mins"
-        mins <= 0L -> if (hours == 1L) "1 hour" else "$hours hours"
-        else -> String.format(
-            Locale.US,
-            "%d hour%s %d min%s",
-            hours,
-            if (hours == 1L) "" else "s",
-            mins,
-            if (mins == 1L) "" else "s"
-        )
     }
 }

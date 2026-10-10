@@ -1,5 +1,5 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { UserAuthService } from './user-auth.service';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { UserLogoutDto } from './dto/user-logout.dto';
@@ -19,8 +19,9 @@ export class UserAuthController {
 
   // --- Start: App analytics P2 logout (Sachin) ---
   @Post('logout')
+  @SkipThrottle()
   @UseGuards(UserJwtAuthGuard)
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
   logout(@CurrentUser() user: AuthUser, @Body() dto: UserLogoutDto) {
     return this.userAuth.logout(user.id, dto.installId);
   }

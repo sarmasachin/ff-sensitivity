@@ -17,6 +17,7 @@ export type PushCampaignRow = {
   status: PushStatus;
   scheduledAt: string | null;
   sentAt: string | null;
+  sentAtMs?: number | null;
   delivered: number;
   failed: number;
   createdBy: string;

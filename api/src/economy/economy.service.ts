@@ -102,20 +102,13 @@ export class EconomyService {
       }
     }
 
-    if (item.stockLimit != null) {
-      const buys = await this.prisma.walletLedger.count({
-        where: { userId, reason: `shop:${item.id}` },
-      });
-      if (buys >= item.stockLimit) {
-        throw new AppError('SHOP_OUT_OF_STOCK', 'Out of stock.', 409);
-      }
-    }
-
     const idempotencyKey = item.oneTime
       ? `${buyKeyBase}:once`
       : `${buyKeyBase}:req:${safeReq}`;
 
     return this.prisma.$transaction(async (tx) => {
+      // Serialize buyers of this item so two users cannot take the last unit.
+      await tx.$queryRaw`SELECT id FROM shop_items WHERE id = ${item.id} FOR UPDATE`;
       const existing = await tx.walletLedger.findUnique({
         where: { idempotencyKey },
       });
@@ -125,6 +118,13 @@ export class EconomyService {
           itemId: item.id,
           alreadyApplied: true,
         };
+      }
+
+      if (item.stockLimit != null) {
+        const buys = await this.shop.countItemSales(item.id, tx);
+        if (buys >= item.stockLimit) {
+          throw new AppError('SHOP_OUT_OF_STOCK', 'Out of stock.', 409);
+        }
       }
 
       const paid = await tx.user.updateMany({

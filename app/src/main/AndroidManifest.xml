@@ -48,6 +48,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:enableOnBackInvokedCallback="true"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.FFSensitivity">
             <intent-filter>

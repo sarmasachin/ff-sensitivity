@@ -20,6 +20,24 @@ object ShopCatalogCache {
 
     fun findById(id: String): ShopItem? = items().firstOrNull { it.id == id }
 
+    /** This device just bought one unit — other sessions learn it from the next catalog fetch. */
+    fun recordSale(itemId: String) {
+        remoteItems = remoteItems.map { item ->
+            if (item.id == itemId) item.copy(stockSold = item.stockSold + 1) else item
+        }
+    }
+
+    fun markSoldOut(itemId: String) {
+        remoteItems = remoteItems.map { item ->
+            if (item.id != itemId) item
+            else {
+                val limit = item.stockLimit
+                if (limit == null) item
+                else item.copy(stockSold = maxOf(item.stockSold, limit))
+            }
+        }
+    }
+
     fun applyRemote(
         rows: List<ShopCatalogRemoteItem>,
         categories: List<Pair<String, String>> = emptyList()
@@ -39,6 +57,7 @@ object ShopCatalogCache {
                     enabled = row.enabled,
                     oneTime = row.oneTime,
                     stockLimit = row.stockLimit,
+                    stockSold = row.stockSold.coerceAtLeast(0),
                     rewardTag = row.rewardTag.trim().ifBlank { "ITEM" }
                 )
             }

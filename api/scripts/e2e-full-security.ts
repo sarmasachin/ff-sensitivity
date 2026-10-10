@@ -5,6 +5,10 @@
 import { PrismaClient } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const BASE = process.env.API_BASE ?? 'http://127.0.0.1:4000';
 const SECRET =
@@ -86,6 +90,24 @@ async function main() {
       'wallet rejects wrong audience',
       r.status === 401,
       `status=${r.status} code=${r.json?.error?.code}`,
+    );
+  }
+  {
+    const expired = jwt.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        aud: 'user',
+        tv: 0,
+        exp: Math.floor(Date.now() / 1000) - 120,
+      },
+      SECRET,
+    );
+    const r = await http('GET', '/api/v1/economy/wallet', { token: expired });
+    note(
+      'expired JWT asks for sign-in, not Unauthorized',
+      r.status === 401 && r.json?.error?.code === 'AUTH_REQUIRED',
+      `status=${r.status} code=${r.json?.error?.code} msg=${r.json?.error?.message}`,
     );
   }
   {

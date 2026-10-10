@@ -50,6 +50,7 @@ internal fun MainNavHost(
     activity: ComponentActivity,
     sessionStore: UserSessionStore,
     onSignedIn: () -> Unit,
+    onSessionExpired: () -> Unit,
     openMenu: () -> Unit,
     goHome: () -> Unit
 ) {
@@ -91,10 +92,15 @@ internal fun MainNavHost(
                 }
             }
             LoginScreen(
+                initialMessage = if (com.ffsensitivity.app.data.remote.SessionExpiry.wasForced()) {
+                    com.ffsensitivity.app.data.remote.SessionExpiry.LOGIN_MESSAGE
+                } else {
+                    null
+                },
                 onContinueWithGoogle = { google, session ->
                     runCatching {
                         sessionStore.signInLocal(
-                            displayName = google.displayName,
+                            displayName = session.displayName.ifBlank { google.displayName },
                             email = google.email,
                             idToken = google.idToken,
                             // --- Start: Redeem live wire (Sachin) ---
@@ -299,6 +305,7 @@ internal fun MainNavHost(
                 }
             )
         }
+        profileDestination(navController, padding)
         composable("about") {
             AboutScreen(
                 contentPadding = padding,
@@ -380,12 +387,10 @@ internal fun MainNavHost(
                 },
                 onRequireSignIn = {
                     runCatching {
-                        navController.navigate("login") {
-                            launchSingleTop = true
-                        }
+                        onSessionExpired()
                         true
                     }.getOrElse {
-                        AppLog.e("Coin shop open login failed", it)
+                        AppLog.e("Coin shop session expired nav failed", it)
                         false
                     }
                 }
@@ -405,12 +410,10 @@ internal fun MainNavHost(
                 },
                 onRequireSignIn = {
                     runCatching {
-                        navController.navigate("login") {
-                            launchSingleTop = true
-                        }
+                        onSessionExpired()
                         true
                     }.getOrElse {
-                        AppLog.e("Share sensi open login failed", it)
+                        AppLog.e("Share sensi session expired nav failed", it)
                         false
                     }
                 }
@@ -430,12 +433,10 @@ internal fun MainNavHost(
                 },
                 onRequireSignIn = {
                     runCatching {
-                        navController.navigate("login") {
-                            launchSingleTop = true
-                        }
+                        onSessionExpired()
                         true
                     }.getOrElse {
-                        AppLog.e("Daily challenge open login failed", it)
+                        AppLog.e("Daily challenge session expired nav failed", it)
                         false
                     }
                 }

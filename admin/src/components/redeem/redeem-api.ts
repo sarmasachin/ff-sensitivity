@@ -143,7 +143,6 @@ export function formToApiBody(
       return { error: "Codes per window must be at least 1." };
     }
     const body: Record<string, unknown> = {
-      mode: "SCRATCH_REWARD",
       title,
       type: values.type,
       valueLabel,
@@ -157,6 +156,7 @@ export function formToApiBody(
       tip: values.tip.trim() || SAFE_SCRATCH_TIP,
       redeemUrl: values.redeemUrl.trim() || "https://play.google.com/redeem",
     };
+    if (mode === "add") body.mode = "SCRATCH_REWARD";
     const startsAt = localToIso(values.startsAtLocal);
     const endsAt = localToIso(values.endsAtLocal);
     if (startsAt) body.startsAt = startsAt;
@@ -186,7 +186,6 @@ export function formToApiBody(
     return { error: "Coin cost must be a valid number." };
   }
   const body: Record<string, unknown> = {
-    mode: "SINGLE",
     title,
     type: values.type,
     valueLabel,
@@ -198,6 +197,7 @@ export function formToApiBody(
     tip: values.tip.trim() || "First Come, First Serve!",
     redeemUrl: values.redeemUrl.trim() || "https://play.google.com/redeem",
   };
+  if (mode === "add") body.mode = "SINGLE";
   if (mode === "add" || secret) body.codeSecret = secret;
   return body;
 }

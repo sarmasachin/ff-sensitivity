@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.MonetizationOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -101,12 +102,12 @@ fun RedeemScratchCardDialog(
     var claimOk by remember { mutableStateOf(false) }
     var claimError by remember { mutableStateOf<String?>(null) }
     var unlockedCode by remember { mutableStateOf<String?>(null) }
+    var unlockedCoins by remember { mutableIntStateOf(0) }
     var revealPreview by remember { mutableStateOf(ScratchRevealOutcome.PENDING) }
     val foilAlpha = remember { Animatable(1f) }
     val foilAlphaValue = foilAlpha.value
     val scope = rememberCoroutineScope()
     val canDismiss = !unlockInFlight
-    val displayCode = unlockedCode?.takeIf { it.isNotBlank() } ?: "••••-••••-••••-••••"
     val outcome = when {
         claimOk || revealed -> ScratchRevealOutcome.WIN
         revealPreview != ScratchRevealOutcome.PENDING -> revealPreview
@@ -134,6 +135,7 @@ fun RedeemScratchCardDialog(
                     claimOk = true
                     claimError = null
                     unlockedCode = result.revealedCode?.takeIf { it.isNotBlank() }
+                    unlockedCoins = result.coinsGranted.coerceAtLeast(0)
                 } else {
                     claimError = result.message.ifBlank {
                         "Couldn't unlock this code. Try again."
@@ -188,8 +190,9 @@ fun RedeemScratchCardDialog(
         ) {
             RedeemScratchHeader(
                 title = when {
-                    claimOk && item.isScratchReward && unlockedCode.isNullOrBlank() -> "COINS EARNED"
-                    claimOk && item.isScratchReward -> "COINS + CODE"
+                    claimOk && item.isScratchReward && !unlockedCode.isNullOrBlank() ->
+                        "CODE UNLOCKED"
+                    claimOk && item.isScratchReward -> "COINS EARNED"
                     claimOk -> "CODE UNLOCKED"
                     claimError != null -> "CLAIM PENDING"
                     revealed -> "PRIZE REVEALED"
@@ -205,10 +208,10 @@ fun RedeemScratchCardDialog(
                 text = when {
                     unlockInFlight && !revealed -> "Revealing…"
                     unlockInFlight -> if (item.isScratchReward) "Securing coins…" else "Unlocking code…"
-                    claimOk && item.isScratchReward && unlockedCode.isNullOrBlank() ->
-                        "Coins secured · watch ad to scratch again"
+                    claimOk && item.isScratchReward && !unlockedCode.isNullOrBlank() ->
+                        "Code ready to copy"
                     claimOk && item.isScratchReward ->
-                        "Coins secured · bonus code ready to copy"
+                        "Coins secured · watch ad to scratch again"
                     claimOk -> "You won · copy code, then close"
                     claimError != null -> if (item.isScratchReward) {
                         "Foil open · retry to secure coins"
@@ -254,8 +257,10 @@ fun RedeemScratchCardDialog(
             ) {
                 when (outcome) {
                     ScratchRevealOutcome.WIN -> RedeemPrizeUnderlay(
-                        code = displayCode,
+                        code = unlockedCode,
                         valueLabel = item.valueLabel,
+                        coinsGranted = unlockedCoins,
+                        isScratchReward = item.isScratchReward,
                         celebrating = claimOk
                     )
                     ScratchRevealOutcome.PENDING -> ScratchMysteryUnderlay()
@@ -442,11 +447,14 @@ private fun RedeemScratchHeader(
 
 @Composable
 private fun RedeemPrizeUnderlay(
-    code: String,
+    code: String?,
     valueLabel: String,
+    coinsGranted: Int,
+    isScratchReward: Boolean,
     celebrating: Boolean
 ) {
     val pop = remember { Animatable(0.92f) }
+    val wonCode = code?.takeIf { it.isNotBlank() }
     LaunchedEffect(celebrating) {
         if (celebrating) {
             pop.snapTo(0.86f)
@@ -482,7 +490,11 @@ private fun RedeemPrizeUnderlay(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Outlined.Key,
+                if (isScratchReward && wonCode == null) {
+                    Icons.Outlined.MonetizationOn
+                } else {
+                    Icons.Outlined.Key
+                },
                 contentDescription = null,
                 tint = VoidBlack,
                 modifier = Modifier.size(26.dp)
@@ -497,24 +509,59 @@ private fun RedeemPrizeUnderlay(
             letterSpacing = 1.8.sp
         )
         Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = if (celebrating) code else "••••-••••-••••",
-            color = AmberHot,
-            fontSize = if (celebrating) 20.sp else 18.sp,
-            fontWeight = FontWeight.Black,
-            fontFamily = FontFamily.Monospace,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = valueLabel,
-            color = if (celebrating) Success else InkSecondary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center
-        )
+        if (isScratchReward) {
+            if (celebrating && wonCode != null) {
+                Text(
+                    text = wonCode,
+                    color = AmberHot,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else if (celebrating && coinsGranted > 0) {
+                Text(
+                    text = "+$coinsGranted",
+                    color = AmberHot,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = if (coinsGranted == 1) "coin" else "coins",
+                    color = InkPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            } else {
+                Text(
+                    text = "…",
+                    color = Amber,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        } else {
+            Text(
+                text = if (celebrating && wonCode != null) wonCode else "••••-••••-••••",
+                color = AmberHot,
+                fontSize = if (celebrating) 20.sp else 18.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = valueLabel,
+                color = if (celebrating) Success else InkSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 

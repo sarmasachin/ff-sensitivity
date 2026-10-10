@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -395,6 +396,7 @@ fun ShareSensitivityScreen(
                 .padding(contentPadding)
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .imePadding()
         ) {
             ShareTopBar(onBack = { backSafe() })
             Spacer(modifier = Modifier.height(12.dp))
@@ -621,6 +623,7 @@ fun ShareSensitivityScreen(
                             onClick = { shareCard() }
                         )
                         Spacer(modifier = Modifier.height(28.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
                 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { labelToRedeemDefId } from "./redeem-data";
 
 const fieldClass =
   "h-8 w-full min-w-0 rounded-lg border border-slate-200/90 bg-slate-50 px-2.5 text-[12px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/10";
@@ -31,10 +32,8 @@ export function RedeemFormTypeCadence({
   onCadenceCreated,
   onError,
 }: Props) {
-  const [newTypeId, setNewTypeId] = useState("");
   const [newTypeLabel, setNewTypeLabel] = useState("");
   const [addingType, setAddingType] = useState(false);
-  const [newCadenceId, setNewCadenceId] = useState("");
   const [newCadenceLabel, setNewCadenceLabel] = useState("");
   const [newClaimLimit, setNewClaimLimit] = useState("3");
   const [newWindowHours, setNewWindowHours] = useState("24");
@@ -45,7 +44,7 @@ export function RedeemFormTypeCadence({
     setAddingType(true);
     onError(null);
     try {
-      const id = newTypeId.trim().toUpperCase();
+      const id = labelToRedeemDefId(newTypeLabel);
       const err = await onCreateType({
         id,
         label: newTypeLabel.trim(),
@@ -55,7 +54,6 @@ export function RedeemFormTypeCadence({
         return;
       }
       if (id) onTypeCreated(id);
-      setNewTypeId("");
       setNewTypeLabel("");
     } finally {
       setAddingType(false);
@@ -67,7 +65,7 @@ export function RedeemFormTypeCadence({
     setAddingCadence(true);
     onError(null);
     try {
-      const id = newCadenceId.trim().toUpperCase();
+      const id = labelToRedeemDefId(newCadenceLabel);
       const claimLimit = Number(newClaimLimit);
       const windowHours = Number(newWindowHours);
       const err = await onCreateCadence({
@@ -81,7 +79,6 @@ export function RedeemFormTypeCadence({
         return;
       }
       if (id) onCadenceCreated(id);
-      setNewCadenceId("");
       setNewCadenceLabel("");
       setNewClaimLimit("3");
       setNewWindowHours("24");
@@ -95,10 +92,12 @@ export function RedeemFormTypeCadence({
       <div className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-2.5">
         <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
           <input
-            className={fieldClass}
-            value={newTypeId}
-            onChange={(e) => setNewTypeId(e.target.value)}
-            placeholder="NEW_TYPE id"
+            className={`${fieldClass} text-slate-500`}
+            value={labelToRedeemDefId(newTypeLabel)}
+            readOnly
+            tabIndex={-1}
+            placeholder="ID (auto)"
+            title="Filled from type label"
           />
           <input
             className={fieldClass}
@@ -122,10 +121,12 @@ export function RedeemFormTypeCadence({
       <div className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-2.5">
         <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
           <input
-            className={fieldClass}
-            value={newCadenceId}
-            onChange={(e) => setNewCadenceId(e.target.value)}
-            placeholder="NEW_CADENCE id"
+            className={`${fieldClass} text-slate-500`}
+            value={labelToRedeemDefId(newCadenceLabel)}
+            readOnly
+            tabIndex={-1}
+            placeholder="ID (auto)"
+            title="Filled from cadence label"
           />
           <input
             className={fieldClass}

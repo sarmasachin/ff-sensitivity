@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -59,6 +60,7 @@ import com.ffsensitivity.app.presentation.theme.SurfaceCard
 import com.ffsensitivity.app.presentation.theme.SurfaceLift
 
 enum class AppDrawerAction {
+    PROFILE,
     HOME,
     NOTIFICATIONS,
     DAILY_CHALLENGE,
@@ -190,6 +192,11 @@ fun AppDrawerContent(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
+                DrawerItem(
+                    label = "Profile",
+                    icon = Icons.Outlined.Person,
+                    selected = selectedRoute == "profile"
+                ) { onAction(AppDrawerAction.PROFILE) }
                 DrawerItem(
                     label = "Home",
                     icon = Icons.Outlined.Home,

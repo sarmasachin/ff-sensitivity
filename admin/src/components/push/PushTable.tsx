@@ -71,12 +71,12 @@ export function PushTable({
                 <td className="px-4 py-3.5 tabular-nums text-[12px] text-slate-600">
                   {row.sentAt ? (
                     <>
-                      <p className="text-slate-400">Sent</p>
+                      <p className="text-slate-400">Sent (IST)</p>
                       <p>{row.sentAt}</p>
                     </>
                   ) : row.scheduledAt ? (
                     <>
-                      <p className="text-slate-400">Scheduled</p>
+                      <p className="text-slate-400">Scheduled (IST)</p>
                       <p>{row.scheduledAt}</p>
                     </>
                   ) : (

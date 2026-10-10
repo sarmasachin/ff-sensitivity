@@ -10,7 +10,6 @@ import android.os.Environment
 import android.os.StatFs
 import android.os.storage.StorageManager
 import android.telephony.TelephonyManager
-import android.text.format.Formatter
 import com.ffsensitivity.app.util.AppLog
 import java.io.IOException
 import java.util.UUID
@@ -170,25 +169,68 @@ object DeviceNetworkStorageReader {
     }
 
     /**
-     * User-facing storage (matches Settings better than StatFs /data).
-     * Primary: [StorageStatsManager] UUID_DEFAULT — retail total + reclaimable free.
-     * Fallback: StatFs on data dir if stats service fails.
+     * User-facing storage (matches Settings better than StatFs /data alone).
+     *
+     * Android 13+ OEM skins often make [StorageManager.UUID_DEFAULT] point at a
+     * smaller emulated volume, so we also probe getUuidForPath(/data) and StatFs
+     * and keep the largest sane total. Then snap that usable size to the
+     * marketed 64/128/256 GB bucket Settings shows.
      */
     private fun readStorage(context: Context): Triple<Double, Double, String> {
-        val fromStats = readStorageViaStatsManager(context)
-        if (fromStats != null) return fromStats
-        return readStorageViaStatFs(context)
+        val candidates = ArrayList<Pair<Long, Long>>(4)
+        readStorageViaStatsManager(context, resolveInternalUuid(context))?.let {
+            candidates.add(it)
+        }
+        readStorageViaStatsManager(context, StorageManager.UUID_DEFAULT)?.let {
+            candidates.add(it)
+        }
+        readStorageViaStatFs(Environment.getDataDirectory().absolutePath)?.let {
+            candidates.add(it)
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            val dir = context.getSystemService(StorageManager::class.java)
+                ?.primaryStorageVolume
+                ?.directory
+            if (dir != null) {
+                readStorageViaStatFs(dir.absolutePath)?.let { candidates.add(it) }
+            }
+        }
+        val best = candidates
+            .filter { it.first >= DeviceStorageMath.MIN_VOLUME_BYTES }
+            .maxByOrNull { it.first }
+        if (best == null) {
+            return Triple(0.0, 0.0, "Unknown")
+        }
+        return toStorageTriple(best.first, best.second)
     }
 
-    private fun readStorageViaStatsManager(context: Context): Triple<Double, Double, String>? {
+    private fun resolveInternalUuid(context: Context): UUID {
+        val sm = context.getSystemService(StorageManager::class.java)
+            ?: return StorageManager.UUID_DEFAULT
+        runCatching { sm.getUuidForPath(Environment.getDataDirectory()) }
+            .getOrNull()
+            ?.let { return it }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            sm.primaryStorageVolume.storageUuid?.let { return it }
+        }
+        val raw = sm.primaryStorageVolume.uuid
+        if (!raw.isNullOrBlank()) {
+            runCatching { UUID.fromString(raw) }.getOrNull()?.let { return it }
+        }
+        return StorageManager.UUID_DEFAULT
+    }
+
+    private fun readStorageViaStatsManager(
+        context: Context,
+        uuid: UUID
+    ): Pair<Long, Long>? {
         return runCatching {
             val stats = context.getSystemService(StorageStatsManager::class.java)
                 ?: return@runCatching null
-            val uuid: UUID = StorageManager.UUID_DEFAULT
             val totalBytes = stats.getTotalBytes(uuid).coerceAtLeast(0L)
             val freeBytes = stats.getFreeBytes(uuid).coerceAtLeast(0L)
-            if (totalBytes <= 0L) return@runCatching null
-            toStorageTriple(context, totalBytes, freeBytes)
+            if (totalBytes < DeviceStorageMath.MIN_VOLUME_BYTES) return@runCatching null
+            totalBytes to freeBytes
         }.getOrElse {
             if (it is IOException) {
                 AppLog.e("StorageStatsManager read failed", it)
@@ -199,34 +241,29 @@ object DeviceNetworkStorageReader {
         }
     }
 
-    private fun readStorageViaStatFs(context: Context): Triple<Double, Double, String> {
+    private fun readStorageViaStatFs(path: String): Pair<Long, Long>? {
         return runCatching {
-            val path = Environment.getDataDirectory().absolutePath
             val stat = StatFs(path)
             val totalBytes = stat.totalBytes.coerceAtLeast(0L)
             val freeBytes = stat.availableBytes.coerceAtLeast(0L)
-            toStorageTriple(context, totalBytes, freeBytes)
+            if (totalBytes < DeviceStorageMath.MIN_VOLUME_BYTES) null else totalBytes to freeBytes
         }.getOrElse {
             AppLog.e("StatFs storage fallback failed", it)
-            Triple(0.0, 0.0, "Unknown")
+            null
         }
     }
 
     private fun toStorageTriple(
-        context: Context,
         totalBytes: Long,
         freeBytes: Long
     ): Triple<Double, Double, String> {
-        // Decimal GB (1000^3) — same family Settings / Formatter uses for display.
-        val totalGb = bytesToDecimalGb(totalBytes)
-        val freeGb = bytesToDecimalGb(freeBytes)
-        val freeLabel = Formatter.formatShortFileSize(context, freeBytes)
-        val totalLabel = Formatter.formatShortFileSize(context, totalBytes)
-        val label = "$freeLabel free / $totalLabel"
-        return Triple(totalGb, freeGb, label)
-    }
-
-    private fun bytesToDecimalGb(bytes: Long): Double {
-        return bytes.toDouble() / (1000.0 * 1000.0 * 1000.0)
+        val snappedTotal = DeviceStorageMath.snapMarketTotalBytes(totalBytes)
+        val free = freeBytes.coerceAtLeast(0L)
+        val label = DeviceStorageMath.formatStorageLabel(totalBytes, free)
+        return Triple(
+            DeviceStorageMath.bytesToDecimalGb(snappedTotal),
+            DeviceStorageMath.bytesToDecimalGb(free),
+            label
+        )
     }
 }

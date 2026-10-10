@@ -59,10 +59,11 @@ import kotlinx.coroutines.withContext
 @Composable
 fun LoginScreen(
     onContinueWithGoogle: suspend (GoogleSignInResult, NestUserSession) -> Unit,
+    initialMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
     var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf(initialMessage) }
     var termsAccepted by remember { mutableStateOf(false) }
     var showTermsSheet by remember { mutableStateOf(false) }
     var showPrivacySheet by remember { mutableStateOf(false) }
@@ -229,7 +230,9 @@ fun LoginScreen(
                         checked = termsAccepted,
                         onCheckedChange = {
                             termsAccepted = it
-                            if (it) error = null
+                            if (it && error == "Please accept the Terms & Conditions to continue.") {
+                                error = null
+                            }
                         },
                         onOpenTerms = { showTermsSheet = true },
                         onOpenPrivacy = { showPrivacySheet = true }

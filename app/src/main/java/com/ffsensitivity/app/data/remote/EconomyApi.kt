@@ -38,6 +38,7 @@ data class ShopCatalogRemoteItem(
     val enabled: Boolean,
     val oneTime: Boolean,
     val stockLimit: Int?,
+    val stockSold: Int = 0,
     val rewardTag: String
 )
 
@@ -178,6 +179,7 @@ object EconomyApi {
                             } else {
                                 null
                             }
+                            val stockSold = o.optInt("stockSold", 0).coerceAtLeast(0)
                             val cat = o.optString("category")
                             add(
                                 ShopCatalogRemoteItem(
@@ -190,6 +192,7 @@ object EconomyApi {
                                     enabled = o.optBoolean("enabled", true),
                                     oneTime = o.optBoolean("oneTime", true),
                                     stockLimit = stock,
+                                    stockSold = stockSold,
                                     rewardTag = o.optString("rewardTag")
                                 )
                             )

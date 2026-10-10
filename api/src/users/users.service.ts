@@ -7,14 +7,9 @@ import type { UserNoteDto, UserStatusDto } from './dto/users.dto';
 import {
   assertSafeUserText,
   assertUserId,
-  formatJoined,
-  formatWhen,
-  hoursAgo,
-  mapAccountStatus,
-  maskEmail,
-  maskGoogleSub,
   sanitizeUserText,
 } from './users-security';
+import { installSelect, toUserRow, userListSelect } from './users-row';
 
 // --- Start: Users admin live wire (Sachin) ---
 @Injectable()
@@ -30,16 +25,6 @@ export class UsersService {
       );
     }
   }
-
-  private readonly installSelect = {
-    installId: true,
-    userId: true,
-    brand: true,
-    model: true,
-    androidVersion: true,
-    appVersion: true,
-    lastSeenAt: true,
-  } as const;
 
   /** Same phone, second Google id: install stays on first user; token still has installId. */
   private async attachSharedInstalls<
@@ -75,7 +60,7 @@ export class UsersService {
     if (installIdByUser.size === 0) return users;
     const extras = await this.prisma.deviceInstall.findMany({
       where: { installId: { in: [...new Set(installIdByUser.values())] } },
-      select: this.installSelect,
+      select: installSelect,
     });
     const byInstall = new Map(extras.map((row) => [row.installId, row]));
     return users.map((user) => {
@@ -86,127 +71,27 @@ export class UsersService {
     });
   }
 
-  private toUserRow(
-    user: {
-      id: string;
-      email: string;
-      displayName: string;
-      googleSub: string;
-      coins: number;
-      isActive: boolean;
-      isRestricted: boolean;
-      dataDeletedAt: Date | null;
-      accountNote: string;
-      createdAt: Date;
-      lastLoginAt: Date | null;
-      _count: { claims: number };
-      deviceInstalls: {
-        installId: string;
-        userId: string | null;
-        brand: string;
-        model: string;
-        androidVersion: string;
-        appVersion: string;
-        lastSeenAt: Date;
-      }[];
-    },
-    now = new Date(),
-  ) {
-    const install = user.deviceInstalls[0];
-    const ownsInstall = Boolean(install?.userId && install.userId === user.id);
-    const activityAt =
-      ownsInstall &&
-      install.lastSeenAt &&
-      (!user.lastLoginAt || install.lastSeenAt > user.lastLoginAt)
-        ? install.lastSeenAt
-        : (user.lastLoginAt ?? user.createdAt);
-    const h = hoursAgo(activityAt, now);
-    const deviceLabel = install
-      ? [install.model || install.brand || 'Device', install.androidVersion]
-          .filter(Boolean)
-          .join(' · ')
-      : '—';
-    return {
-      id: user.id,
-      displayName: user.displayName || 'Player',
-      email: maskEmail(user.email),
-      googleSubMasked: maskGoogleSub(user.googleSub),
-      status: mapAccountStatus(
-        user.isActive,
-        user.isRestricted,
-        user.dataDeletedAt,
-      ),
-      joinedLabel: formatJoined(user.createdAt),
-      lastActiveLabel: formatWhen(h),
-      lastActiveHoursAgo: Math.round(h * 10) / 10,
-      deviceId: install?.installId ?? '—',
-      deviceLabel,
-      appVersion: install?.appVersion || '—',
-      coinBalance: user.coins,
-      claimsCount: user._count.claims,
-      redeemUnlocks: user._count.claims,
-      regionLabel: '—',
-      note: user.accountNote,
-    };
-  }
-
   private async loadRow(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        googleSub: true,
-        coins: true,
-        isActive: true,
-        isRestricted: true,
-        dataDeletedAt: true,
-        accountNote: true,
-        createdAt: true,
-        lastLoginAt: true,
-        _count: { select: { claims: true } },
-        deviceInstalls: {
-          orderBy: { lastSeenAt: 'desc' },
-          take: 1,
-          select: this.installSelect,
-        },
-      },
+      select: userListSelect,
     });
     if (!user) {
       throw new AppError('USER_NOT_FOUND', 'User not found.', 404);
     }
     const [resolved] = await this.attachSharedInstalls([user]);
-    return this.toUserRow(resolved);
+    return toUserRow(resolved);
   }
 
   async adminListUsers() {
     const users = await this.prisma.user.findMany({
       orderBy: { updatedAt: 'desc' },
       take: 500,
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        googleSub: true,
-        coins: true,
-        isActive: true,
-        isRestricted: true,
-        dataDeletedAt: true,
-        accountNote: true,
-        createdAt: true,
-        lastLoginAt: true,
-        _count: { select: { claims: true } },
-        deviceInstalls: {
-          orderBy: { lastSeenAt: 'desc' },
-          take: 1,
-          select: this.installSelect,
-        },
-      },
+      select: userListSelect,
     });
     const now = new Date();
     const resolved = await this.attachSharedInstalls(users);
-    return { users: resolved.map((u) => this.toUserRow(u, now)) };
+    return { users: resolved.map((u) => toUserRow(u, now)) };
   }
 
   async adminSetStatus(
@@ -371,7 +256,12 @@ export class UsersService {
         where: { id: userId, isActive: false, dataDeletedAt: null },
         data: {
           displayName: 'Deleted user',
+          googleName: '',
           photoUrl: null,
+          ffUid: '',
+          playRole: '',
+          region: '',
+          notifyPush: false,
           coins: 0,
           streakDays: 0,
           lastCheckinDay: null,

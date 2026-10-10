@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -22,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ffsensitivity.app.data.DailyChallengeStore
 import com.ffsensitivity.app.data.remote.ApiException
+import com.ffsensitivity.app.data.remote.isAuthFailure
 import com.ffsensitivity.app.data.remote.ChallengeRepository
 import com.ffsensitivity.app.data.remote.EconomyRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
@@ -43,6 +45,7 @@ fun DailyChallengeScreen(
     var actionError by remember { mutableStateOf<ChallengeUiError?>(null) }
     var snap by remember { mutableStateOf(EmptySafeSnapshot) }
     var syncing by remember { mutableStateOf(false) }
+    var quizSyncGen by remember { mutableIntStateOf(0) }
 
     fun clearError() {
         actionError = null
@@ -103,24 +106,16 @@ fun DailyChallengeScreen(
 
             val challengeErr = challenge.exceptionOrNull()
             val walletErr = wallet.exceptionOrNull()
+            val authErr = listOf(challengeErr, walletErr).firstNotNullOfOrNull { err ->
+                (err as? ApiException)?.takeIf { it.isAuthFailure() }
+            }
             when {
-                challengeErr is ApiException && challengeErr.code == "AUTH_REQUIRED" -> {
+                authErr != null -> {
                     showError(
                         ChallengeUiError(
                             code = "AUTH_REQUIRED",
                             title = "Sign in required",
-                            message = challengeErr.message,
-                            retryKind = ChallengeRetryKind.SIGN_IN
-                        )
-                    )
-                    false
-                }
-                walletErr is ApiException && walletErr.code == "AUTH_REQUIRED" -> {
-                    showError(
-                        ChallengeUiError(
-                            code = "AUTH_REQUIRED",
-                            title = "Sign in required",
-                            message = walletErr.message,
+                            message = authErr.message,
                             retryKind = ChallengeRetryKind.SIGN_IN
                         )
                     )
@@ -170,6 +165,7 @@ fun DailyChallengeScreen(
                 }
             }
         } finally {
+            quizSyncGen += 1
             syncing = false
         }
     }
@@ -266,6 +262,7 @@ fun DailyChallengeScreen(
                         onSnapshot = { snap = it },
                         onError = { showError(it) },
                         onClearError = { clearError() },
+                        quizSyncGen = quizSyncGen,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()

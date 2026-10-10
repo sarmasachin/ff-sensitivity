@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.RedeemCadenceOption
 import com.ffsensitivity.app.data.RedeemCodeItem
-import com.ffsensitivity.app.data.RedeemDailyAdConfig
 import com.ffsensitivity.app.data.RedeemDailyAdStore
 import com.ffsensitivity.app.data.remote.RedeemRepository
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
@@ -466,11 +465,11 @@ fun RedeemScreen(
                                 onVote = { yes -> onVoteSafe(item.id, yes) },
                                 onOpenComment = { openCommentsSafe(item) },
                                 redeemActionLabel = when {
-                                    item.isScratchReward && item.needsAd ->
-                                        RedeemDailyAdConfig.buttonLabel
-                                    item.isScratchReward -> "Scratch for Coins"
+                                    item.isScratchReward && item.needsAd -> "WATCH AD"
+                                    item.isScratchReward && item.canScratch -> "SCRATCH"
+                                    item.isScratchReward -> "WAIT"
                                     isUnlocked -> null
-                                    needsRedeemDailyAd -> RedeemDailyAdConfig.buttonLabel
+                                    needsRedeemDailyAd -> "WATCH AD"
                                     else -> null
                                 }
                             )

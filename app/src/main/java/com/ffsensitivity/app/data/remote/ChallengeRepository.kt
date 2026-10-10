@@ -7,6 +7,8 @@ import com.ffsensitivity.app.data.ShopStore
 import com.ffsensitivity.app.data.StreakMilestone
 import com.ffsensitivity.app.data.UserSessionStore
 import com.ffsensitivity.app.util.AppLog
+import java.time.Instant
+import java.time.ZoneOffset
 
 // --- Start: Challenge live wire (Sachin) ---
 object ChallengeRemoteCache {
@@ -18,9 +20,23 @@ object ChallengeRemoteCache {
     var milestones: List<StreakMilestone>? = null
         private set
 
-    fun setToday(question: DailyQuizQuestion?, ms: List<StreakMilestone>) {
+    @Volatile
+    var dayKey: String? = null
+        private set
+
+    fun utcDateKey(): String =
+        Instant.now().atZone(ZoneOffset.UTC).toLocalDate().toString()
+
+    fun isFreshToday(): Boolean = dayKey == utcDateKey()
+
+    fun setToday(
+        question: DailyQuizQuestion?,
+        ms: List<StreakMilestone>,
+        dayKey: String? = this.dayKey
+    ) {
         todayQuestion = question
         milestones = ms
+        if (dayKey != null) this.dayKey = dayKey
     }
 }
 
@@ -31,7 +47,11 @@ object ChallengeRepository {
             return Result.failure(ApiException("AUTH_REQUIRED", "Please sign in again."))
         }
         return ChallengeApi.getToday(token).map { payload ->
-            ChallengeRemoteCache.setToday(payload.question, payload.milestones)
+            ChallengeRemoteCache.setToday(
+                payload.question,
+                payload.milestones,
+                payload.dayKey
+            )
             DailyChallengeStore.applyRemoteToday(context, payload)
             payload
         }.onFailure { AppLog.e("ChallengeRepository.syncToday failed", it) }

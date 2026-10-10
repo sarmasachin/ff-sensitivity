@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -53,6 +54,15 @@ export class CommunityAdminController {
       id.trim(),
       dto.status as CommunityPostStatus,
     );
+  }
+
+  @Delete('posts/:id')
+  @Throttle({ default: { limit: 40, ttl: 60_000 } })
+  remove(@CurrentAdmin() admin: AuthAdmin, @Param('id') id: string) {
+    if (!id?.trim() || id.includes('/') || id.length > 64) {
+      throw new AppError('COMMUNITY_BAD_ID', 'Invalid post id.', 400);
+    }
+    return this.community.adminDeletePost(admin.id, id.trim());
   }
 }
 // --- End: Community live wire (Sachin) ---

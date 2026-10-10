@@ -20,6 +20,21 @@ export type RedeemCadenceRow = {
 export const SAFE_SCRATCH_TIP =
   "Scratch to earn Coins. Limited reward codes distributed via schedule.";
 
+/** Type/cadence id from label — A-Z, 0-9, underscore, starts with a letter. */
+export function labelToRedeemDefId(label: string): string {
+  const raw = label
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 32)
+    .replace(/_+$/g, "");
+  if (!raw) return "";
+  const id = /^[A-Z]/.test(raw) ? raw : `X${raw}`.slice(0, 32);
+  return id.length >= 2 ? id : "";
+}
+
 export type RedeemListRow = {
   id: string;
   title: string;

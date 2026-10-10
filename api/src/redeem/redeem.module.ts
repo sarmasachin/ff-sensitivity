@@ -12,6 +12,7 @@ import { RedeemController } from './redeem.controller';
 import { RedeemModuleGuard } from './redeem-module.guard';
 import { RedeemService } from './redeem.service';
 import { RedeemScratchService } from './redeem-scratch.service';
+import { RedeemScratchPassService } from './redeem-scratch-pass.service';
 import { RedeemClaimsService } from './redeem-claims.service';
 import { RedeemCatalogService } from './redeem-catalog.service';
 
@@ -22,6 +23,7 @@ import { RedeemCatalogService } from './redeem-catalog.service';
   providers: [
     RedeemService,
     RedeemScratchService,
+    RedeemScratchPassService,
     RedeemClaimsService,
     RedeemCatalogService,
     ClaimsModuleGuard,

@@ -8,6 +8,7 @@ import {
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { AppError, ApiErrorBody } from './app-error';
+import { remapUnauthorized } from './remap-unauthorized';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -53,6 +54,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         code = 'RATE_LIMITED';
         message = 'Too many requests. Please wait a moment.';
       }
+      const remapped = remapUnauthorized(status, code, message);
+      code = remapped.code;
+      message = remapped.message;
     }
 
     const payload: ApiErrorBody = {

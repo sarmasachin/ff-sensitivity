@@ -85,12 +85,7 @@ object DeviceInfoFetcher {
         val gamingModeAvailable = DeviceDisplayReaders.hasGamingMode(appContext)
         val gamingModeLabel = if (gamingModeAvailable) "Yes" else "No"
 
-        val ageYears = estimateAgeYears(appContext)
-        val ageLabel = when {
-            ageYears == null -> "Unknown"
-            ageYears < 1.0 -> String.format("%.1f yr", ageYears)
-            else -> String.format("%.1f yrs", ageYears)
-        }
+        val (ageYears, ageLabel) = DeviceAgeReader.read(appContext)
 
         val batteryHealth = DeviceBatteryHealthReader.read(appContext)
         val gyro = hasGyro(appContext)
@@ -191,113 +186,6 @@ object DeviceInfoFetcher {
             "${ramGb.toLong()} GB"
         } else {
             String.format("%.1f GB", ramGb)
-        }
-    }
-
-    private fun estimateAgeYears(context: Context): Double? {
-        val now = System.currentTimeMillis()
-        val candidates = mutableSetOf<Long>()
-
-        // 1) Launch API level — survives OTA, closest to real hardware age
-        val firstApi = readFirstApiLevel()
-        firstApiToEpochMs(firstApi)?.let { candidates.add(it) }
-
-        // 2) Firmware build time (resets on OTA — only useful as fallback/extra signal)
-        if (Build.TIME > 0L) candidates.add(Build.TIME)
-
-        // 3) Oldest system-package install time (often first setup / factory image)
-        listOf(
-            "android",
-            "com.android.settings",
-            "com.android.systemui",
-            "com.google.android.gsf"
-        ).forEach { pkg ->
-            readPackageFirstInstallMs(context, pkg)?.let { candidates.add(it) }
-        }
-
-        val valid = candidates.filter { it in 1L until now }
-        if (valid.isEmpty()) return null
-
-        // Oldest timestamp = longest lived signal = best age estimate
-        val birthMs = valid.minOrNull() ?: return null
-        val ageMs = now - birthMs
-        if (ageMs <= 0L) return 0.1
-        val years = ageMs / (365.25 * 24.0 * 60.0 * 60.0 * 1000.0)
-        return ((years * 10.0).roundToInt() / 10.0).coerceIn(0.1, 15.0)
-    }
-
-    private fun readFirstApiLevel(): Int {
-        // Prefer public SDK field when present (API 31+ on some builds exposes it)
-        try {
-            val field = Build.VERSION::class.java.getField("DEVICE_INITIAL_SDK_INT")
-            val value = field.getInt(null)
-            if (value > 0) return value
-        } catch (_: Throwable) {
-            // not publicly available — fall through
-        }
-        return readSystemPropertyInt("ro.product.first_api_level", 0)
-            .takeIf { it > 0 }
-            ?: readSystemPropertyInt("ro.board.first_api_level", 0)
-    }
-
-    private fun readSystemPropertyInt(key: String, default: Int): Int {
-        return try {
-            val clazz = Class.forName("android.os.SystemProperties")
-            val method = clazz.getMethod("getInt", String::class.java, Int::class.javaPrimitiveType)
-            method.invoke(null, key, default) as Int
-        } catch (_: Throwable) {
-            default
-        }
-    }
-
-    /**
-     * Maps shipping API level -> approximate commercial launch epoch.
-     * first_api_level does not change after OTA, so this tracks hardware generation age.
-     */
-    private fun firstApiToEpochMs(firstApi: Int): Long? {
-        if (firstApi <= 0) return null
-        // Approximate mid-window when devices with this shipping API hit market
-        val launchYearMonth: Pair<Int, Int> = when {
-            firstApi >= 36 -> 2025 to 6
-            firstApi >= 35 -> 2024 to 9
-            firstApi >= 34 -> 2023 to 10
-            firstApi >= 33 -> 2022 to 8
-            firstApi >= 32 -> 2022 to 3
-            firstApi >= 31 -> 2021 to 10
-            firstApi >= 30 -> 2020 to 9
-            firstApi >= 29 -> 2019 to 9
-            firstApi >= 28 -> 2018 to 8
-            firstApi >= 27 -> 2017 to 12
-            firstApi >= 26 -> 2017 to 8
-            firstApi >= 25 -> 2016 to 12
-            firstApi >= 24 -> 2016 to 8
-            firstApi >= 23 -> 2015 to 10
-            firstApi >= 22 -> 2015 to 3
-            firstApi >= 21 -> 2014 to 11
-            firstApi >= 19 -> 2013 to 10
-            firstApi >= 16 -> 2012 to 7
-            else -> 2011 to 1
-        }
-        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
-        cal.clear()
-        cal.set(launchYearMonth.first, launchYearMonth.second - 1, 15, 12, 0, 0)
-        return cal.timeInMillis
-    }
-
-    private fun readPackageFirstInstallMs(context: Context, packageName: String): Long? {
-        return try {
-            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.packageManager.getPackageInfo(
-                    packageName,
-                    PackageManager.PackageInfoFlags.of(0)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.getPackageInfo(packageName, 0)
-            }
-            info.firstInstallTime.takeIf { it > 0L }
-        } catch (_: Throwable) {
-            null
         }
     }
 

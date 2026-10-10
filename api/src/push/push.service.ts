@@ -18,6 +18,7 @@ import {
 import { sendFcmCampaign } from './push-fcm';
 import { DevicesService } from '../devices/devices.service';
 import { assertInstallId } from '../devices/devices-security';
+import { userAllowsPush } from './push-user-opt';
 // --- Start: Push live wire (Sachin) ---
 const MAX_CAMPAIGNS = 100;
 
@@ -60,7 +61,8 @@ export class PushService {
       topic: c.topic,
       status: c.status,
       scheduledAt: stamp(c.scheduledAt),
-      sentAt: stamp(c.sentAt),
+      sentAt: stamp(c.sentAt, true),
+      sentAtMs: c.sentAt ? c.sentAt.getTime() : null,
       delivered: c.delivered,
       failed: c.failed,
       createdBy: c.createdBy,
@@ -365,6 +367,7 @@ export class PushService {
       installId = assertInstallId(dto.installId);
     }
 
+    const allowPush = await userAllowsPush(this.prisma, userId);
     const row = await this.prisma.devicePushToken.upsert({
       where: { token },
       create: {
@@ -373,7 +376,7 @@ export class PushService {
         platform,
         topics,
         installId,
-        pushEnabled: true,
+        pushEnabled: allowPush,
         lastSeenAt: new Date(),
       },
       update: {
@@ -381,7 +384,7 @@ export class PushService {
         platform,
         topics,
         ...(installId ? { installId } : {}),
-        pushEnabled: true,
+        pushEnabled: allowPush,
         lastSeenAt: new Date(),
       },
     });
@@ -446,7 +449,8 @@ export class PushService {
         title: r.title,
         body: r.body,
         deepLink: r.deepLink,
-        sentAt: stamp(r.sentAt),
+        sentAt: stamp(r.sentAt, true),
+        sentAtMs: r.sentAt ? r.sentAt.getTime() : null,
       }));
 
     return { messages };
@@ -456,7 +460,10 @@ export class PushService {
     audience: PushAudience;
     topic: string;
   }): Promise<string[]> {
-    const enabled = { pushEnabled: true as const };
+    const enabled = {
+      pushEnabled: true as const,
+      user: { notifyPush: true },
+    };
     let rows: {
       token: string;
       userId: string;
@@ -488,7 +495,7 @@ export class PushService {
       rows = await this.prisma.devicePushToken.findMany({
         where: {
           ...enabled,
-          user: { claims: { none: {} } },
+          user: { notifyPush: true, claims: { none: {} } },
         },
         select,
         orderBy: { lastSeenAt: 'desc' },

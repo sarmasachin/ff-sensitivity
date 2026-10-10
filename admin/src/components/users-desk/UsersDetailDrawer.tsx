@@ -68,12 +68,20 @@ export function UsersDetailDrawer({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="flex items-center gap-3 rounded-2xl border border-cyan-200/80 bg-gradient-to-br from-cyan-50 to-white px-4 py-3.5">
-            <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-[20px] font-semibold text-white"
-              aria-hidden
-            >
-              {initial}
-            </div>
+            {row.photoUrl ? (
+              <img
+                src={row.photoUrl}
+                alt=""
+                className="h-14 w-14 shrink-0 rounded-2xl object-cover"
+              />
+            ) : (
+              <div
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-[20px] font-semibold text-white"
+                aria-hidden
+              >
+                {initial}
+              </div>
+            )}
             <div className="min-w-0">
               <p className="truncate text-[15px] font-semibold text-slate-900">
                 {row.displayName}
@@ -94,8 +102,22 @@ export function UsersDetailDrawer({
             <dl className="mt-2 grid grid-cols-1 gap-2 text-[13px]">
               <Detail label="Email" value={row.email} />
               <Detail label="Joined" value={row.joinedLabel} />
-              <Detail label="Region" value={row.regionLabel} />
               <Detail label="Last active" value={row.lastActiveLabel} />
+            </dl>
+          </section>
+
+          <section className="mt-5">
+            <h3 className="text-[11px] font-semibold tracking-[0.1em] text-slate-400 uppercase">
+              Player profile
+            </h3>
+            <dl className="mt-2 grid grid-cols-1 gap-2 text-[13px]">
+              <Detail label="Display name" value={row.displayName} />
+              <Detail label="Google name" value={row.googleName} />
+              <Detail label="Free Fire UID" value={row.ffUid} mono />
+              <Detail label="Role" value={row.playRole} />
+              <Detail label="Region" value={row.regionLabel} />
+              <Detail label="Notifications" value={row.notifyPush ? "On" : "Off"} />
+              <Detail label="Streak" value={String(row.streakDays)} />
             </dl>
           </section>
 

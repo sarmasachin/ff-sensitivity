@@ -105,19 +105,14 @@ export function assertTopic(raw: string): string {
 export function parseStamp(raw: string): Date {
   const m = raw
     .trim()
-    .match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/);
+    .match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) {
     throw new AppError('PUSH_BAD_STAMP', 'Invalid schedule stamp.', 400);
   }
-  const [, y, mo, d, h, mi] = m;
+  const [, y, mo, d, h, mi, sec] = m;
+  // Admin wall clock is India time, not the VPS timezone (usually UTC).
   const dt = new Date(
-    Number(y),
-    Number(mo) - 1,
-    Number(d),
-    Number(h),
-    Number(mi),
-    0,
-    0,
+    `${y}-${mo}-${d}T${h}:${mi}:${sec ?? '00'}+05:30`,
   );
   if (!Number.isFinite(dt.getTime())) {
     throw new AppError('PUSH_BAD_STAMP', 'Invalid schedule stamp.', 400);
@@ -125,9 +120,35 @@ export function parseStamp(raw: string): Date {
   return dt;
 }
 
-export function stamp(d: Date | null | undefined): string | null {
+const IST = 'Asia/Kolkata';
+
+function istPart(d: Date, type: Intl.DateTimeFormatPartTypes): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: IST,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(d);
+  return parts.find((p) => p.type === type)?.value ?? '';
+}
+
+/** India wall clock. Seconds only when asked — schedule DTO is HH:mm. */
+export function stamp(
+  d: Date | null | undefined,
+  withSeconds = false,
+): string | null {
   if (!d) return null;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const y = istPart(d, 'year');
+  const mo = istPart(d, 'month');
+  const day = istPart(d, 'day');
+  const h = istPart(d, 'hour');
+  const mi = istPart(d, 'minute');
+  if (!withSeconds) return `${y}-${mo}-${day} ${h}:${mi}`;
+  const s = istPart(d, 'second');
+  return `${y}-${mo}-${day} ${h}:${mi}:${s}`;
 }
 // --- End: Push live wire (Sachin) ---

@@ -10,7 +10,8 @@ data class PushInboxMessage(
     val title: String,
     val body: String,
     val deepLink: String,
-    val sentAt: String?
+    val sentAt: String?,
+    val sentAtMs: Long?
 )
 
 object PushApi {
@@ -56,7 +57,8 @@ object PushApi {
                                 title = o.optString("title"),
                                 body = o.optString("body"),
                                 deepLink = deep,
-                                sentAt = o.optString("sentAt").ifBlank { null }
+                                sentAt = o.optString("sentAt").ifBlank { null },
+                                sentAtMs = o.optLong("sentAtMs", 0L).takeIf { it > 0L }
                             )
                         )
                     }
