@@ -66,7 +66,7 @@ export function EconomyStats({
       tone: "slate" as const,
     },
     {
-      label: "Draft",
+      label: "Save",
       value: dirty ? "Unsaved" : "Synced",
       hint: dirty ? "Save to keep" : "Matches last save",
       tone: dirty ? ("amber" as const) : ("emerald" as const),

@@ -16,7 +16,7 @@ export function EconomyCapabilities() {
         What this module will include
       </h2>
       <p className="mt-1 text-[12px] text-[#94a3b8]">
-        UI shell now — NestJS economy config wire-up next.
+        Rates, toggles, and caps save to the live economy config.
       </p>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {ECONOMY_CAPABILITIES.map((item, i) => (

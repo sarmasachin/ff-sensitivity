@@ -1,5 +1,6 @@
 package com.ffsensitivity.app.data.remote
 
+import com.ffsensitivity.app.data.AppLinks
 import com.ffsensitivity.app.util.AppLog
 import org.json.JSONObject
 
@@ -139,7 +140,7 @@ object CopyDefaults {
             sheetTitle = "Share sensitivity",
             bodyTemplate =
                 "My Free Fire sensitivity for {{device}} — generated with FF Sensitivity.\n\n{{settings}}\n\nGet yours:",
-            footerLine = "https://sensitivitysettings.com",
+            footerLine = AppLinks.PLAY_STORE,
             hashtags = "#FreeFire #FFSensitivity"
         ),
         about = CopyAboutConfig(
@@ -191,12 +192,27 @@ object CopyRepository {
         return buildString {
             append(body.trim())
             append('\n')
-            append(share.footerLine.trim())
+            append(shareLink())
             if (share.hashtags.isNotBlank()) {
                 append('\n')
                 append(share.hashtags.trim())
             }
         }.trim()
+    }
+
+    private fun shareLink(): String {
+        val footer = cache.share.footerLine.trim()
+        if (footer.isBlank() || isWebsiteShare(footer)) return AppLinks.PLAY_STORE
+        return footer
+    }
+
+    private fun isWebsiteShare(raw: String): Boolean {
+        val host = runCatching { java.net.URI(raw).host }
+            .getOrNull()
+            ?.lowercase()
+            .orEmpty()
+            .removeSuffix(".")
+        return host == "sensitivitysettings.com" || host == "www.sensitivitysettings.com"
     }
 
     private fun scrubPlaceholderValue(raw: String): String {
@@ -211,7 +227,7 @@ object CopyRepository {
             append('\n')
             append(about.blurb)
             append('\n')
-            append(share.footerLine)
+            append(shareLink())
             if (share.hashtags.isNotBlank()) {
                 append('\n')
                 append(share.hashtags)

@@ -1,10 +1,11 @@
 type Props = {
   dirty: boolean;
+  busy: boolean;
   onSave: () => void;
   onReset: () => void;
 };
 
-export function EconomyHeader({ dirty, onSave, onReset }: Props) {
+export function EconomyHeader({ dirty, busy, onSave, onReset }: Props) {
   return (
     <header className="relative overflow-hidden rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 px-5 py-5 text-white sm:px-6">
       <div
@@ -26,14 +27,14 @@ export function EconomyHeader({ dirty, onSave, onReset }: Props) {
           </h1>
           <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-white/90">
             Daily coin earn rates for Android — check-in, quiz, ad bonus, wallet
-            caps. Local draft until Economy API is connected.
+            caps. Save writes the live rates the app earns.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onReset}
-            disabled={!dirty}
+            disabled={!dirty || busy}
             className="h-10 rounded-xl border border-white/30 bg-white/10 px-3.5 text-[13px] font-medium text-white backdrop-blur-sm hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Reset
@@ -41,10 +42,10 @@ export function EconomyHeader({ dirty, onSave, onReset }: Props) {
           <button
             type="button"
             onClick={onSave}
-            disabled={!dirty}
+            disabled={!dirty || busy}
             className="h-10 rounded-xl bg-white px-3.5 text-[13px] font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Save draft
+            {busy ? "Saving…" : "Save"}
           </button>
         </div>
       </div>

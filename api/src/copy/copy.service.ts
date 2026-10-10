@@ -9,6 +9,7 @@ import {
   assertSafeCopyText,
   assertSafeFooterLine,
   normalizePlaceholders,
+  shareLinkForApp,
   sanitizeCopyMultiline,
   sanitizeCopyText,
 } from './copy-security';
@@ -95,7 +96,14 @@ export class CopyService {
   }
 
   async publicLive() {
-    return this.toBundle(await this.ensureDefaults());
+    const bundle = this.toBundle(await this.ensureDefaults());
+    return {
+      ...bundle,
+      share: {
+        ...bundle.share,
+        footerLine: shareLinkForApp(bundle.share.footerLine),
+      },
+    };
   }
 
   private normalizePayload(dto: SaveCopyConfigDto): CopyBundle {

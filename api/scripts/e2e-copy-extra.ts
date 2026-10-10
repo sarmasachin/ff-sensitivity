@@ -230,7 +230,8 @@ async function main() {
         sheetTitle: 'Share sensitivity',
         bodyTemplate:
           'My Free Fire sensitivity for {{device}} — generated with FF Sensitivity.\n\n{{settings}}\n\nGet yours:',
-        footerLine: 'https://sensitivitysettings.com',
+        footerLine:
+          'https://play.google.com/store/apps/details?id=com.ffsensitivity.app',
         hashtags: '#FreeFire #FFSensitivity',
       },
       about: {

@@ -84,6 +84,28 @@ export function normalizePlaceholders(template: string): string {
   );
 }
 
+export const PLAY_STORE_SHARE_URL =
+  'https://play.google.com/store/apps/details?id=com.ffsensitivity.app';
+
+/** Share text must open the app. The marketing site is not the app listing. */
+export function shareLinkForApp(footerLine: string): string {
+  const text = footerLine.trim();
+  if (!text) return PLAY_STORE_SHARE_URL;
+  if (!/^https?:\/\//i.test(text)) return text;
+  try {
+    const host = new URL(text).hostname.replace(/\.$/, '').toLowerCase();
+    if (
+      host === 'sensitivitysettings.com' ||
+      host === 'www.sensitivitysettings.com'
+    ) {
+      return PLAY_STORE_SHARE_URL;
+    }
+  } catch {
+    return text;
+  }
+  return text;
+}
+
 export const DEFAULT_COPY_CONFIG = {
   rate: {
     enabled: true,
@@ -97,7 +119,7 @@ export const DEFAULT_COPY_CONFIG = {
     sheetTitle: 'Share sensitivity',
     bodyTemplate:
       'My Free Fire sensitivity for {{device}} — generated with FF Sensitivity.\n\n{{settings}}\n\nGet yours:',
-    footerLine: 'https://sensitivitysettings.com',
+    footerLine: PLAY_STORE_SHARE_URL,
     hashtags: '#FreeFire #FFSensitivity',
   },
   about: {

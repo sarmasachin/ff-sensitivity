@@ -8,7 +8,7 @@ import {
   CONFIG_ID,
   ensureChallengeDefaults,
   mapMilestone,
-  mapRules,
+  mapRulesForApp,
   pickSecondChanceQuestion,
   pickTodayQuestion,
   utcDayOfYear,
@@ -159,7 +159,7 @@ export class ChallengeUserService {
       adAvailable,
       nextAdAvailableAtMs,
       claimedMilestoneDays,
-      rules: mapRules(config),
+      rules: mapRulesForApp(config),
       question: activeQuestion,
       quizState: {
         alreadyCorrect: !!alreadyCorrect,

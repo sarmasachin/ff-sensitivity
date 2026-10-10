@@ -60,6 +60,17 @@ object ChallengeApi {
                         rules.optBoolean("adBonusOptional", true)
                     ChallengeQuizTimingConfig.adBonusCooldownHours =
                         rules.optInt("adBonusCooldownHours", 4)
+                    if (rules.has("checkinCoins")) {
+                        ChallengeQuizTimingConfig.checkinCoins = rules.optInt("checkinCoins", 20)
+                    }
+                    if (rules.has("checkInEnabled")) {
+                        ChallengeQuizTimingConfig.checkInEnabled =
+                            rules.optBoolean("checkInEnabled", true)
+                    }
+                    if (rules.has("quizEnabled")) {
+                        ChallengeQuizTimingConfig.quizEnabled =
+                            rules.optBoolean("quizEnabled", true)
+                    }
                 }
                 val qObj = root.optJSONObject("question")
                 val question = if (qObj != null) {

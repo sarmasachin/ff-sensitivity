@@ -63,6 +63,38 @@ export function mapRules(c: {
   };
 }
 
+export function mapRulesForApp(c: {
+  missDayResetsStreak: boolean;
+  requireCheckIn: boolean;
+  requireQuiz: boolean;
+  adBonusOptional: boolean;
+  adBonusCooldownHours: number;
+  scratchCardsPerDay: number;
+  cardExpiresSameDay: boolean;
+  firstMilestoneDays: number;
+  wrongAnswerLockHours: number;
+  wrongAnswerLockMinutes?: number;
+  quizOpenWindowHours: number;
+  quizCorrectCoins: number;
+  quizWrongCoins: number;
+  checkinCoins: number;
+  adBonusCoins: number;
+  checkInEnabled: boolean;
+  quizEnabled: boolean;
+  walletCap: number;
+  dailyEarnCap: number;
+}) {
+  return {
+    ...mapRules(c),
+    checkinCoins: c.checkinCoins,
+    adBonusCoins: c.adBonusCoins,
+    checkInEnabled: c.checkInEnabled,
+    quizEnabled: c.quizEnabled,
+    walletCap: c.walletCap,
+    dailyEarnCap: c.dailyEarnCap,
+  };
+}
+
 export function mapQuizAdmin(q: {
   id: string;
   question: string;

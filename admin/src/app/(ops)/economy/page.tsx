@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ApiClientError } from "@/lib/api";
 import { EconomyBoostNotes } from "@/components/economy/EconomyBoostNotes";
 import { EconomyCapabilities } from "@/components/economy/EconomyCapabilities";
 import { EconomyEarnPanel } from "@/components/economy/EconomyEarnPanel";
 import { EconomyHeader } from "@/components/economy/EconomyHeader";
 import { EconomyLimitsPanel } from "@/components/economy/EconomyLimitsPanel";
 import { EconomyStats } from "@/components/economy/EconomyStats";
+import {
+  fetchEconomyConfig,
+  saveEconomyConfig,
+} from "@/components/economy/economy-api";
 import {
   ECONOMY_DEFAULTS,
   configToForm,
@@ -28,6 +33,8 @@ export default function EconomyPage() {
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
 
   const savedForm = useMemo(() => configToForm(saved), [saved]);
   const dirty = !sameForm(form, savedForm);
@@ -38,17 +45,45 @@ export default function EconomyPage() {
     return parsed;
   }, [form, saved]);
 
-  function handleSave() {
+  useEffect(() => {
+    let cancelled = false;
+    void fetchEconomyConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        setSaved(cfg);
+        setForm(configToForm(cfg));
+        setReady(true);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof ApiClientError ? err.message : "Could not load economy.");
+        setReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSave() {
     const parsed = formToConfig(form);
     if ("error" in parsed) {
       setError(parsed.error);
       setNotice(null);
       return;
     }
-    setSaved(parsed);
-    setForm(configToForm(parsed));
+    setBusy(true);
     setError(null);
-    setNotice("Economy draft saved locally. API sync comes next.");
+    setNotice(null);
+    try {
+      const cfg = await saveEconomyConfig(parsed);
+      setSaved(cfg);
+      setForm(configToForm(cfg));
+      setNotice("Economy saved. The app uses these rates on the next earn.");
+    } catch (err: unknown) {
+      setError(err instanceof ApiClientError ? err.message : "Could not save economy.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function handleReset() {
@@ -59,7 +94,12 @@ export default function EconomyPage() {
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
-      <EconomyHeader dirty={dirty} onSave={handleSave} onReset={handleReset} />
+      <EconomyHeader
+        dirty={dirty && ready}
+        busy={busy}
+        onSave={() => void handleSave()}
+        onReset={handleReset}
+      />
       <EconomyStats
         maxDaily={maxDailyEarn(preview)}
         liveSources={liveSourceCount(preview)}

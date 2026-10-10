@@ -29,6 +29,7 @@ import com.ffsensitivity.app.ads.QuizInterstitialAds
 import com.ffsensitivity.app.ads.findActivity
 import com.ffsensitivity.app.data.AdBonusAdConfig
 import com.ffsensitivity.app.data.CheckInAdConfig
+import com.ffsensitivity.app.data.ChallengeQuizTimingConfig
 import com.ffsensitivity.app.data.CheckInAdStore
 import com.ffsensitivity.app.data.DailyChallengeStore
 import com.ffsensitivity.app.data.QuizAdStore
@@ -254,24 +255,27 @@ fun DailyChallengeTodayTab(
         val needsCheckInAd = remember(snapshot.checkedInToday, busy, checkInAdPassTick) {
             !snapshot.checkedInToday && CheckInAdStore.needsAd(context)
         }
+        val checkInCoins = ChallengeQuizTimingConfig.checkinCoins
+        val checkInBoostCoins = checkInCoins + 20
+        if (ChallengeQuizTimingConfig.checkInEnabled) {
         ChallengeTaskCard(
             icon = Icons.Outlined.LocalActivity,
             title = "Daily Check-in",
             subtitle = when {
                 snapshot.checkedInToday -> "Claimed today · come back tomorrow"
                 needsCheckInAd && checkInPlus > 0 ->
-                    "Watch ad · Collect +40 · Plus boost ready (×$checkInPlus)"
-                needsCheckInAd -> "Watch ad · Collect your daily +20 coins"
-                checkInPlus > 0 -> "Collect +20 · Plus boost ready (×$checkInPlus)"
-                else -> "Collect your daily +20 coins"
+                    "Watch ad · Collect +$checkInBoostCoins · Plus boost ready (×$checkInPlus)"
+                needsCheckInAd -> "Watch ad · Collect your daily +$checkInCoins coins"
+                checkInPlus > 0 -> "Collect +$checkInCoins · Plus boost ready (×$checkInPlus)"
+                else -> "Collect your daily +$checkInCoins coins"
             },
             done = snapshot.checkedInToday,
             actionLabel = when {
                 snapshot.checkedInToday -> "Claimed"
                 busy && needsCheckInAd -> "Watch ad…"
                 needsCheckInAd -> CheckInAdConfig.buttonLabel
-                checkInPlus > 0 -> "Collect +40"
-                else -> "Collect +20"
+                checkInPlus > 0 -> "Collect +$checkInBoostCoins"
+                else -> "Collect +$checkInCoins"
             },
             actionEnabled = !snapshot.checkedInToday && !busy,
             onAction = {
@@ -294,7 +298,9 @@ fun DailyChallengeTodayTab(
             }
         )
         Spacer(modifier = Modifier.height(14.dp))
+        }
 
+        if (ChallengeQuizTimingConfig.quizEnabled) {
         DailyChallengeTodayQuizSection(
             context = context,
             scope = scope,
@@ -316,6 +322,7 @@ fun DailyChallengeTodayTab(
             onClearError = onClearError,
             onSnapshot = onSnapshot
         )
+        }
         Spacer(modifier = Modifier.height(14.dp))
 
         val adRemainingMs = remember(snapshot.nextAdAvailableAtMs, adTick) {

@@ -1,4 +1,4 @@
-/** Matches Android DailyChallengeStore defaults (local draft until API). */
+/** Economy admin form. Amounts persist on challenge config and drive app earn. */
 
 export type EconomyEarnRules = {
   checkInCoins: number;

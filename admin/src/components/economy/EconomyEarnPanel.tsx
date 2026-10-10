@@ -44,7 +44,7 @@ const SOURCES: SourceCard[] = [
     key: "quizWrong",
     valueKey: "quizWrongCoins",
     title: "Quiz · wrong",
-    subtitle: "Consolation coins (same quiz toggle)",
+    subtitle: "Coins taken from the wallet on a wrong answer",
     accent: "from-slate-50 to-white border-slate-200/80",
     bar: "bg-slate-400",
   },
@@ -74,8 +74,8 @@ export function EconomyEarnPanel({ values, onChange }: Props) {
           Coin sources
         </h2>
         <p className="mt-0.5 max-w-2xl text-[12px] text-slate-500">
-          Amounts match Android Daily Challenge defaults. Toggle a source off to
-          hide it in-app without an APK update (after API wire-up).
+          Saved amounts are what the app earns. Toggle a source off to stop that
+          payout. Quiz wrong is taken from the wallet.
         </p>
       </div>
 

@@ -464,6 +464,10 @@ model ChallengeConfig {
   quizWrongCoins       Int      @default(-10) @map("quiz_wrong_coins")
   checkinCoins         Int      @default(20) @map("checkin_coins")
   adBonusCoins         Int      @default(30) @map("ad_bonus_coins")
+  walletCap            Int      @default(9999999) @map("wallet_cap")
+  dailyEarnCap         Int      @default(0) @map("daily_earn_cap")
+  checkInEnabled       Boolean  @default(true) @map("check_in_enabled")
+  quizEnabled          Boolean  @default(true) @map("quiz_enabled")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
   @@map("challenge_config")

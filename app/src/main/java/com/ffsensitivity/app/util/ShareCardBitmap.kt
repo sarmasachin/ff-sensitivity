@@ -12,14 +12,13 @@ import java.util.Locale
 
 /**
  * Renders a premium shareable sensitivity card image.
- * Card image branding: sensitivitysettings.com (+ site URL drawn on image).
+ * Card image branding: sensitivitysettings.com, with the Play Store link drawn on the image.
  * Share caption uses the mobile app Play Store link (not the website URL).
  * Does NOT paint full sensitivity numbers (tease card only).
  */
 object ShareCardBitmap {
 
     const val BRAND = "sensitivitysettings.com"
-    const val SITE_URL = "https://sensitivitysettings.com"
     /** Shared with the image as EXTRA_TEXT — app install link, not website. */
     const val APP_STORE_URL =
         "https://play.google.com/store/apps/details?id=com.ffsensitivity.app"
@@ -224,11 +223,11 @@ object ShareCardBitmap {
 
         val linkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xFFF5C56B.toInt()
-            textSize = 30f
+            textSize = 22f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }
-        c.drawText(SITE_URL, W / 2f, captionY + 110f, linkPaint)
+        c.drawText(APP_STORE_URL, W / 2f, captionY + 110f, linkPaint)
 
         return bmp
     }

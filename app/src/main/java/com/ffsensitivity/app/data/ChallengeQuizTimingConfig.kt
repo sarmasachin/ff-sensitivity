@@ -25,6 +25,19 @@ object ChallengeQuizTimingConfig {
             field = value.coerceIn(1, 48)
         }
 
+    /** Coins on daily check-in (≥ 0). From economy admin. */
+    @Volatile
+    var checkinCoins: Int = 20
+        set(value) {
+            field = value.coerceIn(0, 100_000)
+        }
+
+    @Volatile
+    var checkInEnabled: Boolean = true
+
+    @Volatile
+    var quizEnabled: Boolean = true
+
     /** Coins on correct answer (≥ 0). */
     @Volatile
     var quizCorrectCoins: Int = 50
