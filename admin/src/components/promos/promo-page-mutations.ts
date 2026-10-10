@@ -137,7 +137,7 @@ export async function movePromoRow(
   [next[idx], next[swap]] = [next[swap], next[idx]];
   try {
     const saved = await reorderPromos(next.map((r) => r.id));
-    setRows(sortByOrder(saved));
+    setRows(() => sortByOrder(saved));
     push("success", PROMOS_TOAST_TITLES.updated, "Promo order is live.");
   } catch (e) {
     push(
