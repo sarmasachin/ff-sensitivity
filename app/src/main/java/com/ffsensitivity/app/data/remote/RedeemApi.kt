@@ -1,6 +1,7 @@
 package com.ffsensitivity.app.data.remote
 
 import com.ffsensitivity.app.data.RedeemCadenceOption
+import com.ffsensitivity.app.data.RedeemComment
 import com.ffsensitivity.app.data.RedeemCatalogPayload
 import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemMode
@@ -17,6 +18,12 @@ data class RedeemClaimResult(
     val alreadyClaimed: Boolean,
     val coinCost: Int?,
     val coinsRemaining: Int?
+)
+
+data class RedeemVoteResult(
+    val worked: Boolean,
+    val yesCount: Int,
+    val noCount: Int
 )
 
 data class RedeemScratchResult(
@@ -161,6 +168,80 @@ object RedeemApi {
         }
     }
 
+    fun vote(accessToken: String, redeemId: String, worked: Boolean): Result<RedeemVoteResult> {
+        return runCatching {
+            val req = ApiClient.post(
+                path = "/api/v1/redeem/$redeemId/vote",
+                body = JSONObject().put("worked", worked),
+                bearer = accessToken
+            )
+            ApiClient.http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) {
+                    throw ApiClient.parseError(raw, resp.code)
+                }
+                val root = JSONObject(raw)
+                RedeemVoteResult(
+                    worked = root.optBoolean("worked", worked),
+                    yesCount = root.optInt("yesCount", 0),
+                    noCount = root.optInt("noCount", 0)
+                )
+            }
+        }.onFailure {
+            AppLog.e("RedeemApi.vote failed", it)
+        }
+    }
+
+    fun comments(accessToken: String, redeemId: String): Result<List<RedeemComment>> {
+        return runCatching {
+            val req = ApiClient.get("/api/v1/redeem/$redeemId/comments", accessToken)
+            ApiClient.http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) throw ApiClient.parseError(raw, resp.code)
+                val arr = JSONObject(raw).optJSONArray("items") ?: JSONArray()
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        add(parseComment(o, redeemId))
+                    }
+                }
+            }
+        }.onFailure { AppLog.e("RedeemApi.comments failed", it) }
+    }
+
+    fun addComment(
+        accessToken: String,
+        redeemId: String,
+        name: String,
+        text: String
+    ): Result<RedeemComment> {
+        return runCatching {
+            val req = ApiClient.post(
+                path = "/api/v1/redeem/$redeemId/comments",
+                body = JSONObject().put("name", name).put("text", text),
+                bearer = accessToken
+            )
+            ApiClient.http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) throw ApiClient.parseError(raw, resp.code)
+                parseComment(JSONObject(raw), redeemId)
+            }
+        }.onFailure { AppLog.e("RedeemApi.addComment failed", it) }
+    }
+
+    private fun parseComment(o: JSONObject, redeemId: String): RedeemComment {
+        val ms = runCatching {
+            java.time.Instant.parse(o.optString("createdAt")).toEpochMilli()
+        }.getOrDefault(System.currentTimeMillis())
+        return RedeemComment(
+            id = o.getString("id"),
+            itemId = redeemId,
+            name = o.optString("name"),
+            text = o.optString("text"),
+            createdAtMs = ms
+        )
+    }
+
     fun scratchAdUnlock(accessToken: String, redeemId: String): Result<Unit> {
         return runCatching {
             val req = ApiClient.post(
@@ -274,7 +355,14 @@ object RedeemApi {
             },
             poolLeft = if (o.has("poolLeft") && !o.isNull("poolLeft")) o.optInt("poolLeft") else null,
             needsAd = o.optBoolean("needsAd", false),
-            canScratch = o.optBoolean("canScratch", mode == RedeemMode.SINGLE)
+            canScratch = o.optBoolean("canScratch", mode == RedeemMode.SINGLE),
+            yesCount = o.optInt("yesCount", 0).coerceAtLeast(0),
+            noCount = o.optInt("noCount", 0).coerceAtLeast(0),
+            myVote = if (o.has("myVote") && !o.isNull("myVote")) o.optBoolean("myVote") else null,
+            waitUntilMs = o.optString("waitUntil").takeIf { it.isNotBlank() }?.let { iso ->
+                runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrNull()
+            },
+            waitNextAd = o.optString("waitNext") == "AD"
         )
     }
 }

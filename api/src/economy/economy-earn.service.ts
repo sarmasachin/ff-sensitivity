@@ -11,6 +11,7 @@ import {
   utcDateKey,
 } from './economy-catalog';
 import { loadEconomyRates, settleCoinDelta } from './economy-rates';
+import { saveScratchArchive } from '../scratch/scratch-history';
 
 @Injectable()
 export class EconomyEarnService {
@@ -233,10 +234,22 @@ export class EconomyEarnService {
       throw new AppError('ECONOMY_STREAK_REQUIRED', `Need ${days}-day streak first.`, 409);
     }
     const key = `earn:milestone:${userId}:${days}`;
-    return this.applyEarn(userId, key, async () => ({
+    const earned = await this.applyEarn(userId, key, async () => ({
       delta: reward,
       reason: `earn:milestone:${days}`,
     }));
+    const title = fromDb?.title?.trim() || `Day ${days}`;
+    await saveScratchArchive(this.prisma, {
+      userId,
+      sourceKey: `milestone:${days}`,
+      kind: 'MILESTONE',
+      title: `Day ${days} · ${title}`,
+      detail: 'Daily Challenge streak reward',
+      rewardLabel: fromDb?.rewardLabel?.trim() || `+${reward} coins`,
+      coins: reward,
+      badge: fromDb?.badge ?? null,
+    });
+    return earned;
   }
 
   private async applyEarn(

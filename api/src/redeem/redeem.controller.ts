@@ -4,6 +4,8 @@ import { UserJwtAuthGuard } from '../user-auth/user-jwt-auth.guard';
 import { CurrentUser } from '../user-auth/current-user.decorator';
 import type { AuthUser } from '../user-auth/current-user.decorator';
 import { RedeemService } from './redeem.service';
+import { RedeemCommentDto } from './dto/redeem-comment.dto';
+import { RedeemVoteDto } from './dto/redeem-vote.dto';
 import { ScratchRedeemDto } from './dto/redeem-scratch.dto';
 
 // --- Start: Redeem live wire (Sachin) ---
@@ -25,6 +27,32 @@ export class RedeemController {
     return this.redeem.myClaims(user.id);
   }
   // --- End: Claims live wire (Sachin) ---
+
+  @Get(':id/comments')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  comments(@Param('id') id: string) {
+    return this.redeem.comments(id);
+  }
+
+  @Post(':id/comments')
+  @Throttle({ default: { limit: 12, ttl: 60_000 } })
+  addComment(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: RedeemCommentDto,
+  ) {
+    return this.redeem.addComment(user.id, id, dto.name, dto.text);
+  }
+
+  @Post(':id/vote')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  vote(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: RedeemVoteDto,
+  ) {
+    return this.redeem.vote(user.id, id, dto.worked);
+  }
 
   @Post(':id/scratch')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })

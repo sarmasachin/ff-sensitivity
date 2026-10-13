@@ -302,6 +302,43 @@ internal fun GhostAction(
 }
 
 @Composable
+internal fun CompareSavedCard(entry: com.ffsensitivity.app.data.remote.SharedCompareEntry) {
+    val whenLabel = androidx.compose.runtime.remember(entry.createdAtMs) {
+        runCatching {
+            java.text.SimpleDateFormat("dd MMM · HH:mm", java.util.Locale.getDefault())
+                .format(java.util.Date(entry.createdAtMs))
+        }.getOrElse { "—" }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceCard)
+            .border(1.dp, Hairline, RoundedCornerShape(16.dp))
+            .padding(14.dp)
+    ) {
+        Text(
+            text = entry.displayName,
+            color = InkPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "${entry.deviceLabel} · ${entry.fingers} · ${entry.role}",
+            color = InkSecondary,
+            fontSize = 12.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "${entry.feedback.label} · General ${signed(entry.generalOffset)} · $whenLabel",
+            color = Amber,
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
 internal fun TipBanner(text: String) {
     Box(
         modifier = Modifier

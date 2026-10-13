@@ -192,6 +192,8 @@ model User {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   claims           RedeemClaim[]
+  redeemCodeVotes  RedeemCodeVote[]
+  redeemComments   RedeemCodeComment[]
   redeemScratchRolls RedeemScratchRoll[]
   redeemScratchPasses RedeemScratchPass[]
   // --- Start: Economy live wire (Sachin) ---
@@ -204,6 +206,7 @@ model User {
   // --- End: Community live wire (Sachin) ---
   // --- Start: Scratch live wire (Sachin) ---
   scratchRolls     ScratchRoll[]
+  scratchArchive   ScratchArchiveEntry[]
   // --- End: Scratch live wire (Sachin) ---
   // --- Start: Support live wire (Sachin) ---
   supportThreads   SupportThread[]
@@ -214,6 +217,7 @@ model User {
   // --- Start: Devices live wire (Sachin) ---
   deviceInstalls   DeviceInstall[]
   // --- End: Devices live wire (Sachin) ---
+  sensitivityCompares SensitivityCompare[]
 
   @@map("users")
 }
@@ -308,6 +312,8 @@ model RedeemCode {
   updatedAt      DateTime         @updatedAt @map("updated_at")
 
   claims        RedeemClaim[]
+  votes         RedeemCodeVote[]
+  comments      RedeemCodeComment[]
   secrets       RedeemCodeSecret[]
   scratchRolls  RedeemScratchRoll[]
   scratchPasses RedeemScratchPass[]
@@ -385,6 +391,37 @@ model RedeemClaim {
   @@index([redeemCodeId])
   @@index([flagged, createdAt])
   @@map("redeem_claims")
+}
+
+model RedeemCodeVote {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  redeemCodeId String   @map("redeem_code_id")
+  worked       Boolean
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redeemCode RedeemCode @relation(fields: [redeemCodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, redeemCodeId])
+  @@index([redeemCodeId, worked])
+  @@map("redeem_code_votes")
+}
+
+model RedeemCodeComment {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  redeemCodeId String   @map("redeem_code_id")
+  authorName   String   @map("author_name")
+  body         String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redeemCode RedeemCode @relation(fields: [redeemCodeId], references: [id], onDelete: Cascade)
+
+  @@index([redeemCodeId, createdAt])
+  @@map("redeem_code_comments")
 }
 
 // --- End: Redeem live wire (Sachin) ---
@@ -569,6 +606,25 @@ model ScratchRoll {
   @@unique([userId, dayKey, slot])
   @@index([userId, createdAt])
   @@map("scratch_rolls")
+}
+
+model ScratchArchiveEntry {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  sourceKey   String   @map("source_key")
+  kind        String
+  title       String
+  detail      String   @default("")
+  rewardLabel String   @map("reward_label")
+  coins       Int      @default(0)
+  badge       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceKey])
+  @@index([userId, createdAt])
+  @@map("scratch_archive_entries")
 }
 
 // --- End: Scratch live wire (Sachin) ---
@@ -863,3 +919,36 @@ model OpsSettings {
 }
 
 // --- End: Ops settings live wire (Sachin) ---
+
+model SensitivityCompare {
+  id                   String   @id @default(cuid())
+  userId               String   @map("user_id")
+  deviceLabel          String   @map("device_label")
+  fingers              String
+  role                 String
+  dpiPreference        String   @map("dpi_preference")
+  screenGuard          String   @map("screen_guard")
+  suggestedGeneral     Int      @map("suggested_general")
+  suggestedRedDot      Int      @map("suggested_red_dot")
+  suggestedScope2x     Int      @map("suggested_scope_2x")
+  suggestedScope4x     Int      @map("suggested_scope_4x")
+  suggestedSniper      Int      @map("suggested_sniper")
+  suggestedFreeLook    Int      @map("suggested_free_look")
+  suggestedFireButton  Int      @map("suggested_fire_button")
+  actualGeneral        Int      @map("actual_general")
+  actualRedDot         Int      @map("actual_red_dot")
+  actualScope2x        Int      @map("actual_scope_2x")
+  actualScope4x        Int      @map("actual_scope_4x")
+  actualSniper         Int      @map("actual_sniper")
+  actualFreeLook       Int      @map("actual_free_look")
+  actualFireButton     Int      @map("actual_fire_button")
+  feedback             String
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([fingers, role, createdAt])
+  @@index([userId, createdAt])
+  @@map("sensitivity_compares")
+}

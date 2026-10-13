@@ -15,6 +15,8 @@ import { RedeemScratchService } from './redeem-scratch.service';
 import { RedeemScratchPassService } from './redeem-scratch-pass.service';
 import { RedeemClaimsService } from './redeem-claims.service';
 import { RedeemCatalogService } from './redeem-catalog.service';
+import { RedeemVoteService } from './redeem-vote.service';
+import { RedeemCommentService } from './redeem-comment.service';
 
 // --- Start: Redeem live wire (Sachin) ---
 @Module({
@@ -26,6 +28,8 @@ import { RedeemCatalogService } from './redeem-catalog.service';
     RedeemScratchPassService,
     RedeemClaimsService,
     RedeemCatalogService,
+    RedeemVoteService,
+    RedeemCommentService,
     ClaimsModuleGuard,
     RedeemAdminService,
     RedeemAdminPoolService,

@@ -53,8 +53,8 @@ export function RedeemCommentsDrawer({
         </header>
         <div className="flex flex-1 items-center justify-center p-6">
           <p className="max-w-xs text-center text-[13px] leading-relaxed text-slate-400">
-            No server comments yet. Players post comments on-device in the app;
-            they are not stored in this inventory.
+            Comments are stored with this card. Deleting the card removes
+            every comment on it. Players see the same comments in the app.
           </p>
         </div>
       </aside>

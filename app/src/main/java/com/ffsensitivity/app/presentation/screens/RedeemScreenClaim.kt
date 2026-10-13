@@ -4,7 +4,6 @@ import android.content.Context
 import com.ffsensitivity.app.data.RedeemCatalogCache
 import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemStatus
-import com.ffsensitivity.app.data.ScratchHistoryStore
 import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.RedeemRepository
 import com.ffsensitivity.app.util.AppLog
@@ -43,11 +42,6 @@ internal object RedeemScreenClaim {
                 RedeemCatalogCache.put(updated)
                 unlocked[target.id] = true
                 revealed[target.id] = true
-                runCatching {
-                    ScratchHistoryStore.addRedeem(context, updated)
-                }.onFailure {
-                    AppLog.e("Redeem unlock / history failed", it)
-                }
                 clearError()
                 SafeOps.toast(context, "Code unlocked · you can copy now")
                 ScratchClaimUiResult(
@@ -101,11 +95,6 @@ internal object RedeemScreenClaim {
                 if (wonCode != null) {
                     unlocked[target.id] = true
                     revealed[target.id] = true
-                    runCatching {
-                        ScratchHistoryStore.addRedeem(context, updated)
-                    }.onFailure {
-                        AppLog.e("Redeem scratch history failed", it)
-                    }
                 }
                 clearError()
                 val toast = if (wonCode != null) {

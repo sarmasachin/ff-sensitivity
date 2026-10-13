@@ -3,12 +3,14 @@ import { RedeemCodeStatus, RedeemMode, RedeemSecretStatus } from '@prisma/client
 import { PrismaService } from '../prisma/prisma.service';
 import { maskRedeemCode } from './redeem-mask';
 import { RedeemScratchService } from './redeem-scratch.service';
+import { RedeemVoteService } from './redeem-vote.service';
 
 @Injectable()
 export class RedeemCatalogService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scratchService: RedeemScratchService,
+    private readonly votes: RedeemVoteService,
   ) {}
 
   async catalog(userId: string) {
@@ -55,6 +57,13 @@ export class RedeemCatalogService {
       }),
     );
 
+    const tallies = await this.votes.tally(
+      userId,
+      codes.map((row) => row.id),
+    );
+    const voteOf = (id: string) =>
+      tallies.get(id) ?? { yesCount: 0, noCount: 0, myVote: null as boolean | null };
+
     const [types, cadences] = await Promise.all([
       this.prisma.redeemTypeDef.findMany({
         where: { enabled: true },
@@ -91,6 +100,8 @@ export class RedeemCatalogService {
             allowedAttempts: 1,
             needsAd: false,
             canScratch: true,
+            waitUntil: null as string | null,
+            waitNext: null as 'AD' | 'SCRATCH' | null,
           };
           const listStatus =
             expiredByTime ||
@@ -127,6 +138,9 @@ export class RedeemCatalogService {
             poolLeft,
             needsAd: meta.needsAd,
             canScratch: meta.canScratch && listStatus === 'ACTIVE',
+            waitUntil: meta.waitUntil,
+            waitNext: meta.waitNext,
+            ...voteOf(row.id),
           };
         }
 
@@ -168,6 +182,9 @@ export class RedeemCatalogService {
           poolLeft: null as number | null,
           needsAd: false,
           canScratch: false,
+          waitUntil: null,
+          waitNext: null,
+          ...voteOf(row.id),
         };
       }),
     };

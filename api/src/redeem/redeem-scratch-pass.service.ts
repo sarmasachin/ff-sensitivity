@@ -104,6 +104,8 @@ export class RedeemScratchPassService {
       allowedAttempts: 1,
       needsAd: false,
       canScratch: false,
+      waitUntil: null as string | null,
+      waitNext: null as 'AD' | 'SCRATCH' | null,
     };
     const code = await this.prisma.redeemCode.findUnique({
       where: { id: redeemCodeId },
@@ -115,7 +117,17 @@ export class RedeemScratchPassService {
       code.windowMinutes,
       now,
     );
-    if (!window) return empty;
+    if (!window) {
+      const start = code.startsAt;
+      if (start && start.getTime() > now.getTime()) {
+        return {
+          ...empty,
+          waitUntil: start.toISOString(),
+          waitNext: 'SCRATCH',
+        };
+      }
+      return empty;
+    }
     const last = await this.prisma.redeemScratchRoll.findFirst({
       where: { userId, redeemCodeId },
       orderBy: { createdAt: 'desc' },
@@ -131,12 +143,15 @@ export class RedeemScratchPassService {
       where: { userId_redeemCodeId: { userId, redeemCodeId } },
     });
     const allowed = pass?.allowedAttempts ?? 1;
-    if (locked) {
+    if (locked && last) {
+      const waitMs = Math.max(1, code.windowMinutes) * 60_000;
       return {
         usedAttempts: totalUsed,
         allowedAttempts: allowed,
         needsAd: false,
         canScratch: false,
+        waitUntil: new Date(last.createdAt.getTime() + waitMs).toISOString(),
+        waitNext: totalUsed >= allowed ? 'AD' : 'SCRATCH',
       };
     }
     const needsAd = totalUsed >= allowed;
@@ -145,6 +160,8 @@ export class RedeemScratchPassService {
       allowedAttempts: allowed,
       needsAd,
       canScratch: !needsAd,
+      waitUntil: null,
+      waitNext: null,
     };
   }
 }

@@ -149,6 +149,8 @@ internal fun RewardReactionCard(
     active: Boolean,
     isPlayGift: Boolean,
     vote: Boolean?,
+    yesCount: Int,
+    noCount: Int,
     onVote: (Boolean) -> Unit
 ) {
     val shape = RoundedCornerShape(22.dp)
@@ -220,17 +222,20 @@ internal fun RewardReactionCard(
             fontSize = 12.sp
         )
         Spacer(modifier = Modifier.height(10.dp))
+        val locked = vote != null
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ReactionChip(
-                label = "LIKE",
+                label = "LIKE $yesCount",
                 selected = vote == true,
                 positive = true,
+                enabled = !locked,
                 onClick = { onVote(true) }
             )
             ReactionChip(
-                label = "DISLIKE",
+                label = "DISLIKE $noCount",
                 selected = vote == false,
                 positive = false,
+                enabled = !locked,
                 onClick = { onVote(false) }
             )
         }
@@ -462,18 +467,26 @@ private fun ReactionChip(
     label: String,
     selected: Boolean,
     positive: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit
 ) {
     val accent = if (positive) Success else Danger
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) accent.copy(alpha = 0.2f) else SurfaceLift)
             .border(1.dp, if (selected) accent else Hairline, RoundedCornerShape(12.dp))
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick
+            .then(
+                if (enabled) {
+                    Modifier.clickable(
+                        indication = null,
+                        interactionSource = interaction,
+                        onClick = onClick
+                    )
+                } else {
+                    Modifier
+                }
             )
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {

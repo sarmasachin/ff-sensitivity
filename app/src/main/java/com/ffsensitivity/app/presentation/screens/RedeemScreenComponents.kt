@@ -20,15 +20,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CardGiftcard
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.RocketLaunch
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.ThumbDown
-import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
@@ -40,11 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.RedeemCodeItem
@@ -220,7 +215,8 @@ internal fun RedeemCodeCard(
     onRedeem: () -> Unit,
     onVote: (Boolean) -> Unit,
     onOpenComment: () -> Unit,
-    redeemActionLabel: String? = null
+    redeemActionLabel: String? = null,
+    onWaitFinished: (Long) -> Unit = {}
 ) {
     val active = item.status == RedeemStatus.ACTIVE
     val displayCode = when {
@@ -344,19 +340,28 @@ internal fun RedeemCodeCard(
                 filled = false,
                 onClick = onCopy
             )
+            val waitFace = if (item.isScratchReward && !item.canScratch && !item.needsAd) {
+                redeemWaitFace(
+                    item.waitUntilMs,
+                    item.waitNextAd,
+                    if (active) ({ item.waitUntilMs?.let(onWaitFinished) }) else null
+                )
+            } else {
+                null
+            }
             ActionPill(
                 pillModifier = Modifier.weight(1f),
                 label = when {
                     item.isScratchReward && item.canScratch -> "SCRATCH"
                     item.isScratchReward && item.needsAd -> "WATCH AD"
-                    item.isScratchReward -> "WAIT"
+                    waitFace != null -> waitFace.label
                     unlocked -> "UNLOCKED"
                     !redeemActionLabel.isNullOrBlank() -> redeemActionLabel
                     else -> "REDEEM NOW"
                 },
                 icon = Icons.Outlined.RocketLaunch,
                 enabled = if (item.isScratchReward) {
-                    active && (item.canScratch || item.needsAd)
+                    active && (item.canScratch || item.needsAd || waitFace?.ready == true)
                 } else {
                     active && !unlocked
                 },
@@ -380,180 +385,13 @@ internal fun RedeemCodeCard(
             )
         }
         Spacer(modifier = Modifier.height(14.dp))
-        Text("Did this code work?", color = InkMuted, fontSize = 12.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                VoteChip("YES", vote == true, true) { onVote(true) }
-                VoteChip("NO", vote == false, false) { onVote(false) }
-            }
-            if (item.isPlayGift) {
-                CommentChip(onClick = onOpenComment)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommentChip(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Amber.copy(alpha = 0.16f))
-            .border(1.dp, Amber.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick
-            )
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Outlined.ChatBubbleOutline,
-                contentDescription = null,
-                tint = Amber,
-                modifier = Modifier.size(14.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "COMMENT",
-                color = Amber,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusChip(active: Boolean) {
-    val bg = if (active) Success.copy(alpha = 0.15f) else Danger.copy(alpha = 0.15f)
-    val fg = if (active) Success else Danger
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(bg)
-            .border(1.dp, fg.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-    ) {
-        Text(
-            text = if (active) "ACTIVE" else "CLAIMED",
-            color = fg,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.8.sp
+        RedeemWorkedVotes(
+            yesCount = item.yesCount,
+            noCount = item.noCount,
+            vote = vote,
+            showComment = item.isPlayGift,
+            onVote = onVote,
+            onOpenComment = onOpenComment
         )
-    }
-}
-
-@Composable
-private fun MetaPill(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(VoidBlack.copy(alpha = 0.45f))
-            .border(1.dp, Hairline, RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-    ) {
-        Text(text, color = InkSecondary, fontSize = 11.sp)
-    }
-}
-
-@Composable
-private fun ActionPill(
-    pillModifier: Modifier = Modifier,
-    label: String,
-    icon: ImageVector,
-    enabled: Boolean,
-    filled: Boolean,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(14.dp)
-    val bg = when {
-        !enabled -> InkMuted.copy(alpha = 0.15f)
-        filled -> Amber
-        else -> VoidBlack.copy(alpha = 0.5f)
-    }
-    val fg = when {
-        !enabled -> InkMuted
-        filled -> VoidBlack
-        else -> InkPrimary
-    }
-    Box(
-        modifier = pillModifier
-            .height(46.dp)
-            .clip(shape)
-            .background(bg)
-            .border(1.dp, if (filled && enabled) Amber else HairlineStrong, shape)
-            .then(
-                if (enabled) {
-                    Modifier.clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                        onClick = onClick
-                    )
-                } else Modifier
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, null, tint = fg, modifier = Modifier.size(14.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = label,
-                color = fg,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.2.sp,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-        }
-    }
-}
-
-@Composable
-private fun VoteChip(label: String, selected: Boolean, positive: Boolean, onClick: () -> Unit) {
-    val accent = if (positive) Success else Danger
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) accent.copy(alpha = 0.2f) else SurfaceLift)
-            .border(1.dp, if (selected) accent else Hairline, RoundedCornerShape(12.dp))
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick
-            )
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                if (positive) Icons.Outlined.ThumbUp else Icons.Outlined.ThumbDown,
-                null,
-                tint = if (selected) accent else InkMuted,
-                modifier = Modifier.size(14.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = label,
-                color = if (selected) accent else InkSecondary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
     }
 }

@@ -1,6 +1,6 @@
 package com.ffsensitivity.app.presentation.screens
 
-internal enum class CommentsRetryKind { RELOAD, POST }
+internal enum class CommentsRetryKind { RELOAD, POST, VOTE }
 
 internal data class CommentsUiError(
     val code: String,

@@ -42,8 +42,26 @@ data class RedeemCodeItem(
     val coinRewardMax: Int? = null,
     val poolLeft: Int? = null,
     val needsAd: Boolean = false,
-    val canScratch: Boolean = false
+    val canScratch: Boolean = false,
+    val yesCount: Int = 0,
+    val noCount: Int = 0,
+    val myVote: Boolean? = null,
+    val waitUntilMs: Long? = null,
+    val waitNextAd: Boolean = false
 ) {
     val isScratchReward: Boolean get() = mode == RedeemMode.SCRATCH_REWARD
     val isPlayGift: Boolean get() = type == "GOOGLE_PLAY"
+
+    fun withVote(previous: Boolean?, next: Boolean): RedeemCodeItem {
+        if (previous == next) return this
+        var yes = yesCount
+        var no = noCount
+        when (previous) {
+            true -> yes = (yes - 1).coerceAtLeast(0)
+            false -> no = (no - 1).coerceAtLeast(0)
+            null -> Unit
+        }
+        if (next) yes += 1 else no += 1
+        return copy(yesCount = yes, noCount = no, myVote = next)
+    }
 }

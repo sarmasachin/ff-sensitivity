@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.DailyChallengeStore
 import com.ffsensitivity.app.data.ScratchCardDebug
-import com.ffsensitivity.app.data.ScratchHistoryStore
 import com.ffsensitivity.app.data.StreakMilestone
 import com.ffsensitivity.app.data.liveMilestones
 import com.ffsensitivity.app.presentation.theme.Amber
@@ -116,11 +115,6 @@ fun DailyChallengeRewardsTab(
                     onSnapshot(result.snapshot)
                     if (result.ok) {
                         DailyChallengeStore.clearMilestoneScratchPending(context, target.days)
-                        runCatching {
-                            ScratchHistoryStore.addMilestone(context, target)
-                        }.onFailure {
-                            AppLog.e("Milestone history save failed", it)
-                        }
                         SafeOps.toast(context, result.message)
                         ScratchClaimUiResult(ok = true, message = result.message)
                     } else {

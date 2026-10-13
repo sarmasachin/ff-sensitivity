@@ -107,7 +107,10 @@ internal object RedeemScreenScratch {
         // Type B: first scratch free; after coins, lock for admin window;
         // next window requires ad, then coins again.
         if (item.isScratchReward) {
-            if (!item.needsAd) {
+            val until = item.waitUntilMs
+            val waitDone = until != null && System.currentTimeMillis() >= until
+            val needsAdNow = item.needsAd || (waitDone && item.waitNextAd)
+            if (!needsAdNow) {
                 proceed(isBusy)
                 return
             }

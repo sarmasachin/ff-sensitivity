@@ -181,6 +181,8 @@ export class ShopAdminService {
     });
     return {
       id: row.id,
+      title: row.title,
+      rewardTag: row.rewardTag,
       priceCoins: row.priceCoins,
       oneTime: row.oneTime,
       stockLimit: row.stockLimit,

@@ -6,6 +6,8 @@ import { AnalyticsService } from '../analytics/analytics.service';
 import { RedeemScratchService } from './redeem-scratch.service';
 import { RedeemClaimsService } from './redeem-claims.service';
 import { RedeemCatalogService } from './redeem-catalog.service';
+import { RedeemVoteService } from './redeem-vote.service';
+import { RedeemCommentService } from './redeem-comment.service';
 
 // --- Start: Redeem live wire (Sachin) ---
 @Injectable()
@@ -16,6 +18,8 @@ export class RedeemService {
     private readonly scratchService: RedeemScratchService,
     private readonly claimsService: RedeemClaimsService,
     private readonly catalogService: RedeemCatalogService,
+    private readonly voteService: RedeemVoteService,
+    private readonly commentService: RedeemCommentService,
   ) {}
 
   catalog(userId: string) {
@@ -273,6 +277,26 @@ export class RedeemService {
 
   myClaims(userId: string) {
     return this.claimsService.myClaims(userId);
+  }
+
+  vote(userId: string, redeemCodeId: string, worked: boolean) {
+    this.assertRedeemId(redeemCodeId);
+    return this.voteService.cast(userId, redeemCodeId, worked);
+  }
+
+  comments(redeemCodeId: string) {
+    this.assertRedeemId(redeemCodeId);
+    return this.commentService.list(redeemCodeId);
+  }
+
+  addComment(
+    userId: string,
+    redeemCodeId: string,
+    name: string,
+    text: string,
+  ) {
+    this.assertRedeemId(redeemCodeId);
+    return this.commentService.add(userId, redeemCodeId, name, text);
   }
 
   private assertRedeemId(redeemCodeId: string) {

@@ -63,6 +63,7 @@ import { OverviewAdminModule } from './overview/overview.module';
 // --- End: Overview KPIs live wire (Sachin) ---
 // --- Start: App analytics P1 live wire (Sachin) ---
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CompareModule } from './compare/compare.module';
 // --- End: App analytics P1 live wire (Sachin) ---
 // --- Start: Ops settings live wire (Sachin) ---
 import { SettingsAdminModule } from './settings/settings.module';
@@ -132,6 +133,7 @@ import { SettingsAdminModule } from './settings/settings.module';
     // --- End: Overview KPIs live wire (Sachin) ---
     // --- Start: App analytics P1 live wire (Sachin) ---
     AnalyticsModule,
+    CompareModule,
     // --- End: App analytics P1 live wire (Sachin) ---
     // --- Start: Ops settings live wire (Sachin) ---
     SettingsAdminModule,

@@ -16,6 +16,12 @@ export class ScratchController {
     return this.scratch.userConfig(user.id);
   }
 
+  @Get('history')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  history(@CurrentUser() user: AuthUser) {
+    return this.scratch.history(user.id);
+  }
+
   @Post('roll')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   roll(@CurrentUser() user: AuthUser) {

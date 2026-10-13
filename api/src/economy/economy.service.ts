@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/errors/app-error';
+import { saveScratchArchive } from '../scratch/scratch-history';
 import { ShopAdminService } from '../shop/shop-admin.service';
 import { EconomyEarnService } from './economy-earn.service';
 
@@ -131,6 +132,21 @@ export class EconomyService {
           },
           create: { userId, boostId: item.id, charges: 1 },
           update: { charges: { increment: 1 } },
+        });
+      }
+
+      if (item.id === 'pack_scratch_bonus') {
+        const sourceKey = item.oneTime
+          ? `shop:${item.id}:once`
+          : `shop:${item.id}:${safeReq}`;
+        await saveScratchArchive(tx, {
+          userId,
+          sourceKey,
+          kind: 'SHOP',
+          title: item.title,
+          detail: 'Coin Shop purchase',
+          rewardLabel: item.rewardTag,
+          coins: 0,
         });
       }
 

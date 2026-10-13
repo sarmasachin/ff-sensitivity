@@ -3,6 +3,7 @@ package com.ffsensitivity.app.data.remote
 import android.content.Context
 import com.ffsensitivity.app.data.DailyChallengeStore
 import com.ffsensitivity.app.data.RedeemCatalogCache
+import com.ffsensitivity.app.data.RedeemComment
 import com.ffsensitivity.app.data.RedeemCatalogPayload
 import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemMode
@@ -52,7 +53,9 @@ object RedeemRepository {
             )
         }
         if (item.isScratchReward) {
-            if (!item.canScratch && !item.needsAd) {
+            val until = item.waitUntilMs
+            val stillWaiting = until != null && System.currentTimeMillis() < until
+            if (stillWaiting || (!item.canScratch && !item.needsAd && until == null)) {
                 return Result.failure(
                     ApiException(
                         "REDEEM_SCRATCH_BLOCKED",
@@ -156,6 +159,37 @@ object RedeemRepository {
             }
             result
         }
+    }
+
+    fun comments(context: Context, redeemId: String): Result<List<RedeemComment>> {
+        val token = UserSessionStore(context).accessToken()
+        if (token.isBlank()) {
+            return Result.failure(ApiException("AUTH_REQUIRED", "Please sign in again."))
+        }
+        return RedeemApi.comments(token, redeemId)
+    }
+
+    fun addComment(
+        context: Context,
+        redeemId: String,
+        name: String,
+        text: String
+    ): Result<RedeemComment> {
+        val token = UserSessionStore(context).accessToken()
+        if (token.isBlank()) {
+            return Result.failure(ApiException("AUTH_REQUIRED", "Please sign in again."))
+        }
+        return RedeemApi.addComment(token, redeemId, name, text)
+    }
+
+    fun vote(context: Context, redeemId: String, worked: Boolean): Result<RedeemVoteResult> {
+        val token = UserSessionStore(context).accessToken()
+        if (token.isBlank()) {
+            return Result.failure(
+                ApiException("AUTH_REQUIRED", "Please sign in again.")
+            )
+        }
+        return RedeemApi.vote(token, redeemId, worked)
     }
 
     fun unlockScratchAfterAd(context: Context, item: RedeemCodeItem): Result<Unit> {

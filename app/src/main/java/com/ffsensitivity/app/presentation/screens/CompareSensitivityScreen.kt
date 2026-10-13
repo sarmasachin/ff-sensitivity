@@ -13,16 +13,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.CompareArrows
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -30,10 +33,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.CompareFeedback
-import com.ffsensitivity.app.data.CompareSensitivityStore
-import com.ffsensitivity.app.data.SensitivityCompareEntry
 import com.ffsensitivity.app.data.SensitivityValues
 import com.ffsensitivity.app.data.WizardAnswers
+import com.ffsensitivity.app.data.remote.ApiException
+import com.ffsensitivity.app.data.remote.CompareRepository
+import com.ffsensitivity.app.data.remote.SharedCompareEntry
 import com.ffsensitivity.app.engine.FullSettingsResult
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
@@ -42,6 +46,9 @@ import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.presentation.theme.VoidBlack
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun CompareSensitivityScreen(
@@ -51,6 +58,7 @@ fun CompareSensitivityScreen(
     onBack: () -> Boolean
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val suggested = remember(result.sensitivity) { result.sensitivity.toValues() }
 
     var general by remember { mutableStateOf("") }
@@ -66,19 +74,34 @@ fun CompareSensitivityScreen(
     var saved by remember { mutableStateOf(false) }
     var actionError by remember { mutableStateOf<CompareUiError?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var storeVersion by remember { mutableIntStateOf(0) }
+    var loadGeneration by remember { mutableIntStateOf(0) }
+    var crowdOffset by remember { mutableStateOf<Int?>(null) }
+    var offsetFromMatch by remember { mutableStateOf(false) }
+    var sharedEntries by remember { mutableStateOf<List<SharedCompareEntry>>(emptyList()) }
 
-    val priorOffset = remember(answers, storeVersion) {
-        runCatching {
-            CompareSensitivityStore.averageGeneralOffset(
-                context,
-                answers.fingers.label,
-                answers.role.label
-            )
-        }.getOrElse {
-            AppLog.e("Compare priorOffset failed", it)
-            null
+    LaunchedEffect(loadGeneration, answers.fingers.label, answers.role.label) {
+        val loaded = withContext(Dispatchers.IO) {
+            CompareRepository.list(context, answers.fingers.label, answers.role.label)
         }
+        loaded.fold(
+            onSuccess = { payload ->
+                crowdOffset = payload.averageGeneralOffset
+                offsetFromMatch = payload.offsetFromMatch
+                sharedEntries = payload.items
+                if (actionError?.code == "COMPARE_LIST_FAILED") actionError = null
+            },
+            onFailure = {
+                AppLog.e("Compare list failed", it)
+                val msg = (it as? ApiException)?.message
+                    ?: "Could not load saved comparisons. Try again."
+                actionError = CompareUiError(
+                    code = "COMPARE_LIST_FAILED",
+                    title = "Saved comparisons unavailable",
+                    message = msg,
+                    retryKind = CompareRetryKind.RELOAD
+                )
+            }
+        )
     }
 
     fun clearError() {
@@ -191,11 +214,10 @@ fun CompareSensitivityScreen(
         if (saved) return
         clearError()
         busy = true
-        val ok = runCatching {
-            CompareSensitivityStore.save(
-                context,
-                SensitivityCompareEntry(
-                    timestamp = System.currentTimeMillis(),
+        scope.launch {
+            val resultSave = withContext(Dispatchers.IO) {
+                CompareRepository.save(
+                    context,
                     deviceLabel = result.deviceLabel,
                     fingers = answers.fingers.label,
                     role = answers.role.label,
@@ -205,22 +227,25 @@ fun CompareSensitivityScreen(
                     actual = actual,
                     feedback = feedback
                 )
-            )
-        }.getOrElse {
-            AppLog.e("Compare save crashed", it)
-            false
-        }
-        busy = false
-        if (ok) {
-            saved = true
-            storeVersion += 1
-            SafeOps.toast(context, "Comparison saved on this device")
-        } else {
-            showError(
-                code = "COMPARE_SAVE_FAILED",
-                title = "Save failed",
-                message = "Could not save this comparison on the device. Try again.",
-                retryKind = CompareRetryKind.SAVE
+            }
+            busy = false
+            resultSave.fold(
+                onSuccess = {
+                    saved = true
+                    loadGeneration += 1
+                    SafeOps.toast(context, "Comparison saved for everyone")
+                },
+                onFailure = {
+                    AppLog.e("Compare save failed", it)
+                    val msg = (it as? ApiException)?.message
+                        ?: "Could not save this comparison. Try again."
+                    showError(
+                        code = "COMPARE_SAVE_FAILED",
+                        title = "Save failed",
+                        message = msg,
+                        retryKind = CompareRetryKind.SAVE
+                    )
+                }
             )
         }
     }
@@ -229,6 +254,10 @@ fun CompareSensitivityScreen(
         when (error.retryKind) {
             CompareRetryKind.COMPARE -> compareSafe()
             CompareRetryKind.SAVE -> compared?.let { saveSafe(it) } ?: clearError()
+            CompareRetryKind.RELOAD -> {
+                clearError()
+                loadGeneration += 1
+            }
             null -> clearError()
         }
     }
@@ -276,12 +305,41 @@ fun CompareSensitivityScreen(
                     SuggestedSummaryCard(suggested = suggested, deviceLabel = result.deviceLabel)
                 }
 
-                if (priorOffset != null) {
+                val offset = crowdOffset
+                if (offset != null) {
+                    val who = if (offsetFromMatch) {
+                        "For ${answers.fingers.label} · ${answers.role.label}"
+                    } else {
+                        "From all saved compares"
+                    }
                     item {
                         TipBanner(
-                            text = "From saved compares, avg General offset is ${signed(priorOffset)}. " +
-                                "Positive = you prefer faster than the app; negative = slower."
+                            text = "$who, avg General offset is ${signed(offset)}. " +
+                                "Positive means faster than the app; negative means slower."
                         )
+                    }
+                }
+
+                item {
+                    Text(
+                        text = "Saved by players",
+                        color = InkPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (sharedEntries.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No saved comparisons yet. A save here shows up for every player.",
+                            color = InkSecondary,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                } else {
+                    items(sharedEntries, key = { it.id }) { entry ->
+                        CompareSavedCard(entry)
                     }
                 }
 

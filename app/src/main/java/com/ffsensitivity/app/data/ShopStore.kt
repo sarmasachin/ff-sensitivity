@@ -216,12 +216,6 @@ object ShopStore {
                             ShopStoreIo.writeOwned(context, owned)
                         }
                         when (item.id) {
-                            ID_PACK_SCRATCH_BONUS ->
-                                ScratchHistoryStore.addShopToken(
-                                    context,
-                                    item,
-                                    requestId = safeReq
-                                )
                             ID_BOOST_QUIZ_DOUBLE,
                             ID_BOOST_CHECKIN_PLUS -> refreshBoosts = true
                         }
@@ -251,12 +245,6 @@ object ShopStore {
                         ShopStoreIo.writeHistory(context, history)
 
                         when (item.id) {
-                            ID_PACK_SCRATCH_BONUS ->
-                                ScratchHistoryStore.addShopToken(
-                                    context,
-                                    item,
-                                    requestId = safeReq
-                                )
                             ID_BOOST_QUIZ_DOUBLE,
                             ID_BOOST_CHECKIN_PLUS -> refreshBoosts = true
                         }

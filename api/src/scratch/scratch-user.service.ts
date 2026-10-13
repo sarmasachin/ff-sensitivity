@@ -8,6 +8,7 @@ import { RedeemService } from '../redeem/redeem.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { utcDateKey } from '../economy/economy-catalog';
 import { assertOutcomeOdds, ensureScratchDefaults } from './scratch-shared';
+import { listScratchHistory } from './scratch-history';
 
 @Injectable()
 export class ScratchUserService {
@@ -68,6 +69,11 @@ export class ScratchUserService {
         canRoll: checkinDone && rollsLeft > 0,
       },
     };
+  }
+
+  async history(userId: string) {
+    await this.economy.requireUserPublic(userId);
+    return listScratchHistory(this.prisma, userId);
   }
 
   async userRoll(userId: string) {

@@ -1,17 +1,8 @@
 package com.ffsensitivity.app.presentation.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -20,20 +11,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.ffsensitivity.app.data.RedeemCadenceOption
 import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemDailyAdStore
 import com.ffsensitivity.app.data.remote.RedeemRepository
-import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
-import com.ffsensitivity.app.presentation.components.AppScreenHeader
-import com.ffsensitivity.app.presentation.components.InlineErrorBanner
-import com.ffsensitivity.app.presentation.theme.InkMuted
-import com.ffsensitivity.app.presentation.theme.InkSecondary
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +54,21 @@ fun RedeemScreen(
     var catalogLoading by remember { mutableStateOf(true) }
     var catalogLoadFailed by remember { mutableStateOf(false) }
     var catalogGeneration by remember { mutableStateOf(0) }
+    var waitRefreshKey by remember { mutableStateOf("") }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var skipResumeRefresh by remember { mutableIntStateOf(1) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            if (skipResumeRefresh > 0) {
+                skipResumeRefresh -= 1
+            } else {
+                catalogGeneration += 1
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(catalogGeneration) {
         catalogLoading = true
@@ -323,16 +323,28 @@ fun RedeemScreen(
     }
 
     fun onVoteSafe(itemId: String, yes: Boolean) {
-        runCatching {
-            votes[itemId] = yes
-        }.onFailure {
-            AppLog.e("Redeem vote failed", it)
-            showError(
-                code = "REDEEM_VOTE_FAILED",
-                title = "Vote not saved",
-                message = "Could not save your like/dislike. Try again."
-            )
-        }
+        val item = findCode(itemId) ?: return
+        val previous = votes[itemId] ?: item.myVote
+        RedeemVoteUi.submit(
+            scope = scope,
+            context = context,
+            item = item,
+            previous = previous,
+            yes = yes,
+            apply = { updated ->
+                votes[itemId] = updated.myVote
+                codes = codes.map { if (it.id == itemId) updated else it }
+            },
+            fail = {
+                if (previous == null) votes.remove(itemId) else votes[itemId] = previous
+                codes = codes.map { if (it.id == itemId) item else it }
+                showError(
+                    code = "REDEEM_VOTE_FAILED",
+                    title = "Vote not saved",
+                    message = "Could not save your yes or no. Try again."
+                )
+            }
+        )
     }
 
     fun runRetry(error: RedeemUiError) {
@@ -368,116 +380,26 @@ fun RedeemScreen(
         )
     }
 
-    AtmosphereScaffold {
-        when {
-            catalogLoading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Loading rewards…",
-                        color = InkSecondary,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-            catalogError != null -> {
-                RedeemCatalogErrorPane(
-                    contentPadding = contentPadding,
-                    error = catalogError,
-                    onOpenMenu = { openMenuSafe() },
-                    onRetry = {
-                        clearError()
-                        catalogGeneration += 1
-                    }
-                )
-            }
-            else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPadding)
-                        .statusBarsPadding(),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        AppScreenHeader(
-                            title = "Gift Codes",
-                            onOpenMenu = { openMenuSafe() }
-                        )
-                    }
-                    item {
-                        RedeemTabRow(
-                            tabs = cadenceTabs.map { it.id to it.label },
-                            selectedId = selectedCadenceId,
-                            onSelect = { selectedCadenceId = it }
-                        )
-                    }
-                    item {
-                        Text(
-                            text = if (isDailyCadence) {
-                                "Scratch to earn Coins · limited codes by schedule"
-                            } else {
-                                "$selectedCadenceLabel · coins every scratch"
-                            },
-                            color = InkMuted,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 2.dp)
-                        )
-                    }
-                    actionError?.let { err ->
-                        item(key = "redeem_error_${err.code}") {
-                            InlineErrorBanner(
-                                title = err.title,
-                                message = err.message,
-                                onDismiss = { clearError() },
-                                retryLabel = if (err.retryKind != null) "Retry" else null,
-                                onRetry = if (err.retryKind != null) {
-                                    { runRetry(err) }
-                                } else {
-                                    null
-                                }
-                            )
-                        }
-                    }
-                    if (tabCodes.isEmpty()) {
-                        item(key = "redeem_tab_empty_$selectedCadenceId") {
-                            RedeemTabEmptyPane(
-                                cadenceId = selectedCadenceId,
-                                cadenceLabel = selectedCadenceLabel
-                            )
-                        }
-                    } else {
-                        items(tabCodes, key = { it.id }) { item ->
-                            val isUnlocked = unlocked[item.id] == true
-                            RedeemCodeCard(
-                                item = item,
-                                unlocked = isUnlocked,
-                                revealed = revealed[item.id] == true,
-                                vote = votes[item.id],
-                                onToggleReveal = { toggleReveal(item) },
-                                onCopy = { copyUnlocked(item) },
-                                onRedeem = { requestScratch(item) },
-                                onVote = { yes -> onVoteSafe(item.id, yes) },
-                                onOpenComment = { openCommentsSafe(item) },
-                                redeemActionLabel = when {
-                                    item.isScratchReward && item.needsAd -> "WATCH AD"
-                                    item.isScratchReward && item.canScratch -> "SCRATCH"
-                                    item.isScratchReward -> "WAIT"
-                                    isUnlocked -> null
-                                    needsRedeemDailyAd -> "WATCH AD"
-                                    else -> null
-                                }
-                            )
-                        }
-                    }
-                    item { Spacer(modifier = Modifier.height(20.dp)) }
-                }
+    RedeemScreenList(
+        contentPadding, catalogLoading, catalogError, actionError,
+        cadenceTabs, selectedCadenceId, selectedCadenceLabel, isDailyCadence,
+        tabCodes, unlocked, revealed, votes, needsRedeemDailyAd,
+        onOpenMenu = { openMenuSafe() },
+        onRetryCatalog = { clearError(); catalogGeneration += 1 },
+        onSelectCadence = { selectedCadenceId = it },
+        onDismissError = { clearError() },
+        onRetryAction = { runRetry(it) },
+        onToggleReveal = { toggleReveal(it) },
+        onCopy = { copyUnlocked(it) },
+        onRedeem = { requestScratch(it) },
+        onVote = { id, yes -> onVoteSafe(id, yes) },
+        onOpenComment = { openCommentsSafe(it) },
+        onWaitFinished = { id, until ->
+            val key = "$id:$until"
+            if (waitRefreshKey != key) {
+                waitRefreshKey = key
+                catalogGeneration += 1
             }
         }
-    }
+    )
 }

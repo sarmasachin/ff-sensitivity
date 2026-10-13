@@ -4,7 +4,7 @@ import com.ffsensitivity.app.data.CompareFeedback
 import com.ffsensitivity.app.data.SensitivityValues
 import com.ffsensitivity.app.engine.SensitivityResult
 
-internal enum class CompareRetryKind { COMPARE, SAVE }
+internal enum class CompareRetryKind { COMPARE, SAVE, RELOAD }
 
 internal data class CompareUiError(
     val code: String,
@@ -61,5 +61,5 @@ internal fun insightText(generalDiff: Int, feedback: CompareFeedback): String {
         CompareFeedback.TOO_FAST -> " Feel tag: Too fast."
         CompareFeedback.PERFECT -> " Feel tag: Perfect."
     }
-    return base + feel + " Saved to local history for offset learning."
+    return base + feel + " Saved for every player."
 }

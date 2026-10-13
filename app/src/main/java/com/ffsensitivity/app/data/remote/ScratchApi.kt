@@ -22,6 +22,11 @@ data class ScratchConfigPayload(
     val eligibility: ScratchEligibility
 )
 
+data class ScratchHistoryPayload(
+    val retentionDays: Int,
+    val items: List<com.ffsensitivity.app.data.ScratchedCardEntry>
+)
+
 data class ScratchRollResult(
     val outcome: String,
     val alreadyApplied: Boolean,
@@ -61,6 +66,45 @@ object ScratchApi {
                 )
             }
         }.onFailure { AppLog.e("ScratchApi.getConfig failed", it) }
+    }
+
+    fun history(accessToken: String): Result<ScratchHistoryPayload> {
+        return runCatching {
+            val req = ApiClient.get("/api/v1/scratch/history", accessToken)
+            ApiClient.http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) throw ApiClient.parseError(raw, resp.code)
+                val root = JSONObject(raw)
+                val arr = root.optJSONArray("items") ?: org.json.JSONArray()
+                ScratchHistoryPayload(
+                    retentionDays = root.optInt("retentionDays", 30),
+                    items = buildList {
+                        for (i in 0 until arr.length()) {
+                            val o = arr.optJSONObject(i) ?: continue
+                            val kind = runCatching {
+                                com.ffsensitivity.app.data.ScratchCardKind.valueOf(o.getString("kind"))
+                            }.getOrNull() ?: continue
+                            val at = runCatching {
+                                java.time.Instant.parse(o.getString("scratchedAt")).toEpochMilli()
+                            }.getOrElse { System.currentTimeMillis() }
+                            add(
+                                com.ffsensitivity.app.data.ScratchedCardEntry(
+                                    id = o.getString("id"),
+                                    kind = kind,
+                                    title = o.optString("title"),
+                                    detail = o.optString("detail"),
+                                    rewardLabel = o.optString("rewardLabel"),
+                                    code = o.optString("code").takeIf { it.isNotBlank() && it != "null" },
+                                    coins = o.optInt("coins", 0),
+                                    badge = o.optString("badge").takeIf { it.isNotBlank() && it != "null" },
+                                    scratchedAtMs = at
+                                )
+                            )
+                        }
+                    }
+                )
+            }
+        }.onFailure { AppLog.e("ScratchApi.history failed", it) }
     }
 
     fun roll(accessToken: String): Result<ScratchRollResult> {

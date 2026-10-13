@@ -46,10 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ffsensitivity.app.data.ScratchCardKind
-import com.ffsensitivity.app.data.ScratchHistoryStore
 import com.ffsensitivity.app.data.ScratchedCardEntry
-import com.ffsensitivity.app.data.remote.RedeemRepository
 import com.ffsensitivity.app.data.remote.ScratchEligibility
 import com.ffsensitivity.app.data.remote.ScratchRepository
 import com.ffsensitivity.app.data.remote.ScratchRollResult
@@ -74,9 +71,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.rememberCoroutineScope
 
 private enum class ScratchArchiveRetryKind { RELOAD, COPY }
 
@@ -94,7 +89,6 @@ fun ScratchCardsScreen(
     onBack: () -> Boolean
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var entries by remember { mutableStateOf<List<ScratchedCardEntry>>(emptyList()) }
     var loadGeneration by remember { mutableStateOf(0) }
     var actionError by remember { mutableStateOf<ScratchArchiveUiError?>(null) }
@@ -102,6 +96,7 @@ fun ScratchCardsScreen(
     var listLoadFailed by remember { mutableStateOf(false) }
     var eligibility by remember { mutableStateOf<ScratchEligibility?>(null) }
     var lastRoll by remember { mutableStateOf<ScratchRollResult?>(null) }
+    var showScratchCard by remember { mutableStateOf(false) }
 
     fun clearError() {
         actionError = null
@@ -192,31 +187,30 @@ fun ScratchCardsScreen(
         }
     }
 
-    fun rollDaily() {
+    fun openScratchCard() {
         if (isBusy) {
             showBusy()
             return
         }
+        if (eligibility?.canRoll != true) return
         clearError()
-        isBusy = true
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                ScratchRepository.rollDaily(context)
-            }
-            isBusy = false
-            result.fold(
-                onSuccess = { roll ->
-                    lastRoll = roll
-                    eligibility = com.ffsensitivity.app.data.remote.ScratchConfigCache.config?.eligibility
-                    reloadArchive()
-                    SafeOps.toast(context, roll.rewardLabel.ifBlank { "Scratch revealed!" })
-                },
-                onFailure = {
-                    AppLog.e("Daily scratch roll failed", it)
-                    val msg = (it as? com.ffsensitivity.app.data.remote.ApiException)?.message
-                        ?: "Scratch roll failed. Try again."
-                    showError("SCRATCH_ROLL_FAILED", "Scratch failed", msg)
-                }
+        showScratchCard = true
+    }
+
+    suspend fun rollAfterScratch(): Result<MenuScratchPrize> {
+        val result = withContext(Dispatchers.IO) {
+            ScratchRepository.rollDaily(context)
+        }
+        return result.map { roll ->
+            lastRoll = roll
+            eligibility = com.ffsensitivity.app.data.remote.ScratchConfigCache.config?.eligibility
+            reloadArchive()
+            SafeOps.toast(context, roll.rewardLabel.ifBlank { "Scratch revealed!" })
+            MenuScratchPrize(
+                title = roll.title,
+                rewardLabel = roll.rewardLabel,
+                code = roll.code,
+                coinDelta = roll.coinDelta
             )
         }
     }
@@ -231,53 +225,24 @@ fun ScratchCardsScreen(
 
     LaunchedEffect(loadGeneration) {
         listLoadFailed = false
-        val localResult = withContext(Dispatchers.IO) {
-            ScratchHistoryStore.listActive(context)
+        val history = withContext(Dispatchers.IO) {
+            ScratchRepository.history(context)
         }
-        val serverClaims = withContext(Dispatchers.IO) {
-            RedeemRepository.myClaims(context).getOrElse { emptyList() }
-        }
-        localResult.fold(
-            onSuccess = { local ->
-                val nonRedeem = local.filter { it.kind != ScratchCardKind.REDEEM }
-                val fromServer = serverClaims.map { row ->
-                    ScratchedCardEntry(
-                        id = "redeem_${row.redeemCodeId}",
-                        kind = ScratchCardKind.REDEEM,
-                        title = row.title,
-                        detail = row.valueLabel.ifBlank { row.whenLabel },
-                        rewardLabel = row.valueLabel.ifBlank { "Redeem claim" },
-                        code = row.code.ifBlank { row.codeMasked },
-                        scratchedAtMs = row.createdAtMs
-                    )
-                }
-                entries = (fromServer + nonRedeem).sortedByDescending { it.scratchedAtMs }
+        history.fold(
+            onSuccess = { rows ->
+                entries = rows.sortedByDescending { it.scratchedAtMs }
                 listLoadFailed = false
             },
             onFailure = {
-                if (serverClaims.isNotEmpty()) {
-                    entries = serverClaims.map { row ->
-                        ScratchedCardEntry(
-                            id = "redeem_${row.redeemCodeId}",
-                            kind = ScratchCardKind.REDEEM,
-                            title = row.title,
-                            detail = row.valueLabel.ifBlank { row.whenLabel },
-                            rewardLabel = row.valueLabel.ifBlank { "Redeem claim" },
-                            code = row.code.ifBlank { row.codeMasked },
-                            scratchedAtMs = row.createdAtMs
-                        )
-                    }
-                    listLoadFailed = false
-                } else {
-                    entries = emptyList()
-                    listLoadFailed = true
-                    actionError = ScratchArchiveUiError(
-                        code = "SCRATCH_ARCHIVE_LOAD_FAILED",
-                        title = "Archive unavailable",
-                        message = "Could not load scratched cards. Try again.",
-                        retryKind = ScratchArchiveRetryKind.RELOAD
-                    )
-                }
+                AppLog.e("Scratch archive load failed", it)
+                entries = emptyList()
+                listLoadFailed = true
+                actionError = ScratchArchiveUiError(
+                    code = "SCRATCH_ARCHIVE_LOAD_FAILED",
+                    title = "Archive unavailable",
+                    message = "Could not load scratched cards. Try again.",
+                    retryKind = ScratchArchiveRetryKind.RELOAD
+                )
             }
         )
     }
@@ -318,7 +283,7 @@ fun ScratchCardsScreen(
                     DailyScratchBanner(
                         eligibility = eligibility,
                         busy = isBusy,
-                        onRoll = { rollDaily() }
+                        onRoll = { openScratchCard() }
                     )
                 }
                 lastRoll?.let { roll ->
@@ -349,5 +314,11 @@ fun ScratchCardsScreen(
                 item { Spacer(modifier = Modifier.height(20.dp)) }
             }
         }
+    }
+    if (showScratchCard) {
+        MenuScratchCardDialog(
+            onDismiss = { showScratchCard = false },
+            onRoll = { rollAfterScratch() }
+        )
     }
 }
