@@ -108,10 +108,17 @@ export class UsersService {
     if (!before) {
       throw new AppError('USER_NOT_FOUND', 'User not found.', 404);
     }
-    if (before.dataDeletedAt) {
+    if (before.googleBanned) {
       throw new AppError(
         'USER_STATUS_CONFLICT',
         'This Gmail is banned after data delete. Cannot restore.',
+        409,
+      );
+    }
+    if (before.dataDeletedAt) {
+      throw new AppError(
+        'USER_STATUS_CONFLICT',
+        'This account was deleted by the user. They can sign in again with the same Google account.',
         409,
       );
     }
@@ -236,8 +243,12 @@ export class UsersService {
       await tx.communityPostReport.deleteMany({ where: { userId } });
       await tx.communityPost.deleteMany({ where: { userId } });
       await tx.redeemClaim.deleteMany({ where: { userId } });
+      await tx.redeemCodeVote.deleteMany({ where: { userId } });
+      await tx.redeemCodeComment.deleteMany({ where: { userId } });
       await tx.redeemScratchRoll.deleteMany({ where: { userId } });
       await tx.redeemScratchPass.deleteMany({ where: { userId } });
+      await tx.scratchArchiveEntry.deleteMany({ where: { userId } });
+      await tx.sensitivityCompare.deleteMany({ where: { userId } });
       await tx.walletLedger.deleteMany({ where: { userId } });
       await tx.userBoostCharge.deleteMany({ where: { userId } });
       await tx.scratchRoll.deleteMany({ where: { userId } });
@@ -269,6 +280,7 @@ export class UsersService {
           walletNote: '',
           isActive: false,
           isRestricted: false,
+          googleBanned: true,
           tokenVersion: { increment: 1 },
           dataDeletedAt: new Date(),
           lastLoginAt: null,

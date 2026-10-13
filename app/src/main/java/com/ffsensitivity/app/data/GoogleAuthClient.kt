@@ -1,6 +1,8 @@
 package com.ffsensitivity.app.data
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.credentials.CredentialManager
 import androidx.credentials.CredentialOption
 import androidx.credentials.CustomCredential
@@ -126,7 +128,7 @@ class GoogleAuthClient(private val activityContext: Context) {
                 )
             }
         } catch (e: GetCredentialCancellationException) {
-            Attempt.Cancelled
+            if (!isOnline(activityContext)) Attempt.Failed(e) else Attempt.Cancelled
         } catch (e: NoCredentialException) {
             AppLog.e("Google Sign-In: no credential", e)
             Attempt.Failed(e)
@@ -156,19 +158,48 @@ class GoogleAuthClient(private val activityContext: Context) {
             msg.contains("28444") ||
                 msg.contains("Developer console is not set up correctly", ignoreCase = true) ->
                 USER_CONSOLE_MISMATCH
-            msg.contains("network", ignoreCase = true) ||
-                msg.contains("timeout", ignoreCase = true) ->
-                USER_NETWORK
+            isNetworkFailure(cause) || !isOnline(activityContext) -> USER_NETWORK
             cause is NoCredentialException -> USER_NO_ACCOUNT
             else -> USER_SIGN_IN_FAILED
         }
         return detailed(base, "${cause?.javaClass?.simpleName}: ${msg.take(240)}")
     }
 
+    private fun isNetworkFailure(cause: Throwable?): Boolean {
+        var current = cause
+        val seen = HashSet<Throwable>()
+        while (current != null && seen.add(current)) {
+            val msg = current.message.orEmpty()
+            if (
+                current is java.net.UnknownHostException ||
+                current is java.net.ConnectException ||
+                current is java.net.SocketTimeoutException ||
+                msg.contains("network", ignoreCase = true) ||
+                msg.contains("offline", ignoreCase = true) ||
+                msg.contains("timeout", ignoreCase = true) ||
+                msg.contains("NETWORK_ERROR") ||
+                msg.contains("[7]")
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
+    }
+
     private fun detailed(base: String, technical: String): String =
         if (BuildConfig.DEBUG) "$base\n[debug] $technical" else base
 
     companion object {
+        fun isOnline(context: Context): Boolean {
+            val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        }
+
+        fun offlineSignInMessage(): String = USER_NETWORK
+
         private const val USER_SIGN_IN_FAILED =
             "Couldn't sign in with Google. Please try again."
         private const val USER_CONSOLE_MISMATCH =

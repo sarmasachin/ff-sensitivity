@@ -97,9 +97,11 @@ fun ContactScreen(
                 subject = thread!!.subject
             }
         }.onFailure {
-            // Keep local cache if offline; only force auth error when no cache.
-            if (ContactStore.load(context) == null && session.accessToken().isBlank()) {
-                error = "Sign in required" to "Sign in to send and receive support messages."
+            if (ContactStore.load(context) != null) return@onFailure
+            error = if (session.accessToken().isBlank()) {
+                "Sign in required" to "Sign in to send and receive support messages."
+            } else {
+                "Couldn't load messages" to "Check your internet connection and try again."
             }
         }
         syncing = false

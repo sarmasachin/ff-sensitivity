@@ -59,24 +59,49 @@ export class UserAuthService {
       payload.name?.trim() || email.split('@')[0] || 'Google Player';
     const photoUrl = payload.picture?.trim() || null;
 
-    // Reject suspended seats before touching lastLoginAt / profile.
+    // Admin suspend and admin Gmail-ban stay blocked.
+    // A user's own delete (data wiped, not googleBanned) can sign in again.
     const existing = await this.prisma.user.findUnique({
       where: { googleSub },
-      select: { isActive: true, dataDeletedAt: true },
+      select: { isActive: true, dataDeletedAt: true, googleBanned: true },
     });
-    if (existing && (!existing.isActive || existing.dataDeletedAt)) {
+    const rejoining = !!existing?.dataDeletedAt && !existing.googleBanned;
+    if (
+      existing &&
+      (existing.googleBanned || (!existing.isActive && !rejoining))
+    ) {
       throw new AppError('AUTH_SUSPENDED', 'This account is suspended.', 403);
     }
 
-    // Do not force isActive:true on login — suspend must stick.
+    // Do not force isActive:true on a normal login — suspend must stick.
     const user = await this.prisma.user.upsert({
       where: { googleSub },
-      update: {
-        email,
-        googleName: displayName,
-        photoUrl,
-        lastLoginAt: new Date(),
-      },
+      update: rejoining
+        ? {
+            email,
+            displayName,
+            googleName: displayName,
+            photoUrl,
+            lastLoginAt: new Date(),
+            isActive: true,
+            isRestricted: false,
+            dataDeletedAt: null,
+            ffUid: '',
+            playRole: '',
+            region: '',
+            coins: 0,
+            streakDays: 0,
+            lastCheckinDay: null,
+            walletFrozen: false,
+            walletNote: '',
+            notifyPush: true,
+          }
+        : {
+            email,
+            googleName: displayName,
+            photoUrl,
+            lastLoginAt: new Date(),
+          },
       create: {
         googleSub,
         email,

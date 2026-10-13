@@ -56,8 +56,12 @@ export class UserProfileService {
       await tx.communityPostReport.deleteMany({ where: { userId } });
       await tx.communityPost.deleteMany({ where: { userId } });
       await tx.redeemClaim.deleteMany({ where: { userId } });
+      await tx.redeemCodeVote.deleteMany({ where: { userId } });
+      await tx.redeemCodeComment.deleteMany({ where: { userId } });
       await tx.redeemScratchRoll.deleteMany({ where: { userId } });
       await tx.redeemScratchPass.deleteMany({ where: { userId } });
+      await tx.scratchArchiveEntry.deleteMany({ where: { userId } });
+      await tx.sensitivityCompare.deleteMany({ where: { userId } });
       await tx.walletLedger.deleteMany({ where: { userId } });
       await tx.userBoostCharge.deleteMany({ where: { userId } });
       await tx.scratchRoll.deleteMany({ where: { userId } });
@@ -89,6 +93,7 @@ export class UserProfileService {
           walletNote: '',
           isActive: false,
           isRestricted: false,
+          googleBanned: false,
           tokenVersion: { increment: 1 },
           dataDeletedAt: new Date(),
           lastLoginAt: null,

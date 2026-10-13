@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -97,6 +98,8 @@ fun ScratchCardsScreen(
     var eligibility by remember { mutableStateOf<ScratchEligibility?>(null) }
     var lastRoll by remember { mutableStateOf<ScratchRollResult?>(null) }
     var showScratchCard by remember { mutableStateOf(false) }
+    var configGeneration by remember { mutableIntStateOf(0) }
+    var configFailed by remember { mutableStateOf(false) }
 
     fun clearError() {
         actionError = null
@@ -123,6 +126,7 @@ fun ScratchCardsScreen(
     fun reloadArchive() {
         clearError()
         loadGeneration += 1
+        configGeneration += 1
     }
 
     fun backSafe() {
@@ -215,11 +219,22 @@ fun ScratchCardsScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
+    LaunchedEffect(configGeneration) {
+        val config = withContext(Dispatchers.IO) {
             ScratchRepository.syncConfig(context)
-        }.onSuccess {
+        }
+        config.onSuccess {
             eligibility = it.eligibility
+            configFailed = false
+        }.onFailure {
+            AppLog.e("Scratch config sync failed", it)
+            configFailed = true
+            actionError = ScratchArchiveUiError(
+                code = "SCRATCH_CONFIG_FAILED",
+                title = "Couldn't load scratch card",
+                message = "Check your internet connection and try again.",
+                retryKind = ScratchArchiveRetryKind.RELOAD
+            )
         }
     }
 
@@ -283,7 +298,8 @@ fun ScratchCardsScreen(
                     DailyScratchBanner(
                         eligibility = eligibility,
                         busy = isBusy,
-                        onRoll = { openScratchCard() }
+                        onRoll = { openScratchCard() },
+                        configFailed = configFailed
                     )
                 }
                 lastRoll?.let { roll ->

@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,10 +69,17 @@ fun LoginScreen(
     var showTermsSheet by remember { mutableStateOf(false) }
     var showPrivacySheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val scroll = rememberScrollState()
     val context = LocalContext.current
     val activity = context as? Activity
     val authClient = remember(context) { GoogleAuthClient(context) }
     val cardShape = RoundedCornerShape(24.dp)
+
+    LaunchedEffect(error) {
+        if (!error.isNullOrBlank()) {
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
 
     if (showTermsSheet) {
         LoginTermsSheet(
@@ -108,7 +116,7 @@ fun LoginScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(horizontal = 24.dp, vertical = 28.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -163,6 +171,10 @@ fun LoginScreen(
                                 error = "Something went wrong. Please try again."
                                 return@LoginGoogleButton
                             }
+                            if (!GoogleAuthClient.isOnline(context)) {
+                                error = GoogleAuthClient.offlineSignInMessage()
+                                return@LoginGoogleButton
+                            }
                             error = null
                             loading = true
                             scope.launch {
@@ -213,7 +225,11 @@ fun LoginScreen(
                                         // --- End: Redeem live wire (Sachin) ---
                                     }
                                     is GoogleSignInOutcome.Cancelled -> {
-                                        error = null
+                                        error = if (!GoogleAuthClient.isOnline(context)) {
+                                            GoogleAuthClient.offlineSignInMessage()
+                                        } else {
+                                            null
+                                        }
                                     }
                                     is GoogleSignInOutcome.Failure -> {
                                         error = outcome.message

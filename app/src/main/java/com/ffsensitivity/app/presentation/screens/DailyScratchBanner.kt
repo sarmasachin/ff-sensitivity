@@ -31,6 +31,7 @@ fun DailyScratchBanner(
     eligibility: ScratchEligibility?,
     busy: Boolean,
     onRoll: () -> Unit,
+    configFailed: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val can = eligibility?.canRoll == true && !busy
@@ -56,6 +57,8 @@ fun DailyScratchBanner(
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = when {
+                eligibility == null && configFailed ->
+                    "Check your internet connection and try again."
                 eligibility == null -> "Syncing card…"
                 eligibility.canRoll -> "Tap to reveal today’s scratch"
                 !eligibility.checkinDone -> "Check in first on Daily Challenge"

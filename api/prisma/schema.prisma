@@ -187,6 +187,8 @@ model User {
   // --- End: App analytics P2 logout (Sachin) ---
   isActive       Boolean   @default(true) @map("is_active")
   dataDeletedAt  DateTime? @map("data_deleted_at")
+  /// Admin data-delete keeps this Gmail banned. A user's own delete does not.
+  googleBanned   Boolean   @default(false) @map("google_banned")
   lastLoginAt    DateTime? @map("last_login_at")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
