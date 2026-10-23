@@ -40,9 +40,9 @@ function buildPath(values: number[], max: number): string {
 export function DashboardTrendCard({ points, rangeLabel }: Props) {
   const [hover, setHover] = useState<number | null>(null);
 
-  const max = Math.max(1, ...points.flatMap((p) => [p.claims, p.redeems]));
+  const max = Math.max(1, ...points.flatMap((p) => [p.claims, p.scratch]));
   const claims = points.map((p) => p.claims);
-  const redeems = points.map((p) => p.redeems);
+  const redeems = points.map((p) => p.scratch);
   const claimsLine = buildPath(claims, max);
   const redeemsLine = buildPath(redeems, max);
   const lastX = pointX(points.length - 1, points.length);
@@ -73,7 +73,7 @@ export function DashboardTrendCard({ points, rangeLabel }: Props) {
             Trend
           </p>
           <h2 className="mt-0.5 text-[17px] font-semibold text-[#0f172a]">
-            Claims vs redeems
+            Claims vs scratch
           </h2>
           <p className="mt-0.5 text-[13px] text-slate-500">{rangeLabel}</p>
         </div>
@@ -84,7 +84,7 @@ export function DashboardTrendCard({ points, rangeLabel }: Props) {
           </span>
           <span className="flex items-center gap-1.5 text-slate-600">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            Redeems · {totalRedeems}
+            Scratch · {totalRedeems}
           </span>
         </div>
       </div>
@@ -100,7 +100,7 @@ export function DashboardTrendCard({ points, rangeLabel }: Props) {
             preserveAspectRatio="none"
             className="h-[280px] w-full"
             role="img"
-            aria-label="Claims and redeems trend chart"
+            aria-label="Claims and scratch trend chart"
           >
             {[0.25, 0.5, 0.75].map((t) => {
               const y = PAD_Y + (H - PAD_Y * 2) * (1 - t);
@@ -159,7 +159,7 @@ export function DashboardTrendCard({ points, rangeLabel }: Props) {
               />
               <Marker
                 leftPct={(pointX(hover, points.length) / W) * 100}
-                topPct={(pointY(active.redeems, max) / H) * 100}
+                topPct={(pointY(active.scratch, max) / H) * 100}
                 colorClass="bg-emerald-500"
               />
               <ChartTooltip
@@ -172,8 +172,8 @@ export function DashboardTrendCard({ points, rangeLabel }: Props) {
                     dotClass: "bg-sky-500",
                   },
                   {
-                    label: "Redeems",
-                    value: String(active.redeems),
+                    label: "Scratch",
+                    value: String(active.scratch),
                     dotClass: "bg-emerald-500",
                   },
                 ]}

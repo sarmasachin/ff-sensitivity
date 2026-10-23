@@ -30,7 +30,7 @@ export function DashboardHeader({ refreshedAt, onRefresh }: Props) {
         </div>
         <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
           <p className="text-[11px] text-white/55 tabular-nums">
-            Demo snapshot · {refreshedAt}
+            Updated · {refreshedAt}
           </p>
           {onRefresh ? (
             <button

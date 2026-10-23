@@ -12,7 +12,7 @@ export type DashKpis = {
 export type DashPoint = {
   label: string;
   claims: number;
-  redeems: number;
+  scratch: number;
 };
 
 export type DashStatusBar = {
@@ -61,301 +61,60 @@ export type DashSnapshot = {
   refreshedAt: string;
 };
 
-const TREND_7D: DashPoint[] = [
-  { label: "Mon", claims: 42, redeems: 38 },
-  { label: "Tue", claims: 51, redeems: 44 },
-  { label: "Wed", claims: 47, redeems: 41 },
-  { label: "Thu", claims: 63, redeems: 55 },
-  { label: "Fri", claims: 58, redeems: 49 },
-  { label: "Sat", claims: 71, redeems: 62 },
-  { label: "Sun", claims: 66, redeems: 58 },
-];
-
-const TREND_30D: DashPoint[] = [
-  { label: "W1", claims: 280, redeems: 240 },
-  { label: "W2", claims: 312, redeems: 268 },
-  { label: "W3", claims: 295, redeems: 251 },
-  { label: "W4", claims: 348, redeems: 302 },
-];
-
-const TREND_TODAY: DashPoint[] = [
-  { label: "00", claims: 2, redeems: 1 },
-  { label: "04", claims: 1, redeems: 1 },
-  { label: "08", claims: 8, redeems: 6 },
-  { label: "12", claims: 14, redeems: 12 },
-  { label: "16", claims: 18, redeems: 15 },
-  { label: "20", claims: 11, redeems: 9 },
-];
-
-const INVENTORY: DashStatusBar[] = [
-  { id: "active", label: "Active", count: 1284, tone: "emerald" },
-  { id: "used", label: "Used", count: 942, tone: "sky" },
-  { id: "low", label: "Low stock", count: 37, tone: "amber" },
-  { id: "expired", label: "Expired", count: 118, tone: "rose" },
-  { id: "held", label: "Held", count: 24, tone: "slate" },
-];
-
-const CLAIMS_MIX: DashDonutSlice[] = [
-  { id: "ok", label: "Success", value: 412, color: "#059669" },
-  { id: "pending", label: "Pending", value: 48, color: "#d97706" },
-  { id: "reject", label: "Rejected", value: 29, color: "#e11d48" },
-  { id: "fail", label: "Failed", value: 17, color: "#64748b" },
-];
-
-/** Max rows shown in Pending support / Recent ops activity cards. */
-export const DASH_LIST_LIMIT = 10;
-
-const SUPPORT: DashSupportRow[] = [
-  {
-    id: "t-1042",
-    subject: "Redeem code not credited",
-    priority: "P1",
-    age: "14m",
-  },
-  {
-    id: "t-1041",
-    subject: "Wallet balance mismatch",
-    priority: "P1",
-    age: "32m",
-  },
-  {
-    id: "t-1038",
-    subject: "Push not received on Android 14",
-    priority: "P2",
-    age: "1h",
-  },
-  {
-    id: "t-1035",
-    subject: "Shop SKU out of sync",
-    priority: "P2",
-    age: "2h",
-  },
-  {
-    id: "t-1029",
-    subject: "Challenge leaderboard delay",
-    priority: "P3",
-    age: "5h",
-  },
-  {
-    id: "t-1026",
-    subject: "Name frame upload rejected",
-    priority: "P2",
-    age: "6h",
-  },
-  {
-    id: "t-1022",
-    subject: "Scratch card not opening",
-    priority: "P1",
-    age: "7h",
-  },
-  {
-    id: "t-1018",
-    subject: "Promo code expired early",
-    priority: "P3",
-    age: "9h",
-  },
-  {
-    id: "t-1014",
-    subject: "Device ban appeal",
-    priority: "P2",
-    age: "11h",
-  },
-  {
-    id: "t-1011",
-    subject: "Daily challenge reward missing",
-    priority: "P3",
-    age: "14h",
-  },
-];
-
-const WALLET_7D: DashWalletDay[] = [
-  { label: "Mon", grant: 4200, revoke: 800 },
-  { label: "Tue", grant: 3800, revoke: 650 },
-  { label: "Wed", grant: 5100, revoke: 920 },
-  { label: "Thu", grant: 4600, revoke: 700 },
-  { label: "Fri", grant: 5400, revoke: 1100 },
-  { label: "Sat", grant: 6100, revoke: 980 },
-  { label: "Sun", grant: 4900, revoke: 760 },
-];
-
-const ACTIVITY: DashActivity[] = [
-  {
-    id: "a1",
-    time: "14:22",
-    actor: "admin",
-    action: "Granted 500 coins",
-    module: "Wallets",
-  },
-  {
-    id: "a2",
-    time: "14:08",
-    actor: "ops.riya",
-    action: "Closed ticket t-1031",
-    module: "Support",
-  },
-  {
-    id: "a3",
-    time: "13:51",
-    actor: "admin",
-    action: "Imported 200 redeem codes",
-    module: "Redeem",
-  },
-  {
-    id: "a4",
-    time: "13:20",
-    actor: "ops.kabir",
-    action: "Sent promo push (12.4k)",
-    module: "Push",
-  },
-  {
-    id: "a5",
-    time: "12:44",
-    actor: "admin",
-    action: "Blocked device fingerprint",
-    module: "Devices",
-  },
-  {
-    id: "a6",
-    time: "12:18",
-    actor: "ops.riya",
-    action: "Published shop SKU pack",
-    module: "Shop",
-  },
-  {
-    id: "a7",
-    time: "11:55",
-    actor: "admin",
-    action: "Updated claim policy",
-    module: "Claims",
-  },
-  {
-    id: "a8",
-    time: "11:30",
-    actor: "ops.kabir",
-    action: "Rotated name fonts",
-    module: "Names",
-  },
-  {
-    id: "a9",
-    time: "10:58",
-    actor: "admin",
-    action: "Purged expired scratch cards",
-    module: "Scratch",
-  },
-  {
-    id: "a10",
-    time: "10:22",
-    actor: "ops.riya",
-    action: "Scheduled daily challenge",
-    module: "Challenge",
-  },
-];
-
 export const DASH_RANGE_TABS: {
   id: DashRangeId;
   label: string;
   hint: string;
 }[] = [
-  { id: "today", label: "Today", hint: "Hourly" },
-  { id: "7d", label: "7 days", hint: "Daily" },
-  { id: "30d", label: "30 days", hint: "Weekly" },
+  { id: "today", label: "Today", hint: "UTC 4h" },
+  { id: "7d", label: "7 days", hint: "UTC daily" },
+  { id: "30d", label: "30 days", hint: "UTC daily" },
 ];
 
 export const DASH_CAPABILITIES = [
   {
     title: "Live KPIs",
-    body: "Active codes, claims, low stock, support backlog, push volume, wallet net — refreshed from Nest.",
+    body: "Active codes and low stock are current. Claims, push deliveries, and wallet net follow the selected UTC window.",
   },
   {
-    title: "Trend charts",
-    body: "Claims vs redeems over today / 7d / 30d without a heavy chart library dependency.",
+    title: "Claims vs scratch",
+    body: "Claims are redeem-claim rows. Scratch is redeem scratch rolls. Today is six 4-hour UTC buckets.",
   },
   {
-    title: "Inventory mix",
-    body: "Redeem pool health: active, used, low stock, expired, held.",
+    title: "Redeem pool",
+    body: "Active means stock above 10. Low stock is 1–10. Out of stock, paused, exhausted, and expired are separate. This is current stock, not the date range.",
   },
   {
-    title: "Claims outcome",
-    body: "Success / pending / rejected / failed share for the selected window.",
+    title: "Claim outcomes",
+    body: "Claimed vs flagged in the selected window. A claim is flagged only when staff marks it.",
   },
   {
     title: "Support queue",
-    body: "Highest-priority open tickets with age — deep link to Support next.",
+    body: "Open and awaiting-staff threads. P1 is unread, P2 is open and read, P3 is awaiting staff.",
   },
   {
-    title: "Nest wire-up",
-    body: "UI uses local demo snapshots now. Wire Redeem, Claims, Support, Push, Wallets feeds next.",
+    title: "Audit feed",
+    body: "Latest 10 staff audit rows. Full history stays on Audit.",
   },
 ];
 
-function kpisFor(range: DashRangeId): DashKpis {
-  if (range === "today") {
-    return {
-      activeCodes: 1284,
-      claimsToday: 54,
-      lowStock: 37,
-      pendingSupport: 12,
-      pushSends: 1840,
-      walletNet: 9200,
-    };
-  }
-  if (range === "30d") {
-    return {
-      activeCodes: 1284,
-      claimsToday: 1235,
-      lowStock: 37,
-      pendingSupport: 12,
-      pushSends: 48200,
-      walletNet: 186400,
-    };
-  }
+export function emptyDashSnapshot(): DashSnapshot {
   return {
-    activeCodes: 1284,
-    claimsToday: 398,
-    lowStock: 37,
-    pendingSupport: 12,
-    pushSends: 12400,
-    walletNet: 41200,
-  };
-}
-
-function trendFor(range: DashRangeId): DashPoint[] {
-  if (range === "today") return TREND_TODAY.map((p) => ({ ...p }));
-  if (range === "30d") return TREND_30D.map((p) => ({ ...p }));
-  return TREND_7D.map((p) => ({ ...p }));
-}
-
-function walletFor(range: DashRangeId): DashWalletDay[] {
-  if (range === "today") {
-    return [
-      { label: "AM", grant: 2100, revoke: 400 },
-      { label: "PM", grant: 2800, revoke: 520 },
-    ];
-  }
-  if (range === "30d") {
-    return [
-      { label: "W1", grant: 22000, revoke: 4100 },
-      { label: "W2", grant: 24800, revoke: 4600 },
-      { label: "W3", grant: 23100, revoke: 3900 },
-      { label: "W4", grant: 27600, revoke: 5200 },
-    ];
-  }
-  return WALLET_7D.map((d) => ({ ...d }));
-}
-
-export function buildDashSnapshot(range: DashRangeId): DashSnapshot {
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
-  return {
-    kpis: kpisFor(range),
-    trend: trendFor(range),
-    inventory: INVENTORY.map((r) => ({ ...r })),
-    claimsMix: CLAIMS_MIX.map((s) => ({ ...s })),
-    support: SUPPORT.map((t) => ({ ...t })).slice(0, DASH_LIST_LIMIT),
-    wallet: walletFor(range),
-    activity: ACTIVITY.map((a) => ({ ...a })).slice(0, DASH_LIST_LIMIT),
-    refreshedAt: `${hh}:${mm}`,
+    kpis: {
+      activeCodes: 0,
+      claimsToday: 0,
+      lowStock: 0,
+      pendingSupport: 0,
+      pushSends: 0,
+      walletNet: 0,
+    },
+    trend: [],
+    inventory: [],
+    claimsMix: [],
+    support: [],
+    wallet: [],
+    activity: [],
+    refreshedAt: "",
   };
 }
 

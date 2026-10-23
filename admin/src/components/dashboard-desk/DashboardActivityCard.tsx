@@ -17,7 +17,7 @@ export function DashboardActivityCard({ rows }: Props) {
             Recent ops activity
           </h2>
           <p className="mt-0.5 text-[12px] text-slate-500">
-            Local demo trail — full history lives under Audit.
+            Latest staff actions. Full history is on Audit.
           </p>
         </div>
         <Link
@@ -28,6 +28,9 @@ export function DashboardActivityCard({ rows }: Props) {
         </Link>
       </div>
 
+      {rows.length === 0 ? (
+        <p className="mt-4 text-[13px] text-slate-500">No staff actions yet.</p>
+      ) : (
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[520px] border-collapse text-left text-[13px]">
           <thead>
@@ -59,6 +62,7 @@ export function DashboardActivityCard({ rows }: Props) {
           </tbody>
         </table>
       </div>
+      )}
     </section>
   );
 }

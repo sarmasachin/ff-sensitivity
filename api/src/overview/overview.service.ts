@@ -14,6 +14,10 @@ import {
   startOfUtcDay,
 } from './overview-security';
 import {
+  buildOverviewDesk,
+  type DeskRange,
+} from './overview-desk';
+import {
   buildOverviewSeries,
   type OverviewSeriesRange,
 } from './overview-series';
@@ -178,6 +182,10 @@ export class OverviewService {
 
   async adminSeries(range: OverviewSeriesRange) {
     return buildOverviewSeries(this.prisma, range);
+  }
+
+  async adminDesk(range: DeskRange) {
+    return buildOverviewDesk(this.prisma, range);
   }
 
   private async countRegisteredWithoutOpenEvent(): Promise<number> {

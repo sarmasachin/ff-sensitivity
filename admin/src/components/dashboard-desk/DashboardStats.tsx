@@ -85,7 +85,7 @@ export function DashboardStats({ kpis, rangeLabel }: Props) {
     {
       label: "Wallet net",
       value: formatCompact(kpis.walletNet),
-      hint: "Grant − revoke",
+      hint: "Coins in − out",
       tone: "teal" as const,
     },
   ];

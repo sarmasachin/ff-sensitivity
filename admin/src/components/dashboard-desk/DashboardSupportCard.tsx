@@ -37,28 +37,32 @@ export function DashboardSupportCard({ rows }: Props) {
         </Link>
       </div>
 
-      <ul className="mt-4 divide-y divide-slate-100">
-        {rows.map((row) => (
-          <li
-            key={row.id}
-            className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-medium text-slate-800">
-                {row.subject}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
-                {row.id} · {row.age}
-              </p>
-            </div>
-            <span
-              className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${PRI[row.priority]}`}
+      {rows.length === 0 ? (
+        <p className="mt-4 text-[13px] text-slate-500">No open tickets.</p>
+      ) : (
+        <ul className="mt-4 divide-y divide-slate-100">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
             >
-              {row.priority}
-            </span>
-          </li>
-        ))}
-      </ul>
+              <div className="min-w-0">
+                <p className="truncate text-[13px] font-medium text-slate-800">
+                  {row.subject}
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
+                  {row.id} · {row.age}
+                </p>
+              </div>
+              <span
+                className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${PRI[row.priority]}`}
+              >
+                {row.priority}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

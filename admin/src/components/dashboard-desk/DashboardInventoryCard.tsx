@@ -30,12 +30,13 @@ export function DashboardInventoryCard({ rows }: Props) {
         Redeem pool status
       </h2>
       <p className="mt-0.5 text-[12px] text-slate-500">
-        Active stock vs used, low, expired, held.
+        Current codes by status. Active means stock above 10.
       </p>
 
       <ul className="mt-4 flex flex-col gap-3">
         {rows.map((row) => {
-          const widthPct = Math.max(4, (row.count / max) * 100);
+          const widthPct =
+            row.count <= 0 ? 0 : Math.max(4, (row.count / max) * 100);
           return (
             <li
               key={row.id}

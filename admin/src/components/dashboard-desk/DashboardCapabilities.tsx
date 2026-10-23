@@ -13,10 +13,10 @@ export function DashboardCapabilities() {
   return (
     <section className="rounded-2xl border border-[#e8eaee] bg-white p-5">
       <h2 className="text-[14px] font-semibold text-[#0f172a]">
-        What this module will include
+        What these numbers mean
       </h2>
       <p className="mt-1 text-[12px] text-[#94a3b8]">
-        UI shell now — Nest KPI feeds wire-up next.
+        Every figure comes from the live database.
       </p>
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {DASH_CAPABILITIES.map((item, i) => (
