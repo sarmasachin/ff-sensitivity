@@ -62,6 +62,12 @@ export class ShopAdminController {
     return this.shop.removeCategory(admin.id, id);
   }
 
+  @Get('purchases')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  purchases() {
+    return this.shop.listPurchases();
+  }
+
   @Get()
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   list() {

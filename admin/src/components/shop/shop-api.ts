@@ -1,5 +1,10 @@
 import { apiFetch } from "@/lib/api";
-import type { ShopCategoryRow, ShopFormValues, ShopListRow } from "./shop-data";
+import type {
+  ShopCategoryRow,
+  ShopFormValues,
+  ShopListRow,
+  ShopPurchaseRow,
+} from "./shop-data";
 import { formToApiBody } from "./shop-data";
 
 export async function fetchShopBundle(): Promise<{
@@ -14,6 +19,13 @@ export async function fetchShopBundle(): Promise<{
     items: data.items ?? [],
     categories: data.categories ?? [],
   };
+}
+
+export async function fetchShopPurchases(): Promise<ShopPurchaseRow[]> {
+  const data = await apiFetch<{ purchases?: ShopPurchaseRow[] }>(
+    "/api/v1/admin/shop/purchases",
+  );
+  return data.purchases ?? [];
 }
 
 export async function createShopItem(

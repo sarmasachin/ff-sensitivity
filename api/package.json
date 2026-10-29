@@ -35,6 +35,8 @@
     "e2e:devices": "ts-node --transpile-only scripts/e2e-devices.ts",
     "e2e:devices:extra": "ts-node --transpile-only scripts/e2e-devices-extra.ts",
     "e2e:wallets": "ts-node --transpile-only scripts/e2e-wallets.ts",
+    "e2e:shop-purchases": "ts-node --transpile-only scripts/e2e-shop-purchases.ts",
+    "e2e:shop-purchases:extra": "ts-node --transpile-only scripts/e2e-shop-purchases-extra.ts",
     "e2e:wallets:extra": "ts-node --transpile-only scripts/e2e-wallets-extra.ts",
     "e2e:users": "ts-node --transpile-only scripts/e2e-users.ts",
     "e2e:users:extra": "ts-node --transpile-only scripts/e2e-users-extra.ts",

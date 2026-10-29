@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../common/errors/app-error';
 import { saveScratchArchive } from '../scratch/scratch-history';
+import { buildShopSnapshot, deviceLabelFrom } from '../shop/shop-purchases';
 import { ShopAdminService } from '../shop/shop-admin.service';
 import { EconomyEarnService } from './economy-earn.service';
 
@@ -115,6 +116,11 @@ export class EconomyService {
       }
 
       const paidUser = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      const install = await tx.deviceInstall.findFirst({
+        where: { userId },
+        orderBy: { lastSeenAt: 'desc' },
+        select: { installId: true, model: true, brand: true },
+      });
       await tx.walletLedger.create({
         data: {
           userId,
@@ -122,6 +128,13 @@ export class EconomyService {
           balanceAfter: paidUser.coins,
           reason: `shop:${item.id}`,
           idempotencyKey,
+          shopSnapshot: buildShopSnapshot({
+            oneTime: item.oneTime,
+            title: item.title,
+            category: item.category,
+            deviceId: install?.installId ?? '',
+            deviceLabel: deviceLabelFrom(install?.model, install?.brand),
+          }),
         },
       });
 

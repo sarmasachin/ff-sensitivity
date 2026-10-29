@@ -245,6 +245,8 @@ model WalletLedger {
   balanceAfter   Int      @map("balance_after")
   reason         String
   idempotencyKey String   @unique @map("idempotency_key")
+  /// Shop buy frozen at purchase time: title, one-time, category, device.
+  shopSnapshot   Json?    @map("shop_snapshot")
   createdAt      DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

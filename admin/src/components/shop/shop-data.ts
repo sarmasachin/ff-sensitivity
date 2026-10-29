@@ -20,6 +20,23 @@ export type ShopListRow = {
   sortOrder: number;
 };
 
+export type ShopPurchaseRow = {
+  id: string;
+  userId: string;
+  email: string;
+  googleName: string;
+  displayName: string;
+  deviceId: string;
+  deviceLabel: string;
+  itemId: string;
+  itemTitle: string;
+  category: string;
+  oneTime: boolean;
+  coins: number;
+  balanceAfter: number;
+  createdAt: string;
+};
+
 export type ShopFormValues = {
   id: string;
   title: string;

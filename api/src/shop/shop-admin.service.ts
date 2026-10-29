@@ -16,6 +16,7 @@ import type {
   UpdateShopCategoryDto,
   UpdateShopItemDto,
 } from './dto/shop-admin.dto';
+import { listShopPurchases } from './shop-purchases';
 
 @Injectable()
 export class ShopAdminService {
@@ -94,6 +95,10 @@ export class ShopAdminService {
       label: existing.label,
     });
     return { ok: true, id };
+  }
+
+  async listPurchases() {
+    return listShopPurchases(this.prisma);
   }
 
   async list() {
@@ -182,6 +187,7 @@ export class ShopAdminService {
     return {
       id: row.id,
       title: row.title,
+      category: row.category,
       rewardTag: row.rewardTag,
       priceCoins: row.priceCoins,
       oneTime: row.oneTime,

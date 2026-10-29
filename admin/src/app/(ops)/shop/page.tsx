@@ -5,6 +5,7 @@ import { ShopEmptyState } from "@/components/shop/ShopEmptyState";
 import { ShopFormModal } from "@/components/shop/ShopFormModal";
 import { ShopHeader } from "@/components/shop/ShopHeader";
 import { ShopPagination } from "@/components/shop/ShopPagination";
+import { ShopPurchasesPanel } from "@/components/shop/ShopPurchasesPanel";
 import { ShopStats } from "@/components/shop/ShopStats";
 import { ShopTable } from "@/components/shop/ShopTable";
 import {
@@ -66,6 +67,7 @@ export default function ShopPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formInitial, setFormInitial] = useState(emptyShopForm());
   const [deleteTarget, setDeleteTarget] = useState<ShopListRow | null>(null);
+  const [tab, setTab] = useState<"catalog" | "purchases">("catalog");
 
   useEffect(() => {
     setAllowed(canAccessShop());
@@ -254,6 +256,49 @@ export default function ShopPage() {
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-5">
       <ShopHeader onAdd={openAdd} />
+      <div
+        role="tablist"
+        aria-label="Shop sections"
+        className="flex flex-wrap gap-1.5 rounded-2xl border border-[#e8eaee] bg-white p-1.5"
+      >
+        {(
+          [
+            ["catalog", "Catalog", "Items the app sells"],
+            ["purchases", "Purchases", "Who bought or unlocked"],
+          ] as const
+        ).map(([id, label, hint]) => {
+          const selected = tab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setTab(id)}
+              className={[
+                "flex min-w-[160px] flex-1 flex-col items-start rounded-xl px-4 py-2.5 text-left",
+                selected
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-50",
+              ].join(" ")}
+            >
+              <span className="text-[13px] font-semibold">{label}</span>
+              <span
+                className={[
+                  "text-[11px]",
+                  selected ? "text-slate-300" : "text-slate-400",
+                ].join(" ")}
+              >
+                {hint}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {tab === "purchases" ? (
+        <ShopPurchasesPanel />
+      ) : (
+        <>
       <ShopStats
         live={stats.live}
         disabled={stats.disabled}
@@ -349,6 +394,8 @@ export default function ShopPage() {
           void confirmDelete();
         }}
       />
+        </>
+      )}
     </section>
   );
 }
