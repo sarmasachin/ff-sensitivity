@@ -38,6 +38,8 @@
     "e2e:wallets:extra": "ts-node --transpile-only scripts/e2e-wallets-extra.ts",
     "e2e:users": "ts-node --transpile-only scripts/e2e-users.ts",
     "e2e:users:extra": "ts-node --transpile-only scripts/e2e-users-extra.ts",
+    "e2e:users:purge": "ts-node --transpile-only scripts/e2e-users-purge.ts",
+    "e2e:users:stats": "ts-node --transpile-only scripts/e2e-users-stats.ts",
     "e2e:copy": "ts-node --transpile-only scripts/e2e-copy.ts",
     "e2e:copy:extra": "ts-node --transpile-only scripts/e2e-copy-extra.ts",
     "e2e:staff": "ts-node --transpile-only scripts/e2e-staff.ts",

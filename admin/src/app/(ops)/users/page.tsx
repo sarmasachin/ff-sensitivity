@@ -22,7 +22,8 @@ import {
   fetchOpsSettings,
 } from "@/components/settings-desk/settings-api";
 import {
-  computeUserStats,
+  EMPTY_USER_STATS,
+  type UserDeskStats,
   type UserListRow,
 } from "@/components/users-desk/users-data";
 
@@ -88,6 +89,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<UserListRow[]>([]);
+  const [stats, setStats] = useState<UserDeskStats>(EMPTY_USER_STATS);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<UsersFilterKey>("all");
   const [page, setPage] = useState(1);
@@ -99,15 +101,19 @@ export default function UsersPage() {
     setAllowed(canAccessUsers());
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
-      setUsers(await fetchUsers());
+      const data = await fetchUsers();
+      setUsers(data.users);
+      setStats(data.stats);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load users.");
+      if (!silent) {
+        setError(e instanceof Error ? e.message : "Failed to load users.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -122,8 +128,6 @@ export default function UsersPage() {
   useEffect(() => {
     setPage(1);
   }, [filter, query]);
-
-  const stats = useMemo(() => computeUserStats(users), [users]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -178,6 +182,7 @@ export default function UsersPage() {
       const row = await setUserStatusApi(id, action);
       setUsers((rows) => rows.map((r) => (r.id === id ? row : r)));
       setNotice(message);
+      await load(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Status update failed.");
     } finally {
@@ -224,9 +229,8 @@ export default function UsersPage() {
     try {
       const updated = await deleteUserDataApi(id);
       setUsers((rows) => rows.map((r) => (r.id === id ? updated : r)));
-      setNotice(
-        `Deleted app data for ${row.email}. Gmail remains banned.`,
-      );
+      setNotice(`Deleted app data for ${row.email}. Gmail remains banned.`);
+      await load(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed.");
     } finally {

@@ -10,6 +10,7 @@ import {
   sanitizeUserText,
 } from './users-security';
 import { installSelect, toUserRow, userListSelect } from './users-row';
+import { countUserDeskStats } from './users-stats';
 
 // --- Start: Users admin live wire (Sachin) ---
 @Injectable()
@@ -84,14 +85,17 @@ export class UsersService {
   }
 
   async adminListUsers() {
-    const users = await this.prisma.user.findMany({
-      orderBy: { updatedAt: 'desc' },
-      take: 500,
-      select: userListSelect,
-    });
+    const [users, stats] = await Promise.all([
+      this.prisma.user.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: 500,
+        select: userListSelect,
+      }),
+      countUserDeskStats(this.prisma),
+    ]);
     const now = new Date();
     const resolved = await this.attachSharedInstalls(users);
-    return { users: resolved.map((u) => toUserRow(u, now)) };
+    return { users: resolved.map((u) => toUserRow(u, now)), stats };
   }
 
   async adminSetStatus(

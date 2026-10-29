@@ -81,7 +81,7 @@ export function UsersStats({
     {
       label: "Deleted",
       value: String(deleted),
-      hint: "Gmail banned",
+      hint: "Wiped · purge 90d",
       tone: "slate" as const,
     },
     {

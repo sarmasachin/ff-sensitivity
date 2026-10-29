@@ -61,6 +61,15 @@ export class UserAuthService {
 
     // Admin suspend and admin Gmail-ban stay blocked.
     // A user's own delete (data wiped, not googleBanned) can sign in again.
+    // After 90-day hard purge, admin bans live in BannedGoogleAccount.
+    const bannedSeat = await this.prisma.bannedGoogleAccount.findFirst({
+      where: { OR: [{ googleSub }, { email }] },
+      select: { id: true },
+    });
+    if (bannedSeat) {
+      throw new AppError('AUTH_SUSPENDED', 'This account is suspended.', 403);
+    }
+
     const existing = await this.prisma.user.findUnique({
       where: { googleSub },
       select: { isActive: true, dataDeletedAt: true, googleBanned: true },

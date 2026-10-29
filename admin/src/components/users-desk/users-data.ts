@@ -48,7 +48,7 @@ export const USERS_CAPABILITIES = [
   },
   {
     title: "Account status",
-    body: "Active, restricted (redeem paused), suspended (login blocked), or deleted (data wiped, Gmail stays banned).",
+    body: "Active, restricted (redeem paused), suspended (login blocked), or deleted (data wiped). Soft-deleted seats are removed after 90 days; admin Gmail bans stay blocked.",
   },
   {
     title: "Module ACL",
@@ -60,7 +60,25 @@ export const USERS_CAPABILITIES = [
   },
 ] as const;
 
-export function computeUserStats(rows: UserListRow[]) {
+export type UserDeskStats = {
+  total: number;
+  active: number;
+  restricted: number;
+  suspended: number;
+  deleted: number;
+  coinsHeld: number;
+};
+
+export const EMPTY_USER_STATS: UserDeskStats = {
+  total: 0,
+  active: 0,
+  restricted: 0,
+  suspended: 0,
+  deleted: 0,
+  coinsHeld: 0,
+};
+
+export function computeUserStats(rows: UserListRow[]): UserDeskStats {
   const total = rows.length;
   const active = rows.filter((r) => r.status === "ACTIVE").length;
   const restricted = rows.filter((r) => r.status === "RESTRICTED").length;

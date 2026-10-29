@@ -1,5 +1,11 @@
 import { apiFetch } from "@/lib/api";
-import type { UserListRow } from "./users-data";
+import {
+  computeUserStats,
+  type UserDeskStats,
+  type UserListRow,
+} from "./users-data";
+
+export type { UserDeskStats };
 
 // --- Start: Users admin live wire (Sachin) ---
 export type UserScreenJourney = {
@@ -43,11 +49,16 @@ export type UserActivityFeed = {
   items: UserActivityItem[];
 };
 
-export async function fetchUsers(): Promise<UserListRow[]> {
-  const data = await apiFetch<{ users: UserListRow[] }>(
-    "/api/v1/admin/users",
-  );
-  return data.users ?? [];
+export async function fetchUsers(): Promise<{
+  users: UserListRow[];
+  stats: UserDeskStats;
+}> {
+  const data = await apiFetch<{
+    users?: UserListRow[];
+    stats?: UserDeskStats;
+  }>("/api/v1/admin/users");
+  const users = data.users ?? [];
+  return { users, stats: data.stats ?? computeUserStats(users) };
 }
 
 export async function fetchUserScreenJourney(
