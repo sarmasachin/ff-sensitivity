@@ -19,7 +19,8 @@ import {
   unblockDeviceApi,
 } from "@/components/devices/devices-api";
 import {
-  computeDeviceStats,
+  deviceCardStats,
+  type DeviceDeskStats,
   type DeviceListRow,
 } from "@/components/devices/devices-data";
 
@@ -87,6 +88,7 @@ export default function DevicesPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rows, setRows] = useState<DeviceListRow[]>([]);
+  const [deskStats, setDeskStats] = useState<DeviceDeskStats | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DevicesFilterKey>("all");
   const [page, setPage] = useState(1);
@@ -103,7 +105,8 @@ export default function DevicesPage() {
     setError(null);
     try {
       const next = await fetchDevices();
-      setRows(next);
+      setRows(next.devices);
+      setDeskStats(next.stats);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load devices.");
     } finally {
@@ -123,7 +126,10 @@ export default function DevicesPage() {
     setPage(1);
   }, [filter, query]);
 
-  const stats = useMemo(() => computeDeviceStats(rows), [rows]);
+  const stats = useMemo(
+    () => deviceCardStats(rows, deskStats),
+    [rows, deskStats],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

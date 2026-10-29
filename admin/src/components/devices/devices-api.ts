@@ -1,12 +1,31 @@
 import { apiFetch } from "@/lib/api";
-import type { DeviceListRow } from "./devices-data";
+import {
+  computeDeviceStats,
+  type DeviceDeskStats,
+  type DeviceListRow,
+} from "./devices-data";
+
+export type { DeviceDeskStats };
 
 // --- Start: Devices live wire (Sachin) ---
-export async function fetchDevices(): Promise<DeviceListRow[]> {
-  const data = await apiFetch<{ devices: DeviceListRow[] }>(
-    "/api/v1/admin/devices",
-  );
-  return data.devices ?? [];
+export async function fetchDevices(): Promise<{
+  devices: DeviceListRow[];
+  stats: DeviceDeskStats;
+}> {
+  const data = await apiFetch<{
+    devices?: DeviceListRow[];
+    stats?: DeviceDeskStats;
+  }>("/api/v1/admin/devices");
+  const devices = data.devices ?? [];
+  const fromRows = computeDeviceStats(devices);
+  const stats = data.stats ?? {
+    total: fromRows.total,
+    active: fromRows.active,
+    stale: fromRows.stale,
+    blocked: fromRows.blocked,
+    withToken: fromRows.withToken,
+  };
+  return { devices, stats };
 }
 
 export async function blockDeviceApi(id: string): Promise<DeviceListRow> {

@@ -2,6 +2,7 @@
  * Devices admin + heartbeat e2e / security (local Postgres).
  */
 import { PrismaClient } from '@prisma/client';
+import { computeDeviceStatus } from '../src/devices/devices-security';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import * as fs from 'fs';
@@ -60,7 +61,20 @@ async function req(
   } catch {
     json = { raw: text };
   }
-  return { status: res.status, json };
+  return { status: res.status, json, headers: res.headers };
+}
+
+function bearer(res: { json: any; headers: Headers }): string | undefined {
+  if (typeof res.json?.accessToken === 'string') return res.json.accessToken;
+  const list =
+    typeof res.headers.getSetCookie === 'function'
+      ? res.headers.getSetCookie()
+      : [];
+  for (const cookie of list) {
+    const m = /^access_token=([^;]+)/.exec(cookie);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return undefined;
 }
 
 async function main() {
@@ -87,14 +101,14 @@ async function main() {
   const login = await req('POST', '/api/v1/auth/login', {
     body: { email: adminEmail, password: adminPassword },
   });
-  if (!okAuth(login.status) || !login.json?.accessToken) {
+  const tok = bearer(login);
+  if (!okAuth(login.status) || !tok) {
     fail('admin_login', `status=${login.status}`);
     printSummary();
     await prisma.$disconnect();
     process.exit(1);
   }
   pass('admin_login');
-  const tok = login.json.accessToken as string;
 
   {
     const r = await req('GET', '/api/v1/admin/devices', { token: tok });
@@ -398,9 +412,9 @@ async function main() {
       password: 'NoDevPass9',
     },
   });
-  if (okAuth(deniedLogin.status) && deniedLogin.json?.accessToken) {
+  const dTok = bearer(deniedLogin);
+  if (okAuth(deniedLogin.status) && dTok) {
     pass('denied_login');
-    const dTok = deniedLogin.json.accessToken as string;
     const list = await req('GET', '/api/v1/admin/devices', { token: dTok });
     list.status === 403
       ? pass('module_acl_list')
@@ -435,9 +449,9 @@ async function main() {
       password: 'DevViewer9',
     },
   });
-  if (okAuth(viewerLogin.status) && viewerLogin.json?.accessToken && deviceRowId) {
+  const vTok = bearer(viewerLogin);
+  if (okAuth(viewerLogin.status) && vTok && deviceRowId) {
     pass('viewer_login');
-    const vTok = viewerLogin.json.accessToken as string;
     const list = await req('GET', '/api/v1/admin/devices', { token: vTok });
     list.status === 200
       ? pass('viewer_can_list')
@@ -452,6 +466,59 @@ async function main() {
       : fail('viewer_cannot_block', `status=${block.status}`);
   } else {
     fail('viewer_login', `status=${viewerLogin.status}`);
+  }
+
+  {
+    const r = await req('GET', '/api/v1/admin/devices', { token: tok });
+    const devices = r.json?.devices ?? [];
+    const stats = r.json?.stats;
+    const dbRows = await prisma.deviceInstall.findMany({
+      select: { blocked: true, lastSeenAt: true, hasFcmToken: true, installId: true },
+    });
+    const now = new Date();
+    let active = 0;
+    let stale = 0;
+    let blocked = 0;
+    let withToken = 0;
+    for (const row of dbRows) {
+      const status = computeDeviceStatus({
+        blocked: row.blocked,
+        lastSeenAt: row.lastSeenAt,
+        now,
+      });
+      if (status === 'ACTIVE') active += 1;
+      else if (status === 'STALE') stale += 1;
+      else blocked += 1;
+      if (row.hasFcmToken) withToken += 1;
+    }
+    const ids = new Set(devices.map((d: { id: string }) => d.id));
+    r.status === 200 &&
+    stats?.total === dbRows.length &&
+    devices.length === dbRows.length
+      ? pass('stats_total_matches_db', `total=${stats?.total}`)
+      : fail(
+          'stats_total_matches_db',
+          `status=${r.status} api=${stats?.total} rows=${devices.length} db=${dbRows.length}`,
+        );
+    stats?.active === active &&
+    stats?.stale === stale &&
+    stats?.blocked === blocked &&
+    stats?.withToken === withToken &&
+    active + stale + blocked === dbRows.length
+      ? pass(
+          'stats_active_stale_blocked_fcm',
+          `active=${active} stale=${stale} blocked=${blocked} fcm=${withToken}`,
+        )
+      : fail(
+          'stats_active_stale_blocked_fcm',
+          `api=${JSON.stringify(stats)} db=${active}/${stale}/${blocked}/${withToken}`,
+        );
+    devices.some((d: { deviceId: string }) => d.deviceId === installId)
+      ? pass('list_includes_new_install')
+      : fail('list_includes_new_install', installId);
+    ids.size === devices.length
+      ? pass('device_ids_unique')
+      : fail('device_ids_unique', `rows=${devices.length} unique=${ids.size}`);
   }
 
   // Cleanup install

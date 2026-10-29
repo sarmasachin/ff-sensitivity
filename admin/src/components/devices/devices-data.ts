@@ -54,6 +54,14 @@ export const DEVICES_CAPABILITIES = [
   },
 ] as const;
 
+export type DeviceDeskStats = {
+  total: number;
+  active: number;
+  stale: number;
+  blocked: number;
+  withToken: number;
+};
+
 export function computeDeviceStats(rows: DeviceListRow[]) {
   const total = rows.length;
   const active = rows.filter((r) => r.status === "ACTIVE").length;
@@ -62,4 +70,23 @@ export function computeDeviceStats(rows: DeviceListRow[]) {
   const withToken = rows.filter((r) => r.hasFcmToken).length;
   const noToken = total - withToken;
   return { total, active, stale, blocked, withToken, noToken };
+}
+
+/** Cards follow the database totals. After block or token drop, the loaded rows take over. */
+export function deviceCardStats(
+  rows: DeviceListRow[],
+  desk: DeviceDeskStats | null,
+) {
+  const live = computeDeviceStats(rows);
+  if (!desk) return live;
+  if (rows.length >= desk.total) return live;
+  return {
+    ...live,
+    total: desk.total,
+    active: desk.active,
+    stale: desk.stale,
+    blocked: desk.blocked,
+    withToken: desk.withToken,
+    noToken: Math.max(0, desk.total - desk.withToken),
+  };
 }

@@ -60,7 +60,20 @@ async function req(
   } catch {
     json = { raw: text };
   }
-  return { status: res.status, json };
+  return { status: res.status, json, headers: res.headers };
+}
+
+function bearer(res: { json: any; headers: Headers }): string | undefined {
+  if (typeof res.json?.accessToken === 'string') return res.json.accessToken;
+  const list =
+    typeof res.headers.getSetCookie === 'function'
+      ? res.headers.getSetCookie()
+      : [];
+  for (const cookie of list) {
+    const m = /^access_token=([^;]+)/.exec(cookie);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return undefined;
 }
 
 async function main() {
@@ -79,13 +92,13 @@ async function main() {
   const login = await req('POST', '/api/v1/auth/login', {
     body: { email: adminEmail, password: adminPassword },
   });
-  if (!okAuth(login.status) || !login.json?.accessToken) {
+  const tok = bearer(login);
+  if (!okAuth(login.status) || !tok) {
     fail('admin_login');
     await prisma.$disconnect();
     process.exit(1);
   }
   pass('admin_login');
-  const tok = login.json.accessToken as string;
 
   {
     const r = await req('GET', '/api/v1/admin/wallets', { token: tok });
@@ -309,6 +322,82 @@ async function main() {
     void leaked;
   }
 
+  {
+    const r = await req('GET', '/api/v1/admin/wallets', { token: tok });
+    const wallets = r.json?.wallets ?? [];
+    const stats = r.json?.stats;
+    const [dbUsers, dbZero, dbFrozen, dbCoins, dbStaff, dbLedger] =
+      await Promise.all([
+        prisma.user.count(),
+        prisma.user.count({ where: { coins: 0 } }),
+        prisma.user.count({ where: { walletFrozen: true } }),
+        prisma.user.aggregate({ _sum: { coins: true } }),
+        prisma.walletLedger.count({
+          where: {
+            OR: [
+              { reason: { startsWith: 'staff:grant' } },
+              { reason: { startsWith: 'staff:revoke' } },
+            ],
+          },
+        }),
+        prisma.walletLedger.count(),
+      ]);
+    const coins = dbCoins._sum.coins ?? 0;
+    r.status === 200 &&
+    stats?.total === dbUsers &&
+    wallets.length === dbUsers
+      ? pass('stats_total_matches_db', `total=${stats?.total}`)
+      : fail(
+          'stats_total_matches_db',
+          `status=${r.status} api=${stats?.total} rows=${wallets.length} db=${dbUsers}`,
+        );
+    stats?.zero === dbZero &&
+    stats?.frozen === dbFrozen &&
+    stats?.coinsInCirculation === coins
+      ? pass(
+          'stats_zero_frozen_coins',
+          `zero=${stats?.zero} frozen=${stats?.frozen} coins=${stats?.coinsInCirculation}`,
+        )
+      : fail(
+          'stats_zero_frozen_coins',
+          `api=${JSON.stringify(stats)} dbZero=${dbZero} dbFrozen=${dbFrozen} dbCoins=${coins}`,
+        );
+    stats?.staffMoves === dbStaff
+      ? pass('stats_staff_moves', `n=${stats?.staffMoves}`)
+      : fail('stats_staff_moves', `api=${stats?.staffMoves} db=${dbStaff}`);
+
+    const ledger = await req('GET', '/api/v1/admin/wallets/ledger', {
+      token: tok,
+    });
+    ledger.status === 200 && (ledger.json?.ledger ?? []).length === dbLedger
+      ? pass('ledger_not_capped', `rows=${dbLedger}`)
+      : fail(
+          'ledger_not_capped',
+          `status=${ledger.status} api=${ledger.json?.ledger?.length} db=${dbLedger}`,
+        );
+
+    const hit = wallets.find((w: { id: string }) => w.id === user.id);
+    const rows = await prisma.walletLedger.findMany({
+      where: { userId: user.id },
+      select: { delta: true },
+    });
+    const earned = rows.reduce((s, row) => s + (row.delta > 0 ? row.delta : 0), 0);
+    const spent = rows.reduce(
+      (s, row) => s + (row.delta < 0 ? -row.delta : 0),
+      0,
+    );
+    hit && hit.lifetimeEarned === earned && hit.lifetimeSpent === spent
+      ? pass('lifetime_full_history', `+${earned}/-${spent}`)
+      : fail(
+          'lifetime_full_history',
+          `row=${JSON.stringify(hit)} db=+${earned}/-${spent}`,
+        );
+    const ids = new Set(wallets.map((w: { id: string }) => w.id));
+    ids.size === wallets.length
+      ? pass('wallet_ids_unique')
+      : fail('wallet_ids_unique', `rows=${wallets.length} unique=${ids.size}`);
+  }
+
   // ACL
   const noHash = await bcrypt.hash('NoWalPass9', 12);
   await prisma.admin.upsert({
@@ -335,9 +424,9 @@ async function main() {
       password: 'NoWalPass9',
     },
   });
-  if (okAuth(deniedLogin.status) && deniedLogin.json?.accessToken) {
+  const dTok = bearer(deniedLogin);
+  if (okAuth(deniedLogin.status) && dTok) {
     pass('denied_login');
-    const dTok = deniedLogin.json.accessToken as string;
     const list = await req('GET', '/api/v1/admin/wallets', { token: dTok });
     list.status === 403
       ? pass('module_acl_list')
@@ -371,9 +460,9 @@ async function main() {
       password: 'WalViewer9',
     },
   });
-  if (okAuth(viewerLogin.status) && viewerLogin.json?.accessToken) {
+  const vTok = bearer(viewerLogin);
+  if (okAuth(viewerLogin.status) && vTok) {
     pass('viewer_login');
-    const vTok = viewerLogin.json.accessToken as string;
     const list = await req('GET', '/api/v1/admin/wallets', { token: vTok });
     list.status === 200
       ? pass('viewer_can_list')

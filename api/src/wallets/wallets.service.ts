@@ -6,6 +6,12 @@ import type { AuthAdmin } from '../auth/current-admin.decorator';
 import { SettingsService } from '../settings/settings.service';
 import type { WalletAdjustDto } from './dto/wallets.dto';
 import {
+  loadWalletLifetime,
+  loadWalletLifetimes,
+  countWalletDeskStats,
+  type WalletLife,
+} from './wallets-desk';
+import {
   MAX_COINS,
   assertAdjustAmount,
   assertRequestId,
@@ -18,6 +24,20 @@ import {
   maskEmail,
   sanitizeWalletText,
 } from './wallets-security';
+
+const walletUserSelect = {
+  id: true,
+  email: true,
+  displayName: true,
+  coins: true,
+  walletFrozen: true,
+  walletNote: true,
+  deviceInstalls: {
+    orderBy: { lastSeenAt: 'desc' as const },
+    take: 1,
+    select: { installId: true, brand: true, model: true },
+  },
+};
 
 // --- Start: Wallets admin live wire (Sachin) ---
 @Injectable()
@@ -46,8 +66,8 @@ export class WalletsService {
       walletFrozen: boolean;
       walletNote: string;
       deviceInstalls: { installId: string; brand: string; model: string }[];
-      ledger: { delta: number; createdAt: Date }[];
     },
+    life: WalletLife | undefined,
     now = new Date(),
   ) {
     const install = user.deviceInstalls[0];
@@ -58,21 +78,15 @@ export class WalletsService {
             .filter(Boolean)
             .join(' · ')
         : `${user.displayName || 'User'} · ${maskEmail(user.email)}`;
-    let lifetimeEarned = 0;
-    let lifetimeSpent = 0;
-    for (const e of user.ledger) {
-      if (e.delta > 0) lifetimeEarned += e.delta;
-      if (e.delta < 0) lifetimeSpent += -e.delta;
-    }
-    const last = user.ledger[0];
-    const h = last ? hoursAgo(last.createdAt, now) : hoursAgo(now, now);
+    const last = life?.lastAt ?? null;
+    const h = last ? hoursAgo(last, now) : hoursAgo(now, now);
     return {
       id: user.id,
       deviceId,
       label,
       balance: user.coins,
-      lifetimeEarned,
-      lifetimeSpent,
+      lifetimeEarned: life?.earned ?? 0,
+      lifetimeSpent: life?.spent ?? 0,
       status: user.walletFrozen ? ('FROZEN' as const) : ('ACTIVE' as const),
       lastTxnLabel: last ? formatWhen(h) : '—',
       lastTxnHoursAgo: last ? Math.round(h * 10) / 10 : 9999,
@@ -80,37 +94,35 @@ export class WalletsService {
     };
   }
 
-  async adminListWallets() {
-    const users = await this.prisma.user.findMany({
-      orderBy: { updatedAt: 'desc' },
-      take: 500,
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        coins: true,
-        walletFrozen: true,
-        walletNote: true,
-        deviceInstalls: {
-          orderBy: { lastSeenAt: 'desc' },
-          take: 1,
-          select: { installId: true, brand: true, model: true },
-        },
-        ledger: {
-          orderBy: { createdAt: 'desc' },
-          take: 200,
-          select: { delta: true, createdAt: true },
-        },
-      },
+  private async walletRowById(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: walletUserSelect,
     });
+    if (!user) return undefined;
+    const life = await loadWalletLifetime(this.prisma, userId);
+    return this.toWalletRow(user, life, new Date());
+  }
+
+  async adminListWallets() {
+    const [users, lives, stats] = await Promise.all([
+      this.prisma.user.findMany({
+        orderBy: { updatedAt: 'desc' },
+        select: walletUserSelect,
+      }),
+      loadWalletLifetimes(this.prisma),
+      countWalletDeskStats(this.prisma),
+    ]);
     const now = new Date();
-    return { wallets: users.map((u) => this.toWalletRow(u, now)) };
+    return {
+      wallets: users.map((u) => this.toWalletRow(u, lives.get(u.id), now)),
+      stats,
+    };
   }
 
   async adminListLedger() {
     const rows = await this.prisma.walletLedger.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 500,
       include: {
         user: {
           select: {
@@ -220,8 +232,7 @@ export class WalletsService {
         afterJson: { userId, amount, requestId, ...result },
       },
     });
-    const wallets = await this.adminListWallets();
-    const wallet = wallets.wallets.find((w) => w.id === userId);
+    const wallet = await this.walletRowById(userId);
     return { wallet, ...result };
   }
 
@@ -295,8 +306,7 @@ export class WalletsService {
         afterJson: { userId, amount, requestId, ...result },
       },
     });
-    const wallets = await this.adminListWallets();
-    const wallet = wallets.wallets.find((w) => w.id === userId);
+    const wallet = await this.walletRowById(userId);
     return { wallet, ...result };
   }
 
@@ -337,8 +347,7 @@ export class WalletsService {
         afterJson: { userId, walletFrozen: frozen },
       },
     });
-    const wallets = await this.adminListWallets();
-    return { wallet: wallets.wallets.find((w) => w.id === userId) };
+    return { wallet: await this.walletRowById(userId) };
   }
 }
 // --- End: Wallets admin live wire (Sachin) ---

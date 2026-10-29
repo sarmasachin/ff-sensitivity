@@ -1,12 +1,30 @@
 import { apiFetch } from "@/lib/api";
-import type { LedgerEntry, WalletListRow } from "./wallets-data";
+import type {
+  LedgerEntry,
+  WalletDeskStats,
+  WalletListRow,
+} from "./wallets-data";
+
+export type { WalletDeskStats };
 
 // --- Start: Wallets admin live wire (Sachin) ---
-export async function fetchWallets(): Promise<WalletListRow[]> {
-  const data = await apiFetch<{ wallets: WalletListRow[] }>(
-    "/api/v1/admin/wallets",
-  );
-  return data.wallets ?? [];
+export async function fetchWallets(): Promise<{
+  wallets: WalletListRow[];
+  stats: WalletDeskStats;
+}> {
+  const data = await apiFetch<{
+    wallets?: WalletListRow[];
+    stats?: WalletDeskStats;
+  }>("/api/v1/admin/wallets");
+  const wallets = data.wallets ?? [];
+  const stats = data.stats ?? {
+    total: wallets.length,
+    frozen: wallets.filter((w) => w.status === "FROZEN").length,
+    zero: wallets.filter((w) => w.balance === 0).length,
+    coinsInCirculation: wallets.reduce((sum, w) => sum + w.balance, 0),
+    staffMoves: 0,
+  };
+  return { wallets, stats };
 }
 
 export async function fetchWalletLedger(): Promise<LedgerEntry[]> {

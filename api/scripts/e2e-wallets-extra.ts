@@ -60,7 +60,20 @@ async function req(
   } catch {
     json = { raw: text };
   }
-  return { status: res.status, json };
+  return { status: res.status, json, headers: res.headers };
+}
+
+function bearer(res: { json: any; headers: Headers }): string | undefined {
+  if (typeof res.json?.accessToken === 'string') return res.json.accessToken;
+  const list =
+    typeof res.headers.getSetCookie === 'function'
+      ? res.headers.getSetCookie()
+      : [];
+  for (const cookie of list) {
+    const m = /^access_token=([^;]+)/.exec(cookie);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return undefined;
 }
 
 async function main() {
@@ -72,7 +85,7 @@ async function main() {
   const login = await req('POST', '/api/v1/auth/login', {
     body: { email: adminEmail, password: adminPassword },
   });
-  const tok = login.json?.accessToken as string | undefined;
+  const tok = bearer(login);
   if (!tok) {
     fail('admin_login');
     await prisma.$disconnect();
@@ -222,9 +235,9 @@ async function main() {
       password: 'WalViewer9',
     },
   });
-  if (okAuth(viewerLogin.status) && viewerLogin.json?.accessToken) {
+  const vTok = bearer(viewerLogin);
+  if (okAuth(viewerLogin.status) && vTok) {
     pass('viewer_login');
-    const vTok = viewerLogin.json.accessToken as string;
     const freeze = await req('POST', `/api/v1/admin/wallets/${user.id}/freeze`, {
       token: vTok,
       body: { action: 'freeze' },

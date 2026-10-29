@@ -26,8 +26,9 @@ import {
   revokeCoinsApi,
 } from "@/components/wallets/wallets-api";
 import {
-  computeWalletStats,
+  walletCardStats,
   type LedgerEntry,
+  type WalletDeskStats,
   type WalletListRow,
   type WalletsTabId,
 } from "@/components/wallets/wallets-data";
@@ -94,6 +95,7 @@ export default function WalletsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [wallets, setWallets] = useState<WalletListRow[]>([]);
+  const [deskStats, setDeskStats] = useState<WalletDeskStats | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [tab, setTab] = useState<WalletsTabId>("balances");
   const [query, setQuery] = useState("");
@@ -113,8 +115,12 @@ export default function WalletsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [w, l] = await Promise.all([fetchWallets(), fetchWalletLedger()]);
-      setWallets(w);
+      const [pack, l] = await Promise.all([
+        fetchWallets(),
+        fetchWalletLedger(),
+      ]);
+      setWallets(pack.wallets);
+      setDeskStats(pack.stats);
       setLedger(l);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load wallets.");
@@ -141,8 +147,8 @@ export default function WalletsPage() {
   }, [tab]);
 
   const stats = useMemo(
-    () => computeWalletStats(wallets, ledger),
-    [wallets, ledger],
+    () => walletCardStats(wallets, ledger, deskStats),
+    [wallets, ledger, deskStats],
   );
 
   const filteredWallets = useMemo(() => {

@@ -78,6 +78,14 @@ export const WALLETS_CAPABILITIES = [
   },
 ] as const;
 
+export type WalletDeskStats = {
+  total: number;
+  frozen: number;
+  zero: number;
+  coinsInCirculation: number;
+  staffMoves: number;
+};
+
 export function computeWalletStats(
   wallets: WalletListRow[],
   ledger: LedgerEntry[],
@@ -97,6 +105,27 @@ export function computeWalletStats(
     coinsInCirculation,
     staffMoves,
     purchases,
+  };
+}
+
+/** Cards follow the database totals. After a grant or freeze, the loaded rows take over. */
+export function walletCardStats(
+  wallets: WalletListRow[],
+  ledger: LedgerEntry[],
+  desk: WalletDeskStats | null,
+) {
+  const live = computeWalletStats(wallets, ledger);
+  if (!desk) return live;
+  const listComplete = wallets.length >= desk.total;
+  return {
+    total: Math.max(desk.total, live.total),
+    frozen: listComplete ? live.frozen : desk.frozen,
+    zero: listComplete ? live.zero : desk.zero,
+    coinsInCirculation: listComplete
+      ? live.coinsInCirculation
+      : desk.coinsInCirculation,
+    staffMoves: Math.max(desk.staffMoves, live.staffMoves),
+    purchases: live.purchases,
   };
 }
 

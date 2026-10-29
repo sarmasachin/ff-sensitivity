@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
 import { AppError } from '../common/errors/app-error';
+import { countDeviceDeskStats } from './devices-desk';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import type { AuthAdmin } from '../auth/current-admin.decorator';
@@ -183,13 +184,18 @@ export class DevicesService {
   }
 
   async adminList() {
-    const rows = await this.prisma.deviceInstall.findMany({
-      orderBy: { lastSeenAt: 'desc' },
-      take: 500,
-      include: { user: { select: { coins: true } } },
-    });
     const now = new Date();
-    return { devices: rows.map((r) => this.toRow(r, now)) };
+    const [rows, stats] = await Promise.all([
+      this.prisma.deviceInstall.findMany({
+        orderBy: { lastSeenAt: 'desc' },
+        include: { user: { select: { coins: true } } },
+      }),
+      countDeviceDeskStats(this.prisma, now),
+    ]);
+    return {
+      devices: rows.map((r) => this.toRow(r, now)),
+      stats,
+    };
   }
 
   private assertCanMutate(admin: AuthAdmin) {
