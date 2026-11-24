@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ShopPurchaseDto = exports.ChallengeEarnDto = void 0;
+exports.PremiumUnlockDto = exports.ShopPurchaseDto = exports.ChallengeEarnDto = void 0;
 const class_validator_1 = require("class-validator");
 class ChallengeEarnDto {
     kind;
@@ -50,4 +50,19 @@ __decorate([
     (0, class_validator_1.MaxLength)(80),
     __metadata("design:type", String)
 ], ShopPurchaseDto.prototype, "requestId", void 0);
+class PremiumUnlockDto {
+    product;
+    requestId;
+}
+exports.PremiumUnlockDto = PremiumUnlockDto;
+__decorate([
+    (0, class_validator_1.IsIn)(['best_premium', 'premium_pro_max', 'one_tap_premium']),
+    __metadata("design:type", String)
+], PremiumUnlockDto.prototype, "product", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MinLength)(8),
+    (0, class_validator_1.MaxLength)(80),
+    __metadata("design:type", String)
+], PremiumUnlockDto.prototype, "requestId", void 0);
 //# sourceMappingURL=economy.dto.js.map

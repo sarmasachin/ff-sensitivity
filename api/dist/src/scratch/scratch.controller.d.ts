@@ -1,8 +1,8 @@
 import type { AuthUser } from '../user-auth/current-user.decorator';
-import { ScratchService } from './scratch.service';
+import { ScratchUserService } from './scratch-user.service';
 export declare class ScratchController {
     private readonly scratch;
-    constructor(scratch: ScratchService);
+    constructor(scratch: ScratchUserService);
     config(user: AuthUser): Promise<{
         dayKey: string;
         policy: {
@@ -30,6 +30,11 @@ export declare class ScratchController {
             rollsLeft: number;
             canRoll: boolean;
         };
+    }>;
+    history(user: AuthUser): Promise<{
+        retentionDays: number;
+        showExpired: boolean;
+        items: import("./scratch-history").ScratchHistoryItem[];
     }>;
     roll(user: AuthUser): Promise<{
         outcome: "COINS";

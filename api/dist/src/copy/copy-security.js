@@ -1,12 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_COPY_CONFIG = void 0;
+exports.DEFAULT_COPY_CONFIG = exports.PLAY_STORE_SHARE_URL = void 0;
 exports.sanitizeCopyText = sanitizeCopyText;
 exports.sanitizeCopyMultiline = sanitizeCopyMultiline;
 exports.assertSafeCopyText = assertSafeCopyText;
 exports.assertSafeFooterLine = assertSafeFooterLine;
 exports.assertAllowedPlaceholders = assertAllowedPlaceholders;
 exports.normalizePlaceholders = normalizePlaceholders;
+exports.shareLinkForApp = shareLinkForApp;
 const app_error_1 = require("../common/errors/app-error");
 const app_config_security_1 = require("../app-config/app-config-security");
 function sanitizeCopyText(raw, max) {
@@ -76,6 +77,25 @@ function assertAllowedPlaceholders(template) {
 function normalizePlaceholders(template) {
     return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, key) => `{{${key}}}`);
 }
+exports.PLAY_STORE_SHARE_URL = 'https://play.google.com/store/apps/details?id=com.ffsensitivity.app';
+function shareLinkForApp(footerLine) {
+    const text = footerLine.trim();
+    if (!text)
+        return exports.PLAY_STORE_SHARE_URL;
+    if (!/^https?:\/\//i.test(text))
+        return text;
+    try {
+        const host = new URL(text).hostname.replace(/\.$/, '').toLowerCase();
+        if (host === 'sensitivitysettings.com' ||
+            host === 'www.sensitivitysettings.com') {
+            return exports.PLAY_STORE_SHARE_URL;
+        }
+    }
+    catch {
+        return text;
+    }
+    return text;
+}
 exports.DEFAULT_COPY_CONFIG = {
     rate: {
         enabled: true,
@@ -88,7 +108,7 @@ exports.DEFAULT_COPY_CONFIG = {
     share: {
         sheetTitle: 'Share sensitivity',
         bodyTemplate: 'My Free Fire sensitivity for {{device}} — generated with FF Sensitivity.\n\n{{settings}}\n\nGet yours:',
-        footerLine: 'https://sensitivitysettings.com',
+        footerLine: exports.PLAY_STORE_SHARE_URL,
         hashtags: '#FreeFire #FFSensitivity',
     },
     about: {

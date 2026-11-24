@@ -35,3 +35,13 @@ export function cleanChoice(raw: string, allowed: readonly string[]): string | n
   if (!value) return '';
   return allowed.includes(value) ? value : null;
 }
+
+/** List region or custom label (1–40 chars). Empty clears. */
+export function cleanRegion(raw: string): string | null {
+  const value = raw.trim().replace(/\s+/g, ' ');
+  if (!value) return '';
+  if (value.length > 40) return null;
+  if (/[<>]/.test(value)) return null;
+  if ((PROFILE_REGIONS as readonly string[]).includes(value)) return value;
+  return value;
+}

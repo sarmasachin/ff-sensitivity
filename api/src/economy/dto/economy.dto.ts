@@ -28,4 +28,16 @@ export class ShopPurchaseDto {
   @MaxLength(80)
   requestId!: string;
 }
+
+/** Debit wallet for Premium Sensi unlock (Best / Pro Max / One Tap). */
+export class PremiumUnlockDto {
+  @IsIn(['best_premium', 'premium_pro_max', 'one_tap_premium'])
+  product!: 'best_premium' | 'premium_pro_max' | 'one_tap_premium';
+
+  /** Client-generated id so retries do not double-charge. */
+  @IsString()
+  @MinLength(8)
+  @MaxLength(80)
+  requestId!: string;
+}
 // --- End: Economy live wire (Sachin) ---

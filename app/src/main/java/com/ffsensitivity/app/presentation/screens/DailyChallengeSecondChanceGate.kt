@@ -7,8 +7,8 @@ import com.ffsensitivity.app.data.DailyChallengeStore
 import com.ffsensitivity.app.data.DailyQuizQuestion
 import com.ffsensitivity.app.data.SecondChanceAdConfig
 import com.ffsensitivity.app.data.SecondChanceAdStore
-import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.ChallengeRepository
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
 import kotlinx.coroutines.CoroutineScope
@@ -62,14 +62,11 @@ object DailyChallengeSecondChanceGate {
                         SafeOps.toast(context, "New question unlocked")
                     },
                     onFailure = { err ->
-                        val msg =
-                            (err as? ApiException)?.message
-                                ?: "Couldn’t unlock new question."
                         onError(
                             ChallengeUiError(
                                 code = "CHALLENGE_SECOND_CHANCE_FAILED",
                                 title = "Unlock failed",
-                                message = msg,
+                                message = err.userMessage("Couldn’t unlock new question. Please try again."),
                                 retryKind = ChallengeRetryKind.QUIZ
                             )
                         )
@@ -87,8 +84,8 @@ object DailyChallengeSecondChanceGate {
             onError(
                 ChallengeUiError(
                     code = "CHALLENGE_QUIZ_AD_NO_ACTIVITY",
-                    title = "Couldn’t show ad",
-                    message = "Restart the app and try again.",
+                    title = "Ad unavailable",
+                    message = "Couldn’t open the ad right now. Please try again.",
                     retryKind = ChallengeRetryKind.QUIZ
                 )
             )
@@ -98,6 +95,7 @@ object DailyChallengeSecondChanceGate {
         setBusy(true)
         CalculateRewardedAds.show(
             activity = activity,
+            slot = CalculateRewardedAds.Slot.SECOND_CHANCE,
             onRewarded = {
                 SecondChanceAdStore.markRewarded(context)
                 onPassTick()

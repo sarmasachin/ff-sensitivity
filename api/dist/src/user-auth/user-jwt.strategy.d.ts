@@ -6,6 +6,7 @@ export type UserJwtPayload = {
     email: string;
     aud: 'user';
     tv?: number;
+    exp?: number;
 };
 declare const UserJwtStrategy_base: new (...args: [opt: import("passport-jwt").StrategyOptionsWithRequest] | [opt: import("passport-jwt").StrategyOptionsWithoutRequest]) => Strategy & {
     validate(...args: any[]): unknown;

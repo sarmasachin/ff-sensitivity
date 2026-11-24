@@ -25,8 +25,8 @@ android {
         applicationId = "com.ffsensitivity.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 10
+        versionName = "1.0.9"
 
         val googleServerClientId = localProps.getProperty("GOOGLE_SERVER_CLIENT_ID", "")
         buildConfigField(
@@ -35,27 +35,40 @@ android {
             "\"$googleServerClientId\""
         )
         // Google sample IDs until real AdMob units are set in local.properties.
+        val sampleRewardedDefault = "ca-app-pub-3940256099942544/5227853062"
+        val sampleInterstitialDefault = "ca-app-pub-3940256099942544/1033173712"
         val admobAppId = localProps.getProperty(
             "ADMOB_APP_ID",
             "ca-app-pub-3940256099942544~3347511713"
         )
-        val rewardedCalculate = localProps.getProperty(
-            "ADMOB_REWARDED_CALCULATE",
-            "ca-app-pub-3940256099942544/5227853062"
-        )
+        fun rewardedProp(key: String) =
+            localProps.getProperty(key, sampleRewardedDefault)
+        val rewardedCalculate = rewardedProp("ADMOB_REWARDED_CALCULATE")
+        val rewardedDpi = rewardedProp("ADMOB_REWARDED_DPI")
+        val rewardedPremium = rewardedProp("ADMOB_REWARDED_PREMIUM")
+        val rewardedAdBonus = rewardedProp("ADMOB_REWARDED_AD_BONUS")
+        val rewardedSecondChance = rewardedProp("ADMOB_REWARDED_SECOND_CHANCE")
         val interstitialCheckIn = localProps.getProperty(
             "ADMOB_INTERSTITIAL_CHECKIN",
-            "ca-app-pub-3940256099942544/1033173712"
+            sampleInterstitialDefault
         )
         val interstitialQuiz = localProps.getProperty(
             "ADMOB_INTERSTITIAL_QUIZ",
-            "ca-app-pub-3940256099942544/1033173712"
+            sampleInterstitialDefault
         )
         val interstitialRedeemDaily = localProps.getProperty(
             "ADMOB_INTERSTITIAL_REDEEM_DAILY",
-            "ca-app-pub-3940256099942544/1033173712"
+            sampleInterstitialDefault
         )
         buildConfigField("String", "ADMOB_REWARDED_CALCULATE", "\"$rewardedCalculate\"")
+        buildConfigField("String", "ADMOB_REWARDED_DPI", "\"$rewardedDpi\"")
+        buildConfigField("String", "ADMOB_REWARDED_PREMIUM", "\"$rewardedPremium\"")
+        buildConfigField("String", "ADMOB_REWARDED_AD_BONUS", "\"$rewardedAdBonus\"")
+        buildConfigField(
+            "String",
+            "ADMOB_REWARDED_SECOND_CHANCE",
+            "\"$rewardedSecondChance\""
+        )
         buildConfigField("String", "ADMOB_INTERSTITIAL_CHECKIN", "\"$interstitialCheckIn\"")
         buildConfigField("String", "ADMOB_INTERSTITIAL_QUIZ", "\"$interstitialQuiz\"")
         buildConfigField(
@@ -92,8 +105,12 @@ android {
         debug {
             isMinifyEnabled = false
             // LAN / emulator HTTP OK for debug only.
+            // -PAPI_BASE_URL=… overrides local.properties (E2E JWT against Nest on :4000).
             val debugApi =
-                localProps.getProperty("API_BASE_URL", "http://10.0.2.2:4000")
+                (project.findProperty("API_BASE_URL") as String?)
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: localProps.getProperty("API_BASE_URL", "http://10.0.2.2:4000")
             buildConfigField("String", "API_BASE_URL", "\"$debugApi\"")
             // Always Google sample units in debug — avoids NO_FILL from unused real units.
             val sampleApp = "ca-app-pub-3940256099942544~3347511713"
@@ -101,6 +118,10 @@ android {
             val sampleInterstitial = "ca-app-pub-3940256099942544/1033173712"
             manifestPlaceholders["admobAppId"] = sampleApp
             buildConfigField("String", "ADMOB_REWARDED_CALCULATE", "\"$sampleRewarded\"")
+            buildConfigField("String", "ADMOB_REWARDED_DPI", "\"$sampleRewarded\"")
+            buildConfigField("String", "ADMOB_REWARDED_PREMIUM", "\"$sampleRewarded\"")
+            buildConfigField("String", "ADMOB_REWARDED_AD_BONUS", "\"$sampleRewarded\"")
+            buildConfigField("String", "ADMOB_REWARDED_SECOND_CHANCE", "\"$sampleRewarded\"")
             buildConfigField("String", "ADMOB_INTERSTITIAL_CHECKIN", "\"$sampleInterstitial\"")
             buildConfigField("String", "ADMOB_INTERSTITIAL_QUIZ", "\"$sampleInterstitial\"")
             buildConfigField(
@@ -110,10 +131,14 @@ android {
             )
         }
         release {
-            // Full-size installable release (no R8 strip). Re-enable minify
-            // before Play Store upload if you want a smaller AAB/APK.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 minify + resource shrink — Play Console needs obfuscation 25%+
+            // (was 0% on release 9 / 1.0.8). Rules: app/proguard-rules.pro
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             // Play upload key from local.properties (STORE_*). Never use debug for Play.
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
@@ -147,6 +172,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }

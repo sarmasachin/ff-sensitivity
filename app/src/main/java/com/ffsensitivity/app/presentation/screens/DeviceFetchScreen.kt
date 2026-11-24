@@ -47,6 +47,7 @@ import com.ffsensitivity.app.data.DeviceInfo
 import com.ffsensitivity.app.data.DeviceInfoFetcher
 import com.ffsensitivity.app.data.DpiAdConfig
 import com.ffsensitivity.app.data.DpiAdStore
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.HardwareSectionCard
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
@@ -101,7 +102,18 @@ fun DeviceFetchScreen(
     val needsDpiAd = dpiAdPassTick.let { isDpiFeature && DpiAdStore.needsAd(context) }
 
     val title = when (safeFeatureId) {
-        "sensi" -> "Best Sensitivity"
+        "sensi" -> {
+            when (com.ffsensitivity.app.data.AppSession.sensitivityEngine) {
+                com.ffsensitivity.app.data.SensitivityEngineKind.PREMIUM_PRO_MAX ->
+                    "Premium Sensi Pro Max"
+                com.ffsensitivity.app.data.SensitivityEngineKind.BEST_PREMIUM ->
+                    "Best Premium Sensi"
+                com.ffsensitivity.app.data.SensitivityEngineKind.ONE_TAP_PREMIUM ->
+                    "One Tap Premium Sensi"
+                com.ffsensitivity.app.data.SensitivityEngineKind.CLASSIC ->
+                    "Best Sensitivity"
+            }
+        }
         "hud" -> "Custom HUD"
         "graphics" -> "Graphics Settings"
         "dpi" -> "DPI and Resolution"
@@ -206,8 +218,8 @@ fun DeviceFetchScreen(
         if (activity == null) {
             showActionError(
                 code = "DEVICE_SCAN_AD_NO_ACTIVITY",
-                titleText = "Couldn’t show ad",
-                message = "Restart the app and try again.",
+                titleText = "Ad unavailable",
+                message = "Couldn’t open the ad right now. Please try again.",
                 retryKind = DeviceScanRetryKind.CONFIRM
             )
             return
@@ -215,6 +227,7 @@ fun DeviceFetchScreen(
         confirming = true
         CalculateRewardedAds.show(
             activity = activity,
+            slot = CalculateRewardedAds.Slot.DPI,
             onRewarded = {
                 DpiAdStore.markRewarded(context)
                 dpiAdPassTick += 1
@@ -278,8 +291,7 @@ fun DeviceFetchScreen(
             scanError = DeviceScanUiError(
                 code = "DEVICE_SCAN_FAILED",
                 title = "Scan failed",
-                message = it.message?.takeIf { msg -> msg.isNotBlank() }
-                    ?: "Could not read device info. Please try again.",
+                message = it.userMessage("Couldn’t scan this device. Please try again."),
                 retryKind = DeviceScanRetryKind.RESCAN
             )
             loading = false
@@ -287,9 +299,10 @@ fun DeviceFetchScreen(
         }
     }
 
-    LaunchedEffect(info, needsDpiAd) {
-        if (info != null && needsDpiAd) {
-            CalculateRewardedAds.preload(context)
+    // Start DPI preload while scan runs (not only after info is ready).
+    LaunchedEffect(needsDpiAd) {
+        if (needsDpiAd) {
+            CalculateRewardedAds.preload(context, CalculateRewardedAds.Slot.DPI)
         }
     }
 
@@ -467,6 +480,7 @@ fun DeviceFetchScreen(
                                 )
                                 GameRow("Free Fire", device.freeFireInstalled)
                                 GameRow("Free Fire Max", device.freeFireMaxInstalled)
+                                GameRow("Free Fire India", device.freeFireIndiaInstalled)
                             }
                         }
                         item {

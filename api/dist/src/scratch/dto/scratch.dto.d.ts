@@ -22,5 +22,5 @@ export declare class ScratchPrizeDto {
 export declare class SaveScratchDto {
     outcomeOdds: ScratchOutcomeOddsDto;
     policy: ScratchPolicyDto;
-    prizes: ScratchPrizeDto[];
+    prizes?: ScratchPrizeDto[];
 }

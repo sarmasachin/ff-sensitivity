@@ -6,6 +6,14 @@ import { saveScratchArchive } from '../scratch/scratch-history';
 import { buildShopSnapshot, deviceLabelFrom } from '../shop/shop-purchases';
 import { ShopAdminService } from '../shop/shop-admin.service';
 import { EconomyEarnService } from './economy-earn.service';
+import {
+  isPremiumUnlockProduct,
+  loadPremiumUnlockOptions,
+  loadPremiumUnlockPrices,
+  PREMIUM_UNLOCK_LABEL,
+  premiumUnlockCost,
+  type PremiumUnlockProduct,
+} from './premium-unlock-prices';
 
 // --- Start: Economy live wire (Sachin) ---
 @Injectable()
@@ -164,6 +172,112 @@ export class EconomyService {
       }
 
       return { coins: paidUser.coins, itemId: item.id, alreadyApplied: false };
+    });
+  }
+
+  /** Live Premium unlock coin prices + which paths the app should show. */
+  async getPremiumUnlockPrices() {
+    const [prices, options] = await Promise.all([
+      loadPremiumUnlockPrices(this.prisma),
+      loadPremiumUnlockOptions(this.prisma),
+    ]);
+    return {
+      best_premium: prices.best_premium,
+      premium_pro_max: prices.premium_pro_max,
+      one_tap_premium: prices.one_tap_premium,
+      coinUnlockEnabled: options.coinUnlockEnabled,
+      adUnlockEnabled: options.adUnlockEnabled,
+      labels: { ...PREMIUM_UNLOCK_LABEL },
+    };
+  }
+
+  /**
+   * Debit server wallet for Premium Sensi unlock.
+   * Cost from admin challenge_config. Idempotent on requestId.
+   */
+  async spendPremiumUnlock(
+    userId: string,
+    productRaw: string,
+    requestId: string,
+  ) {
+    const user = await this.requireUser(userId);
+    this.assertNotFrozen(user);
+    const product = String(productRaw ?? '').trim();
+    if (!isPremiumUnlockProduct(product)) {
+      throw new AppError('PREMIUM_UNLOCK_BAD_PRODUCT', 'Unknown unlock.', 400);
+    }
+    const safeReq = requestId.trim();
+    if (safeReq.length < 8 || safeReq.length > 80) {
+      throw new AppError('PREMIUM_UNLOCK_BAD_REQUEST', 'Invalid request id.', 400);
+    }
+    const options = await loadPremiumUnlockOptions(this.prisma);
+    if (!options.coinUnlockEnabled) {
+      throw new AppError(
+        'PREMIUM_UNLOCK_COIN_DISABLED',
+        'Coin unlock is disabled. Use watch ad instead.',
+        403,
+      );
+    }
+    const prices = await loadPremiumUnlockPrices(this.prisma);
+    const cost = premiumUnlockCost(prices, product as PremiumUnlockProduct);
+    const label = PREMIUM_UNLOCK_LABEL[product as PremiumUnlockProduct];
+    const reason = `premium_unlock:${product}`;
+    const idempotencyKey = `premium_unlock:${userId}:${product}:req:${safeReq}`;
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.walletLedger.findUnique({
+        where: { idempotencyKey },
+      });
+      if (existing) {
+        // Always return live wallet balance (not ledger snapshot) so app sync
+        // cannot rewind coins after later spends.
+        const live = await tx.user.findUniqueOrThrow({
+          where: { id: userId },
+          select: { coins: true },
+        });
+        return {
+          coins: live.coins,
+          product,
+          cost: Math.abs(existing.delta),
+          alreadyApplied: true,
+          label,
+        };
+      }
+
+      if (cost > 0) {
+        const paid = await tx.user.updateMany({
+          where: { id: userId, coins: { gte: cost } },
+          data: { coins: { decrement: cost } },
+        });
+        if (paid.count !== 1) {
+          throw new AppError(
+            'NOT_ENOUGH_COINS',
+            `You need ${cost} coins.`,
+            409,
+          );
+        }
+      }
+
+      const paidUser = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+      });
+      await tx.walletLedger.create({
+        data: {
+          userId,
+          delta: -cost,
+          balanceAfter: paidUser.coins,
+          reason,
+          idempotencyKey,
+        },
+      });
+
+      return {
+        coins: paidUser.coins,
+        product,
+        cost,
+        alreadyApplied: false,
+        label,
+      };
     });
   }
 

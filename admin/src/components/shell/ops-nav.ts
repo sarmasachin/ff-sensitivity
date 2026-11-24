@@ -13,6 +13,7 @@ export type OpsNavHref =
   | "/promos"
   | "/push"
   | "/ads"
+  | "/promax"
   | "/app"
   | "/devices"
   | "/wallets"
@@ -49,6 +50,7 @@ export const OPS_NAV_SYSTEM: OpsNavItem[] = [
   { href: "/profile", label: "Profile" },
   { href: "/push", label: "Push" },
   { href: "/ads", label: "Ads" },
+  { href: "/promax", label: "ProMax" },
   { href: "/app", label: "App" },
   { href: "/devices", label: "Devices" },
   { href: "/wallets", label: "Wallets" },

@@ -43,8 +43,9 @@ __decorate([
 ], UserAuthController.prototype, "google", null);
 __decorate([
     (0, common_1.Post)('logout'),
+    (0, throttler_1.SkipThrottle)(),
     (0, common_1.UseGuards)(user_jwt_auth_guard_1.UserJwtAuthGuard),
-    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),

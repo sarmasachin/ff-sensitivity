@@ -279,6 +279,10 @@ export class RedeemService {
     return this.claimsService.myClaims(userId);
   }
 
+  recentWinners(cadence?: string) {
+    return this.claimsService.recentWinners(cadence);
+  }
+
   vote(userId: string, redeemCodeId: string, worked: boolean) {
     this.assertRedeemId(redeemCodeId);
     return this.voteService.cast(userId, redeemCodeId, worked);

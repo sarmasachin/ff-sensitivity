@@ -15,6 +15,7 @@ const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../prisma/prisma.service");
 const analytics_service_1 = require("../analytics/analytics.service");
 const overview_security_1 = require("./overview-security");
+const overview_desk_1 = require("./overview-desk");
 const overview_series_1 = require("./overview-series");
 let OverviewService = class OverviewService {
     prisma;
@@ -147,6 +148,9 @@ let OverviewService = class OverviewService {
     }
     async adminSeries(range) {
         return (0, overview_series_1.buildOverviewSeries)(this.prisma, range);
+    }
+    async adminDesk(range) {
+        return (0, overview_desk_1.buildOverviewDesk)(this.prisma, range);
     }
     async countRegisteredWithoutOpenEvent() {
         const rows = await this.prisma.$queryRaw `

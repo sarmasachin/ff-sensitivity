@@ -3,6 +3,7 @@ package com.ffsensitivity.app.presentation.screens
 import android.content.Context
 import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.EconomyRepository
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,20 +28,11 @@ internal suspend fun refreshShopFromServer(context: Context): ShopRefreshOutcome
                 val auth = err is ApiException && err.code == "AUTH_REQUIRED"
                 if (auth) {
                     ShopRefreshOutcome.AuthRequired(
-                        (err as? ApiException)?.message
-                            ?: "Please sign in again to use Coin Shop."
+                        err.userMessage("Please sign in again to use Coin Shop.")
                     )
                 } else {
                     ShopRefreshOutcome.Failed(
-                        when (err) {
-                            is ApiException -> err.message
-                            is java.net.ConnectException,
-                            is java.net.SocketTimeoutException,
-                            is java.net.UnknownHostException,
-                            is java.io.IOException ->
-                                "Can't reach the server. Check Wi‑Fi and try again."
-                            else -> "Could not load wallet or shop. Try again."
-                        }
+                        err.userMessage("Could not load wallet or shop. Try again.")
                     )
                 }
             }

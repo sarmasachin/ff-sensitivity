@@ -19,17 +19,29 @@ const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const current_admin_decorator_1 = require("../auth/current-admin.decorator");
 const scratch_module_guard_1 = require("./scratch-module.guard");
 const scratch_service_1 = require("./scratch.service");
+const scratch_admin_prizes_service_1 = require("./scratch-admin-prizes.service");
 const scratch_dto_1 = require("./dto/scratch.dto");
 let ScratchAdminController = class ScratchAdminController {
     scratch;
-    constructor(scratch) {
+    prizes;
+    constructor(scratch, prizes) {
         this.scratch = scratch;
+        this.prizes = prizes;
     }
     get() {
         return this.scratch.adminGetBundle();
     }
     save(admin, dto) {
         return this.scratch.adminSave(admin.id, dto);
+    }
+    createPrize(admin, dto) {
+        return this.prizes.create(admin.id, dto);
+    }
+    updatePrize(admin, id, dto) {
+        return this.prizes.update(admin.id, id, dto);
+    }
+    deletePrize(admin, id) {
+        return this.prizes.delete(admin.id, id);
     }
 };
 exports.ScratchAdminController = ScratchAdminController;
@@ -49,9 +61,38 @@ __decorate([
     __metadata("design:paramtypes", [Object, scratch_dto_1.SaveScratchDto]),
     __metadata("design:returntype", void 0)
 ], ScratchAdminController.prototype, "save", null);
+__decorate([
+    (0, common_1.Post)('prizes'),
+    (0, throttler_1.Throttle)({ default: { limit: 40, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, scratch_dto_1.ScratchPrizeDto]),
+    __metadata("design:returntype", void 0)
+], ScratchAdminController.prototype, "createPrize", null);
+__decorate([
+    (0, common_1.Put)('prizes/:id'),
+    (0, throttler_1.Throttle)({ default: { limit: 40, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, scratch_dto_1.ScratchPrizeDto]),
+    __metadata("design:returntype", void 0)
+], ScratchAdminController.prototype, "updatePrize", null);
+__decorate([
+    (0, common_1.Delete)('prizes/:id'),
+    (0, throttler_1.Throttle)({ default: { limit: 40, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], ScratchAdminController.prototype, "deletePrize", null);
 exports.ScratchAdminController = ScratchAdminController = __decorate([
     (0, common_1.Controller)('api/v1/admin/scratch'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, scratch_module_guard_1.ScratchModuleGuard),
-    __metadata("design:paramtypes", [scratch_service_1.ScratchService])
+    __metadata("design:paramtypes", [scratch_service_1.ScratchService,
+        scratch_admin_prizes_service_1.ScratchAdminPrizesService])
 ], ScratchAdminController);
 //# sourceMappingURL=scratch-admin.controller.js.map

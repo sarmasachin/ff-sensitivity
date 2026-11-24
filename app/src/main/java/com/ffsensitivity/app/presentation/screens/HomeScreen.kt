@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.Speed
@@ -92,6 +93,7 @@ data class HomeFeature(
 /** Stable route ids Home is allowed to open. */
 private val AllowedHomeFeatureIds = setOf(
     "sensi",
+    "sensi_pro",
     "hud",
     "graphics",
     "dpi",
@@ -107,6 +109,13 @@ private val defaultHomeFeatures = listOf(
         subtitle = "Sensitivity tuned to your RAM, Hz & playstyle.",
         icon = Icons.Outlined.Speed,
         accent = Amber
+    ),
+    HomeFeature(
+        id = "sensi_pro",
+        title = "Unlock Premium Pro Sensitivity (Paid)",
+        subtitle = "",
+        icon = Icons.Outlined.Lock,
+        accent = AmberHot
     ),
     HomeFeature(
         id = "hud",
@@ -238,12 +247,12 @@ fun HomeScreen(
         featuresLoad.isFailure -> HomeUiError(
             code = "HOME_CATALOG_FAILED",
             title = "Home unavailable",
-            message = "Could not load tools on this screen. Restart the app and try again."
+            message = "Could not load tools on this screen. Please try again."
         )
         features.isEmpty() -> HomeUiError(
             code = "HOME_CATALOG_EMPTY",
             title = "No tools available",
-            message = "No tools to show. Restart the app and try again."
+            message = "No tools to show right now. Please try again."
         )
         else -> null
     }
@@ -533,13 +542,15 @@ private fun FeatureCard(
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = feature.subtitle,
-                color = InkSecondary,
-                fontSize = 12.sp,
-                lineHeight = 17.sp
-            )
+            if (feature.subtitle.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = feature.subtitle,
+                    color = InkSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
         }
         Icon(
             imageVector = Icons.Outlined.ChevronRight,

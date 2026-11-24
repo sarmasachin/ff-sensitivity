@@ -7,6 +7,7 @@ import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemDailyAdStore
 import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.RedeemRepository
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.util.AppLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,10 +53,7 @@ internal object RedeemScreenScratch {
                 onSuccess = { onReady(item) },
                 onFailure = { err ->
                     AppLog.e("Redeem scratch precheck failed", err)
-                    val message = when (err) {
-                        is ApiException -> err.message
-                        else -> "Couldn't open scratch card. Try again."
-                    }
+                    val message = err.userMessage("Couldn't open scratch card. Try again.")
                     showError(
                         (err as? ApiException)?.code ?: "REDEEM_SCRATCH_OPEN_FAILED",
                         "Couldn’t open scratch card",
@@ -142,10 +140,9 @@ internal object RedeemScreenScratch {
                                         code = (err as? ApiException)?.code
                                             ?: "REDEEM_AD_UNLOCK_FAILED",
                                         title = "Couldn’t unlock scratch",
-                                        message = when (err) {
-                                            is ApiException -> err.message
-                                            else -> "Watch the ad again to scratch for coins."
-                                        },
+                                        message = err.userMessage(
+                                            "Couldn’t unlock this scratch card. Please try again."
+                                        ),
                                         retryKind = RedeemRetryKind.SCRATCH,
                                         retryItemId = item.id
                                     )

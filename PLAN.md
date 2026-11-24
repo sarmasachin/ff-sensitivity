@@ -5,6 +5,18 @@
 
 ---
 
+## Next Play upload (must)
+
+Play Console, release **9 (1.0.8)**: **DEX obfuscation 0%**. Deadline **Feb 2027**. Under 25% can hurt visibility and publishing.
+
+**R8 minify — DONE in code (1.0.9):**
+- `app/build.gradle.kts` release: `isMinifyEnabled = true`, `isShrinkResources = true`, `proguard-rules.pro` wired.
+- Abhi baki: release AAB build → device pe Google Sign-In / AdMob / Firebase check → Play pe upload → Console me obfuscation **25%+** confirm.
+
+**Compare with Free Fire** — DONE: `imePadding` on screen + `bringIntoView` on each `CompareField` (same pattern as Share/Contact).
+
+---
+
 ## Partial (chal raha, lekin limited)
 
 | Item | Status |

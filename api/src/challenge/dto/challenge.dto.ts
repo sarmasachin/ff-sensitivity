@@ -28,10 +28,18 @@ export class ChallengeRulesDto {
   @IsBoolean()
   adBonusOptional!: boolean;
 
+  /** Legacy hours — kept for older admin clients; minutes preferred. */
   @IsInt()
-  @Min(1)
+  @Min(0)
   @Max(168)
   adBonusCooldownHours!: number;
+
+  /** Minutes until Watch Ad Bonus can show/claim again (0 = every time). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(168 * 60)
+  adBonusCooldownMinutes?: number;
 
   @IsInt()
   @Min(0)

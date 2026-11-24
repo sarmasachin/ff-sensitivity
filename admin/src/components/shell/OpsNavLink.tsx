@@ -5,6 +5,7 @@ import type { OpsNavHref } from "./ops-nav";
 import {
   IconAds,
   IconApp,
+  IconProMax,
   IconAudit,
   IconChallenge,
   IconClaims,
@@ -43,6 +44,7 @@ const ICONS = {
   "/promos": IconPromos,
   "/push": IconPush,
   "/ads": IconAds,
+  "/promax": IconProMax,
   "/app": IconApp,
   "/devices": IconDevices,
   "/wallets": IconWallets,

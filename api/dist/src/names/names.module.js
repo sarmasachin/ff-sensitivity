@@ -13,6 +13,7 @@ const names_admin_controller_1 = require("./names-admin.controller");
 const names_controller_1 = require("./names.controller");
 const names_module_guard_1 = require("./names-module.guard");
 const names_service_1 = require("./names.service");
+const names_admin_items_service_1 = require("./names-admin-items.service");
 let NamesModule = class NamesModule {
 };
 exports.NamesModule = NamesModule;
@@ -20,7 +21,7 @@ exports.NamesModule = NamesModule = __decorate([
     (0, common_1.Module)({
         imports: [auth_module_1.AuthModule],
         controllers: [names_controller_1.NamesController, names_admin_controller_1.NamesAdminController],
-        providers: [names_service_1.NamesService, names_module_guard_1.NamesModuleGuard],
+        providers: [names_service_1.NamesService, names_admin_items_service_1.NamesAdminItemsService, names_module_guard_1.NamesModuleGuard],
     })
 ], NamesModule);
 //# sourceMappingURL=names.module.js.map

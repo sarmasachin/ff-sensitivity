@@ -187,8 +187,10 @@ class GoogleAuthClient(private val activityContext: Context) {
         return false
     }
 
-    private fun detailed(base: String, technical: String): String =
-        if (BuildConfig.DEBUG) "$base\n[debug] $technical" else base
+    private fun detailed(base: String, technical: String): String {
+        AppLog.w("GoogleAuth detail: $technical")
+        return base
+    }
 
     companion object {
         fun isOnline(context: Context): Boolean {

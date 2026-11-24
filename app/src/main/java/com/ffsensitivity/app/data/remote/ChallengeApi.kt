@@ -58,8 +58,15 @@ object ChallengeApi {
                         rules.optInt("quizWrongCoins", -10)
                     ChallengeQuizTimingConfig.adBonusOptional =
                         rules.optBoolean("adBonusOptional", true)
-                    ChallengeQuizTimingConfig.adBonusCooldownHours =
-                        rules.optInt("adBonusCooldownHours", 4)
+                    if (rules.has("adBonusCooldownMinutes") &&
+                        !rules.isNull("adBonusCooldownMinutes")
+                    ) {
+                        ChallengeQuizTimingConfig.adBonusCooldownMinutes =
+                            rules.optInt("adBonusCooldownMinutes", 240)
+                    } else {
+                        ChallengeQuizTimingConfig.adBonusCooldownMinutes =
+                            rules.optInt("adBonusCooldownHours", 4).coerceIn(0, 168) * 60
+                    }
                     if (rules.has("checkinCoins")) {
                         ChallengeQuizTimingConfig.checkinCoins = rules.optInt("checkinCoins", 20)
                     }

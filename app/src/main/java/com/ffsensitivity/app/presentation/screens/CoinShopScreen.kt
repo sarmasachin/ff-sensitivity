@@ -28,7 +28,9 @@ import com.ffsensitivity.app.data.ShopCategoryRef
 import com.ffsensitivity.app.data.ShopItem
 import com.ffsensitivity.app.data.ShopStore
 import com.ffsensitivity.app.data.UserSessionStore
+import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.EconomyRepository
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
 import com.ffsensitivity.app.util.AppLog
@@ -265,7 +267,10 @@ fun CoinShopScreen(
                                 "WALLET_FROZEN", "ECONOMY_FROZEN" -> "Wallet frozen"
                                 else -> "Couldn’t buy"
                             },
-                            message = result.message.ifBlank { "Purchase was declined." },
+                            message = ApiException(
+                                code ?: "SHOP_BUY_REJECTED",
+                                result.message
+                            ).userMessage("Purchase was declined. Please try again."),
                             retryKind = when (code) {
                                 "AUTH_REQUIRED" -> ShopRetryKind.SIGN_IN
                                 "SHOP_ALREADY_OWNED",

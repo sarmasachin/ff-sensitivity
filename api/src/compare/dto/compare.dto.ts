@@ -2,6 +2,8 @@ import { Type } from 'class-transformer';
 import {
   IsIn,
   IsInt,
+  IsNumber,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
@@ -83,4 +85,47 @@ export class SaveCompareDto {
   @ValidateNested()
   @Type(() => SensitivityValuesDto)
   actual!: SensitivityValuesDto;
+
+  /** Optional — Pro Max peer matching (legacy clients omit). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.5)
+  @Max(64)
+  ramGb?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  processorBrand?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  processorType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  gpuLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  gpuVendor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(30)
+  @Max(360)
+  refreshHz?: number;
+
+  /**
+   * Product bucket for peer isolation:
+   * one_tap | promax | best_premium | classic
+   */
+  @IsOptional()
+  @IsIn(['one_tap', 'promax', 'best_premium', 'classic', 'one_tap_premium', 'premium_pro_max'])
+  engine?: string;
 }

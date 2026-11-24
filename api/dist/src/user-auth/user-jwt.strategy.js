@@ -21,12 +21,16 @@ let UserJwtStrategy = class UserJwtStrategy extends (0, passport_1.PassportStrat
     constructor(config, prisma) {
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
-            ignoreExpiration: false,
+            ignoreExpiration: true,
             secretOrKey: config.getOrThrow('JWT_USER_SECRET'),
         });
         this.prisma = prisma;
     }
     async validate(payload) {
+        const expMs = typeof payload.exp === 'number' ? payload.exp * 1000 : Number.NaN;
+        if (!Number.isFinite(expMs) || Date.now() > expMs + 30_000) {
+            throw new app_error_1.AppError('AUTH_REQUIRED', 'Session expired. Sign in again.', 401);
+        }
         if (payload.aud !== 'user') {
             throw new app_error_1.AppError('AUTH_INVALID', 'Invalid token audience.', 401);
         }
@@ -37,10 +41,11 @@ let UserJwtStrategy = class UserJwtStrategy extends (0, passport_1.PassportStrat
                 email: true,
                 displayName: true,
                 isActive: true,
+                dataDeletedAt: true,
                 tokenVersion: true,
             },
         });
-        if (!user || !user.isActive) {
+        if (!user || !user.isActive || user.dataDeletedAt) {
             throw new app_error_1.AppError('AUTH_INVALID', 'Invalid or inactive account.', 401);
         }
         const tv = typeof payload.tv === 'number' ? payload.tv : 0;

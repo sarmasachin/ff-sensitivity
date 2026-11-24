@@ -55,7 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.ffsensitivity.app.data.ShopStore
-import com.ffsensitivity.app.data.remote.ApiException
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.presentation.components.PremiumWinConfetti
 import com.ffsensitivity.app.presentation.components.ScratchMysteryUnderlay
 import com.ffsensitivity.app.presentation.theme.Amber
@@ -121,9 +121,7 @@ fun MenuScratchCardDialog(
                         claimError = null
                     },
                     onFailure = { err ->
-                        claimError = (err as? ApiException)?.message
-                            ?: err.message?.takeIf { it.isNotBlank() }
-                            ?: "Scratch failed. Try again."
+                        claimError = err.userMessage("Scratch failed. Try again.")
                     }
                 )
             } catch (ce: CancellationException) {

@@ -21,6 +21,7 @@ export type EconomyRates = {
   quizEnabled: boolean;
   adBonusEnabled: boolean;
   adBonusCooldownHours: number;
+  adBonusCooldownMinutes: number;
 };
 
 function clampCap(n: number): number {
@@ -41,7 +42,12 @@ export async function loadEconomyRates(db: RateDb): Promise<EconomyRates> {
     checkInEnabled: row?.checkInEnabled ?? true,
     quizEnabled: row?.quizEnabled ?? true,
     adBonusEnabled: row?.adBonusOptional ?? true,
-    adBonusCooldownHours: Math.max(1, row?.adBonusCooldownHours ?? 4),
+    adBonusCooldownHours: Math.max(0, row?.adBonusCooldownHours ?? 4),
+    adBonusCooldownMinutes: Math.max(
+      0,
+      row?.adBonusCooldownMinutes ??
+        Math.max(0, row?.adBonusCooldownHours ?? 4) * 60,
+    ),
   };
 }
 

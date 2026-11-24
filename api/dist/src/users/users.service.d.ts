@@ -5,17 +5,17 @@ export declare class UsersService {
     private readonly prisma;
     constructor(prisma: PrismaService);
     private assertCanMutate;
-    private readonly installSelect;
     private attachSharedInstalls;
-    private toUserRow;
     private loadRow;
     adminListUsers(): Promise<{
         users: {
             id: string;
             displayName: string;
+            googleName: string;
+            photoUrl: string | null;
             email: string;
             googleSubMasked: string;
-            status: "ACTIVE" | "RESTRICTED" | "SUSPENDED";
+            status: "ACTIVE" | "RESTRICTED" | "SUSPENDED" | "DELETED";
             joinedLabel: string;
             lastActiveLabel: string;
             lastActiveHoursAgo: number;
@@ -23,19 +23,26 @@ export declare class UsersService {
             deviceLabel: string;
             appVersion: string;
             coinBalance: number;
+            streakDays: number;
             claimsCount: number;
             redeemUnlocks: number;
+            ffUid: string;
+            playRole: string;
             regionLabel: string;
+            notifyPush: boolean;
             note: string;
         }[];
+        stats: import("./users-stats").UserDeskStats;
     }>;
     adminSetStatus(admin: AuthAdmin, userIdRaw: string, dto: UserStatusDto): Promise<{
         user: {
             id: string;
             displayName: string;
+            googleName: string;
+            photoUrl: string | null;
             email: string;
             googleSubMasked: string;
-            status: "ACTIVE" | "RESTRICTED" | "SUSPENDED";
+            status: "ACTIVE" | "RESTRICTED" | "SUSPENDED" | "DELETED";
             joinedLabel: string;
             lastActiveLabel: string;
             lastActiveHoursAgo: number;
@@ -43,9 +50,13 @@ export declare class UsersService {
             deviceLabel: string;
             appVersion: string;
             coinBalance: number;
+            streakDays: number;
             claimsCount: number;
             redeemUnlocks: number;
+            ffUid: string;
+            playRole: string;
             regionLabel: string;
+            notifyPush: boolean;
             note: string;
         };
     }>;
@@ -53,9 +64,11 @@ export declare class UsersService {
         user: {
             id: string;
             displayName: string;
+            googleName: string;
+            photoUrl: string | null;
             email: string;
             googleSubMasked: string;
-            status: "ACTIVE" | "RESTRICTED" | "SUSPENDED";
+            status: "ACTIVE" | "RESTRICTED" | "SUSPENDED" | "DELETED";
             joinedLabel: string;
             lastActiveLabel: string;
             lastActiveHoursAgo: number;
@@ -63,9 +76,39 @@ export declare class UsersService {
             deviceLabel: string;
             appVersion: string;
             coinBalance: number;
+            streakDays: number;
             claimsCount: number;
             redeemUnlocks: number;
+            ffUid: string;
+            playRole: string;
             regionLabel: string;
+            notifyPush: boolean;
+            note: string;
+        };
+    }>;
+    adminDeleteData(admin: AuthAdmin, userIdRaw: string): Promise<{
+        user: {
+            id: string;
+            displayName: string;
+            googleName: string;
+            photoUrl: string | null;
+            email: string;
+            googleSubMasked: string;
+            status: "ACTIVE" | "RESTRICTED" | "SUSPENDED" | "DELETED";
+            joinedLabel: string;
+            lastActiveLabel: string;
+            lastActiveHoursAgo: number;
+            deviceId: string;
+            deviceLabel: string;
+            appVersion: string;
+            coinBalance: number;
+            streakDays: number;
+            claimsCount: number;
+            redeemUnlocks: number;
+            ffUid: string;
+            playRole: string;
+            regionLabel: string;
+            notifyPush: boolean;
             note: string;
         };
     }>;

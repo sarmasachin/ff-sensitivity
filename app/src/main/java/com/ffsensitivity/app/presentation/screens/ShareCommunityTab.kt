@@ -50,6 +50,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.ffsensitivity.app.data.SharedSensiCard
 import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.CommunityRepository
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.AmberHot
 import com.ffsensitivity.app.presentation.theme.AmberSoft
@@ -107,15 +108,7 @@ fun ShareCommunityTab(
                 AppLog.e("Community feed load failed", err)
                 cards = emptyList()
                 authRequired = err is ApiException && err.code == "AUTH_REQUIRED"
-                loadError = when (err) {
-                    is ApiException -> err.message
-                    is java.net.ConnectException,
-                    is java.net.SocketTimeoutException,
-                    is java.net.UnknownHostException,
-                    is java.io.IOException ->
-                        "Can't reach the server. Check Wi‑Fi and try again."
-                    else -> "Couldn't load Community. Try again."
-                }
+                loadError = err.userMessage("Couldn't load Community. Try again.")
             }
         )
         loading = false
@@ -262,14 +255,14 @@ fun ShareCommunityTab(
                                 onFailure = { err ->
                                     AppLog.e("Community report failed", err)
                                     if (err is ApiException && err.code == "AUTH_REQUIRED") {
-                                        SafeOps.toast(context, err.message)
+                                        SafeOps.toast(
+                                            context,
+                                            err.userMessage("Please sign in again.")
+                                        )
                                         viewing = null
                                         onRequireSignIn()
                                     } else {
-                                        val msg = when (err) {
-                                            is ApiException -> err.message
-                                            else -> "Could not report. Try again."
-                                        }
+                                        val msg = err.userMessage("Could not report. Try again.")
                                         SafeOps.toast(context, msg)
                                     }
                                 }

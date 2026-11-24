@@ -1,8 +1,7 @@
-package com.ffsensitivity.app.presentation.screens
+﻿package com.ffsensitivity.app.presentation.screens
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -12,9 +11,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import com.ffsensitivity.app.data.RedeemCadenceOption
 import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemDailyAdStore
@@ -53,51 +49,31 @@ fun RedeemScreen(
     }
     var catalogLoading by remember { mutableStateOf(true) }
     var catalogLoadFailed by remember { mutableStateOf(false) }
-    var catalogGeneration by remember { mutableStateOf(0) }
+    var catalogLoadCause by remember { mutableStateOf<Throwable?>(null) }
+    var catalogGeneration by remember { mutableIntStateOf(0) }
     var waitRefreshKey by remember { mutableStateOf("") }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var skipResumeRefresh by remember { mutableIntStateOf(1) }
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
-            if (skipResumeRefresh > 0) {
-                skipResumeRefresh -= 1
-            } else {
-                catalogGeneration += 1
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    var winnerLines by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    LaunchedEffect(catalogGeneration) {
-        catalogLoading = true
-        val result = withContext(Dispatchers.IO) {
-            RedeemRepository.loadCatalog(context)
+    RedeemCatalogResumeBinder(onResumeRefresh = { catalogGeneration += 1 })
+    RedeemCatalogLoadEffect(
+        context = context,
+        catalogGeneration = catalogGeneration,
+        selectedCadenceId = selectedCadenceId,
+        unlocked = unlocked,
+        onCodes = { codes = it },
+        onCadences = { cadenceTabs = it },
+        onSelectCadenceIfMissing = { selectedCadenceId = it },
+        onLoading = { catalogLoading = it },
+        onFailed = { failed, cause ->
+            catalogLoadFailed = failed
+            catalogLoadCause = cause
         }
-        result.fold(
-            onSuccess = { payload ->
-                val cleaned = payload.items
-                    .filter { it.id.isNotBlank() && !it.id.contains('/') }
-                    .distinctBy { it.id }
-                codes = cleaned
-                if (payload.cadences.isNotEmpty()) {
-                    cadenceTabs = payload.cadences
-                    if (cadenceTabs.none { it.id == selectedCadenceId }) {
-                        selectedCadenceId = cadenceTabs.first().id
-                    }
-                }
-                unlocked.clear()
-                cleaned.filter { it.serverUnlocked }.forEach { unlocked[it.id] = true }
-                catalogLoadFailed = false
-            },
-            onFailure = {
-                AppLog.e("Redeem catalog failed", it)
-                catalogLoadFailed = true
-                codes = emptyList()
-            }
-        )
-        catalogLoading = false
+    )
+    LaunchedEffect(selectedCadenceId, catalogGeneration) {
+        val result = withContext(Dispatchers.IO) {
+            RedeemRepository.loadWinners(context, selectedCadenceId)
+        }
+        winnerLines = result.getOrNull()?.map { it.text }.orEmpty()
     }
 
     val selectedCadenceLabel =
@@ -109,23 +85,17 @@ fun RedeemScreen(
     val needsRedeemDailyAd = remember(selectedCadenceId, isBusy, redeemDailyAdPassTick) {
         isDailyCadence && RedeemDailyAdStore.needsAd(context)
     }
-    LaunchedEffect(selectedCadenceId, redeemDailyAdPassTick) {
-        RedeemScreenScratch.preloadIfNeeded(context, isDailyCadence)
+    LaunchedEffect(selectedCadenceId, redeemDailyAdPassTick, needsRedeemDailyAd) {
+        if (needsRedeemDailyAd) {
+            RedeemScreenScratch.preloadIfNeeded(context, isDailyCadence)
+        }
     }
-    val catalogError = when {
-        catalogLoading -> null
-        catalogLoadFailed -> RedeemUiError(
-            code = "REDEEM_CATALOG_FAILED",
-            title = "Rewards unavailable",
-            message = "Could not load redeem inventory. Check your connection and try again."
-        )
-        codes.isEmpty() -> RedeemUiError(
-            code = "REDEEM_CATALOG_EMPTY",
-            title = "No rewards right now",
-            message = "There are no scratch cards to show. Check back later."
-        )
-        else -> null
-    }
+    val catalogError = redeemCatalogErrorUi(
+        loading = catalogLoading,
+        failed = catalogLoadFailed,
+        cause = catalogLoadCause,
+        codesEmpty = codes.isEmpty()
+    )
 
     fun clearError() {
         actionError = null
@@ -306,6 +276,7 @@ fun RedeemScreen(
                     codes = codes.map { row ->
                         if (row.id == latest.id) row.copy(code = secret) else row
                     }
+                    catalogGeneration += 1
                     finishCopy(secret, latest.id)
                 },
                 onFailure = { err ->
@@ -364,7 +335,7 @@ fun RedeemScreen(
             onClaim = {
                 isBusy = true
                 try {
-                    RedeemScreenClaim.run(
+                    val claimUi = RedeemScreenClaim.run(
                         context = context,
                         target = target,
                         onCodes = { codes = it },
@@ -373,6 +344,10 @@ fun RedeemScreen(
                         revealed = revealed,
                         clearError = { clearError() }
                     )
+                    if (claimUi.ok) {
+                        catalogGeneration += 1
+                    }
+                    claimUi
                 } finally {
                     isBusy = false
                 }
@@ -383,7 +358,7 @@ fun RedeemScreen(
     RedeemScreenList(
         contentPadding, catalogLoading, catalogError, actionError,
         cadenceTabs, selectedCadenceId, selectedCadenceLabel, isDailyCadence,
-        tabCodes, unlocked, revealed, votes, needsRedeemDailyAd,
+        winnerLines, tabCodes, unlocked, revealed, votes, needsRedeemDailyAd,
         onOpenMenu = { openMenuSafe() },
         onRetryCatalog = { clearError(); catalogGeneration += 1 },
         onSelectCadence = { selectedCadenceId = it },

@@ -23,6 +23,7 @@ export declare class DevicesAdminController {
             coinBalance: number;
             note: string;
         }[];
+        stats: import("./devices-desk").DeviceDeskStats;
     }>;
     block(admin: AuthAdmin, id: string): Promise<{
         device: {

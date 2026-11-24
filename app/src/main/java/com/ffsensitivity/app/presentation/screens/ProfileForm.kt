@@ -49,7 +49,12 @@ internal fun profileFieldError(
         return "Free Fire UID must be 6–15 digits."
     }
     if (role.isNotEmpty() && role !in ProfileOptions.roles) return "Pick a role from the list."
-    if (region.isNotEmpty() && region !in ProfileOptions.regions) return "Pick a region from the list."
+    val regionClean = region.trim().replace(Regex("\\s+"), " ")
+    if (regionClean.isNotEmpty()) {
+        if (regionClean.length > 40 || regionClean.contains('<') || regionClean.contains('>')) {
+            return "Region must be 1–40 characters."
+        }
+    }
     return null
 }
 

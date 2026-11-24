@@ -164,6 +164,35 @@ fun PushInboxScreen(
         }
     }
 
+    fun clearAll() {
+        if (busy || messages.isEmpty()) return
+        busy = true
+        error = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                PushRepository.clearInbox(context)
+            }
+            result
+                .onSuccess {
+                    messages = emptyList()
+                }
+                .onFailure { err ->
+                    AppLog.e("Push inbox clear all failed", err)
+                    val noAuth =
+                        err.message?.contains("Not signed in", ignoreCase = true) == true
+                    error = InboxUiError(
+                        title = if (noAuth) "Sign-in required" else "Couldn’t clear inbox",
+                        message = if (noAuth) {
+                            "Sign in with Google again to clear notifications."
+                        } else {
+                            "Try again in a moment."
+                        }
+                    )
+                }
+            busy = false
+        }
+    }
+
     AtmosphereScaffold {
         Column(
             modifier = Modifier
@@ -273,12 +302,28 @@ fun PushInboxScreen(
                         contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
                         item {
-                            Text(
-                                text = "${messages.size} message${if (messages.size == 1) "" else "s"}",
-                                color = InkMuted,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${messages.size} message${if (messages.size == 1) "" else "s"}",
+                                    color = InkMuted,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "Clear all",
+                                    color = Amber,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable(enabled = !busy) { clearAll() }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                         }
                         items(messages, key = { it.id.ifBlank { it.title + it.sentAt } }) { msg ->

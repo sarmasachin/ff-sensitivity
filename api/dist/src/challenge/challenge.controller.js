@@ -17,7 +17,7 @@ const common_1 = require("@nestjs/common");
 const throttler_1 = require("@nestjs/throttler");
 const user_jwt_auth_guard_1 = require("../user-auth/user-jwt-auth.guard");
 const current_user_decorator_1 = require("../user-auth/current-user.decorator");
-const challenge_service_1 = require("./challenge.service");
+const challenge_user_service_1 = require("./challenge-user.service");
 const challenge_dto_1 = require("./dto/challenge.dto");
 let ChallengeController = class ChallengeController {
     challenge;
@@ -25,13 +25,13 @@ let ChallengeController = class ChallengeController {
         this.challenge = challenge;
     }
     today(user) {
-        return this.challenge.userToday(user.id);
+        return this.challenge.today(user.id);
     }
     submitQuiz(user, dto) {
-        return this.challenge.userSubmitQuiz(user.id, dto.questionId, dto.selectedIndex);
+        return this.challenge.submitQuiz(user.id, dto.questionId, dto.selectedIndex);
     }
     unlockSecondChance(user) {
-        return this.challenge.userUnlockSecondChance(user.id);
+        return this.challenge.unlockSecondChance(user.id);
     }
 };
 exports.ChallengeController = ChallengeController;
@@ -63,6 +63,6 @@ __decorate([
 exports.ChallengeController = ChallengeController = __decorate([
     (0, common_1.Controller)('api/v1/challenge'),
     (0, common_1.UseGuards)(user_jwt_auth_guard_1.UserJwtAuthGuard),
-    __metadata("design:paramtypes", [challenge_service_1.ChallengeService])
+    __metadata("design:paramtypes", [challenge_user_service_1.ChallengeUserService])
 ], ChallengeController);
 //# sourceMappingURL=challenge.controller.js.map

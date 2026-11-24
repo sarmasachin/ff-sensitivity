@@ -3,6 +3,12 @@ export declare class CopyPublicController {
     private readonly copy;
     constructor(copy: CopyService);
     live(): Promise<{
+        share: {
+            footerLine: string;
+            sheetTitle: string;
+            bodyTemplate: string;
+            hashtags: string;
+        };
         rate: {
             enabled: boolean;
             title: string;
@@ -10,12 +16,6 @@ export declare class CopyPublicController {
             primaryCta: string;
             secondaryCta: string;
             minSessions: number;
-        };
-        share: {
-            sheetTitle: string;
-            bodyTemplate: string;
-            footerLine: string;
-            hashtags: string;
         };
         about: {
             headline: string;

@@ -18,18 +18,24 @@ const analytics_service_1 = require("../analytics/analytics.service");
 const redeem_scratch_service_1 = require("./redeem-scratch.service");
 const redeem_claims_service_1 = require("./redeem-claims.service");
 const redeem_catalog_service_1 = require("./redeem-catalog.service");
+const redeem_vote_service_1 = require("./redeem-vote.service");
+const redeem_comment_service_1 = require("./redeem-comment.service");
 let RedeemService = class RedeemService {
     prisma;
     analytics;
     scratchService;
     claimsService;
     catalogService;
-    constructor(prisma, analytics, scratchService, claimsService, catalogService) {
+    voteService;
+    commentService;
+    constructor(prisma, analytics, scratchService, claimsService, catalogService, voteService, commentService) {
         this.prisma = prisma;
         this.analytics = analytics;
         this.scratchService = scratchService;
         this.claimsService = claimsService;
         this.catalogService = catalogService;
+        this.voteService = voteService;
+        this.commentService = commentService;
     }
     catalog(userId) {
         return this.catalogService.catalog(userId);
@@ -217,6 +223,21 @@ let RedeemService = class RedeemService {
     myClaims(userId) {
         return this.claimsService.myClaims(userId);
     }
+    recentWinners(cadence) {
+        return this.claimsService.recentWinners(cadence);
+    }
+    vote(userId, redeemCodeId, worked) {
+        this.assertRedeemId(redeemCodeId);
+        return this.voteService.cast(userId, redeemCodeId, worked);
+    }
+    comments(redeemCodeId) {
+        this.assertRedeemId(redeemCodeId);
+        return this.commentService.list(redeemCodeId);
+    }
+    addComment(userId, redeemCodeId, name, text) {
+        this.assertRedeemId(redeemCodeId);
+        return this.commentService.add(userId, redeemCodeId, name, text);
+    }
     assertRedeemId(redeemCodeId) {
         const id = redeemCodeId?.trim() ?? '';
         if (id.length < 10 || id.length > 40 || !/^[a-z0-9_-]+$/i.test(id)) {
@@ -248,6 +269,8 @@ exports.RedeemService = RedeemService = __decorate([
         analytics_service_1.AnalyticsService,
         redeem_scratch_service_1.RedeemScratchService,
         redeem_claims_service_1.RedeemClaimsService,
-        redeem_catalog_service_1.RedeemCatalogService])
+        redeem_catalog_service_1.RedeemCatalogService,
+        redeem_vote_service_1.RedeemVoteService,
+        redeem_comment_service_1.RedeemCommentService])
 ], RedeemService);
 //# sourceMappingURL=redeem.service.js.map

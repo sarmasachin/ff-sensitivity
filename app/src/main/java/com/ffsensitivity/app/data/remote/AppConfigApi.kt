@@ -22,6 +22,9 @@ data class AppRemoteLinks(
 
 data class AppRemoteAdPlacement(
     val enabled: Boolean,
+    /** Minutes until this ad can show again (0 = every time). */
+    val cooldownMinutes: Int,
+    /** Legacy hours — prefer [cooldownMinutes]. */
     val cooldownHours: Int,
     val incompleteMessage: String,
     val buttonLabel: String
@@ -29,6 +32,7 @@ data class AppRemoteAdPlacement(
 
 data class AppRemoteAds(
     val calculate: AppRemoteAdPlacement,
+    val premium: AppRemoteAdPlacement,
     val dpi: AppRemoteAdPlacement,
     val quiz: AppRemoteAdPlacement,
     val secondChance: AppRemoteAdPlacement,
@@ -101,6 +105,10 @@ object AppConfigApi {
                 ads?.optJSONObject("calculate"),
                 defaults.calculate
             ),
+            premium = parsePlacement(
+                ads?.optJSONObject("premium"),
+                defaults.premium
+            ),
             dpi = parsePlacement(
                 ads?.optJSONObject("dpi"),
                 defaults.dpi
@@ -133,10 +141,21 @@ object AppConfigApi {
         d: AppRemoteAdPlacement
     ): AppRemoteAdPlacement {
         val raw = obj ?: JSONObject()
+        val minutes = when {
+            raw.has("cooldownMinutes") && !raw.isNull("cooldownMinutes") ->
+                raw.optInt("cooldownMinutes", d.cooldownMinutes)
+            else ->
+                raw.optInt("cooldownHours", d.cooldownHours).coerceIn(0, 168) * 60
+        }.coerceIn(0, 168 * 60)
+        val hours = if (minutes <= 0) {
+            0
+        } else {
+            ((minutes + 59) / 60).coerceIn(1, 168)
+        }
         return AppRemoteAdPlacement(
             enabled = raw.optBoolean("enabled", d.enabled),
-            cooldownHours = raw.optInt("cooldownHours", d.cooldownHours)
-                .coerceIn(0, 168),
+            cooldownMinutes = minutes,
+            cooldownHours = hours,
             incompleteMessage = raw.optString("incompleteMessage")
                 .trim()
                 .ifBlank { d.incompleteMessage }
@@ -174,42 +193,56 @@ object AppConfigDefaults {
     fun ads(): AppRemoteAds = AppRemoteAds(
         calculate = AppRemoteAdPlacement(
             enabled = true,
+            cooldownMinutes = 24 * 60,
             cooldownHours = 24,
             incompleteMessage = "Watch the full ad to see your settings.",
             buttonLabel = "Calculate Best Pro Settings · Watch Ad"
         ),
+        premium = AppRemoteAdPlacement(
+            enabled = true,
+            cooldownMinutes = 24 * 60,
+            cooldownHours = 24,
+            incompleteMessage = "Watch the full ad to unlock Premium Pro settings.",
+            buttonLabel = "Premium Pro Settings · Watch Ad"
+        ),
         dpi = AppRemoteAdPlacement(
             enabled = true,
+            cooldownMinutes = 24 * 60,
             cooldownHours = 24,
             incompleteMessage = "Watch the full ad to see your DPI & Resolution result.",
             buttonLabel = "DPI & Resolution Result · Watch Ad"
         ),
         quiz = AppRemoteAdPlacement(
             enabled = true,
+            cooldownMinutes = 24 * 60,
             cooldownHours = 24,
             incompleteMessage = "Watch the ad to submit the quiz.",
             buttonLabel = "Submit Answer · Watch Ad"
         ),
         secondChance = AppRemoteAdPlacement(
             enabled = true,
+            cooldownMinutes = 0,
             cooldownHours = 0,
             incompleteMessage = "Watch the full ad to unlock a new question.",
             buttonLabel = "Watch Ad for New Question"
         ),
         adBonus = AppRemoteAdPlacement(
             enabled = true,
+            cooldownMinutes = 4 * 60,
             cooldownHours = 4,
             incompleteMessage = "Watch the full ad to claim bonus coins.",
             buttonLabel = "Watch Ad for Bonus Coins"
         ),
         checkIn = AppRemoteAdPlacement(
             enabled = true,
+            cooldownMinutes = 24 * 60,
             cooldownHours = 24,
             incompleteMessage = "Watch the ad to claim check-in.",
             buttonLabel = "Collect +20 · Watch Ad"
         ),
         redeemDaily = AppRemoteAdPlacement(
             enabled = true,
+            cooldownMinutes = 24 * 60,
             cooldownHours = 24,
             incompleteMessage = "Watch the ad to scratch again and earn coins.",
             buttonLabel = "Scratch again · Watch Ad"

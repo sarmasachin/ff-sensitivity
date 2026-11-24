@@ -18,18 +18,33 @@ const throttler_1 = require("@nestjs/throttler");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const current_admin_decorator_1 = require("../auth/current-admin.decorator");
 const promos_module_guard_1 = require("./promos-module.guard");
+const promos_admin_items_service_1 = require("./promos-admin-items.service");
 const promos_service_1 = require("./promos.service");
 const promos_dto_1 = require("./dto/promos.dto");
 let PromosAdminController = class PromosAdminController {
     promos;
-    constructor(promos) {
+    items;
+    constructor(promos, items) {
         this.promos = promos;
+        this.items = items;
     }
     list() {
         return this.promos.adminList();
     }
     save(admin, dto) {
         return this.promos.adminSave(admin.id, dto);
+    }
+    create(admin, dto) {
+        return this.items.create(admin.id, dto);
+    }
+    reorder(admin, dto) {
+        return this.items.reorder(admin.id, dto.ids);
+    }
+    update(admin, id, dto) {
+        return this.items.update(admin.id, id, dto);
+    }
+    remove(admin, id) {
+        return this.items.remove(admin.id, id);
     }
 };
 exports.PromosAdminController = PromosAdminController;
@@ -49,9 +64,47 @@ __decorate([
     __metadata("design:paramtypes", [Object, promos_dto_1.SavePromosDto]),
     __metadata("design:returntype", void 0)
 ], PromosAdminController.prototype, "save", null);
+__decorate([
+    (0, common_1.Post)(),
+    (0, throttler_1.Throttle)({ default: { limit: 40, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, promos_dto_1.PromoDto]),
+    __metadata("design:returntype", void 0)
+], PromosAdminController.prototype, "create", null);
+__decorate([
+    (0, common_1.Patch)('reorder'),
+    (0, throttler_1.Throttle)({ default: { limit: 40, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, promos_dto_1.ReorderPromosDto]),
+    __metadata("design:returntype", void 0)
+], PromosAdminController.prototype, "reorder", null);
+__decorate([
+    (0, common_1.Put)(':id'),
+    (0, throttler_1.Throttle)({ default: { limit: 40, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, promos_dto_1.PromoDto]),
+    __metadata("design:returntype", void 0)
+], PromosAdminController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], PromosAdminController.prototype, "remove", null);
 exports.PromosAdminController = PromosAdminController = __decorate([
     (0, common_1.Controller)('api/v1/admin/promos'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, promos_module_guard_1.PromosModuleGuard),
-    __metadata("design:paramtypes", [promos_service_1.PromosService])
+    __metadata("design:paramtypes", [promos_service_1.PromosService,
+        promos_admin_items_service_1.PromosAdminItemsService])
 ], PromosAdminController);
 //# sourceMappingURL=promos-admin.controller.js.map

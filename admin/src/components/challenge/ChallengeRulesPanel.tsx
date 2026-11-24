@@ -92,24 +92,30 @@ export function ChallengeRulesPanel({ rules, onChange }: Props) {
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <label className="block text-[11px] font-semibold text-slate-600">
-          Ad bonus cooldown (hours)
+          Ad bonus cooldown (minutes)
           <input
             type="number"
-            min={1}
-            max={168}
+            min={0}
+            max={10080}
             className={fieldClass}
-            value={rules.adBonusCooldownHours}
-            onChange={(e) =>
-              patch({
-                adBonusCooldownHours: Math.max(
-                  1,
-                  Math.min(168, Number(e.target.value) || 1),
-                ),
-              })
-            }
+            value={rules.adBonusCooldownMinutes}
+            onChange={(e) => {
+              const adBonusCooldownMinutes = Math.max(
+                0,
+                Math.min(10080, Math.trunc(Number(e.target.value) || 0)),
+              );
+              const adBonusCooldownHours =
+                adBonusCooldownMinutes <= 0
+                  ? 0
+                  : Math.min(
+                      168,
+                      Math.max(1, Math.ceil(adBonusCooldownMinutes / 60)),
+                    );
+              patch({ adBonusCooldownMinutes, adBonusCooldownHours });
+            }}
           />
           <span className="mt-1 block text-[11px] font-normal text-slate-400">
-            After claim: “Next Ad Available in …” (default 4)
+            After claim: “Next Ad Available in …” (default 240 = 4h)
           </span>
         </label>
         <label className="block text-[11px] font-semibold text-slate-600">

@@ -15,6 +15,7 @@ export declare class PushAdminController {
             status: import(".prisma/client").$Enums.PushStatus;
             scheduledAt: string | null;
             sentAt: string | null;
+            sentAtMs: number | null;
             delivered: number;
             failed: number;
             createdBy: string;
@@ -32,6 +33,7 @@ export declare class PushAdminController {
             status: import(".prisma/client").$Enums.PushStatus;
             scheduledAt: string | null;
             sentAt: string | null;
+            sentAtMs: number | null;
             delivered: number;
             failed: number;
             createdBy: string;
@@ -49,6 +51,7 @@ export declare class PushAdminController {
             status: import(".prisma/client").$Enums.PushStatus;
             scheduledAt: string | null;
             sentAt: string | null;
+            sentAtMs: number | null;
             delivered: number;
             failed: number;
             createdBy: string;
@@ -66,6 +69,7 @@ export declare class PushAdminController {
             status: import(".prisma/client").$Enums.PushStatus;
             scheduledAt: string | null;
             sentAt: string | null;
+            sentAtMs: number | null;
             delivered: number;
             failed: number;
             createdBy: string;

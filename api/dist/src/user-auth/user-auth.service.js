@@ -52,25 +52,55 @@ let UserAuthService = class UserAuthService {
         }
         const displayName = payload.name?.trim() || email.split('@')[0] || 'Google Player';
         const photoUrl = payload.picture?.trim() || null;
+        const bannedSeat = await this.prisma.bannedGoogleAccount.findFirst({
+            where: { OR: [{ googleSub }, { email }] },
+            select: { id: true },
+        });
+        if (bannedSeat) {
+            throw new app_error_1.AppError('AUTH_SUSPENDED', 'This account is suspended.', 403);
+        }
         const existing = await this.prisma.user.findUnique({
             where: { googleSub },
-            select: { isActive: true },
+            select: { isActive: true, dataDeletedAt: true, googleBanned: true },
         });
-        if (existing && !existing.isActive) {
+        const rejoining = !!existing?.dataDeletedAt && !existing.googleBanned;
+        if (existing &&
+            (existing.googleBanned || (!existing.isActive && !rejoining))) {
             throw new app_error_1.AppError('AUTH_SUSPENDED', 'This account is suspended.', 403);
         }
         const user = await this.prisma.user.upsert({
             where: { googleSub },
-            update: {
-                email,
-                displayName,
-                photoUrl,
-                lastLoginAt: new Date(),
-            },
+            update: rejoining
+                ? {
+                    email,
+                    displayName,
+                    googleName: displayName,
+                    photoUrl,
+                    lastLoginAt: new Date(),
+                    isActive: true,
+                    isRestricted: false,
+                    dataDeletedAt: null,
+                    ffUid: '',
+                    playRole: '',
+                    region: '',
+                    coins: 0,
+                    streakDays: 0,
+                    lastCheckinDay: null,
+                    walletFrozen: false,
+                    walletNote: '',
+                    notifyPush: true,
+                }
+                : {
+                    email,
+                    googleName: displayName,
+                    photoUrl,
+                    lastLoginAt: new Date(),
+                },
             create: {
                 googleSub,
                 email,
                 displayName,
+                googleName: displayName,
                 photoUrl,
                 lastLoginAt: new Date(),
             },
@@ -78,6 +108,10 @@ let UserAuthService = class UserAuthService {
         if (!user.isActive) {
             throw new app_error_1.AppError('AUTH_SUSPENDED', 'This account is suspended.', 403);
         }
+        this.analytics.trackSafe({
+            name: 'login',
+            userId: user.id,
+        });
         const accessToken = await this.jwt.signAsync({
             sub: user.id,
             email: user.email,
@@ -85,7 +119,7 @@ let UserAuthService = class UserAuthService {
             tv: user.tokenVersion,
         }, {
             secret: this.config.getOrThrow('JWT_USER_SECRET'),
-            expiresIn: 60 * 60 * 24 * 7,
+            expiresIn: 60 * 60 * 24 * 90,
         });
         return {
             accessToken,

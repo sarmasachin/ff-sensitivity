@@ -68,6 +68,7 @@ data class DeviceInfo(
     val gyroAvailable: Boolean,
     val freeFireInstalled: Boolean,
     val freeFireMaxInstalled: Boolean,
+    val freeFireIndiaInstalled: Boolean,
     /** Remaining full-charge capacity vs design, when readable. */
     val batteryHealthPercent: Int?,
     val batteryHealthLabel: String,

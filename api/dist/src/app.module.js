@@ -15,6 +15,7 @@ const auth_module_1 = require("./auth/auth.module");
 const prisma_module_1 = require("./prisma/prisma.module");
 const request_id_middleware_1 = require("./common/middleware/request-id.middleware");
 const user_auth_module_1 = require("./user-auth/user-auth.module");
+const user_profile_module_1 = require("./user-profile/user-profile.module");
 const redeem_module_1 = require("./redeem/redeem.module");
 const economy_module_1 = require("./economy/economy.module");
 const shop_module_1 = require("./shop/shop.module");
@@ -34,6 +35,7 @@ const staff_module_1 = require("./staff/staff.module");
 const audit_module_1 = require("./audit/audit.module");
 const overview_module_1 = require("./overview/overview.module");
 const analytics_module_1 = require("./analytics/analytics.module");
+const compare_module_1 = require("./compare/compare.module");
 const settings_module_1 = require("./settings/settings.module");
 let AppModule = class AppModule {
     configure(consumer) {
@@ -55,6 +57,7 @@ exports.AppModule = AppModule = __decorate([
             prisma_module_1.PrismaModule,
             auth_module_1.AuthModule,
             user_auth_module_1.UserAuthModule,
+            user_profile_module_1.UserProfileModule,
             redeem_module_1.RedeemModule,
             economy_module_1.EconomyModule,
             shop_module_1.ShopModule,
@@ -72,6 +75,7 @@ exports.AppModule = AppModule = __decorate([
             audit_module_1.AuditAdminModule,
             overview_module_1.OverviewAdminModule,
             analytics_module_1.AnalyticsModule,
+            compare_module_1.CompareModule,
             settings_module_1.SettingsAdminModule,
             push_module_1.PushModule,
             app_config_module_1.AppConfigModule,

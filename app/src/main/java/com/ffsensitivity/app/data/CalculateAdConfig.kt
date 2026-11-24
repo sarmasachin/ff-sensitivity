@@ -1,21 +1,19 @@
 package com.ffsensitivity.app.data
 
 /**
- * Remote Calculate rewarded-ad gate (from GET /api/v1/app/config → ads.calculate).
- * Defaults match previous hardcoded 24h behavior.
+ * Remote Calculate Best Pro Settings ad gate
+ * (GET /api/v1/app/config → ads.calculate).
  */
 object CalculateAdConfig {
-    const val DEFAULT_INCOMPLETE =
-        "Watch the full ad to see your settings."
-    const val DEFAULT_BUTTON =
-        "Calculate Best Pro Settings · Watch Ad"
+    const val DEFAULT_INCOMPLETE = "Watch the full ad to see your settings."
+    const val DEFAULT_BUTTON = "Calculate Best Pro Settings · Watch Ad"
 
     @Volatile
     var enabled: Boolean = true
         private set
 
     @Volatile
-    var cooldownHours: Int = 24
+    var cooldownMinutes: Int = 24 * 60
         private set
 
     @Volatile
@@ -28,12 +26,12 @@ object CalculateAdConfig {
 
     fun apply(
         enabled: Boolean,
-        cooldownHours: Int,
+        cooldownMinutes: Int,
         incompleteMessage: String,
         buttonLabel: String
     ) {
         this.enabled = enabled
-        this.cooldownHours = cooldownHours.coerceIn(0, 168)
+        this.cooldownMinutes = cooldownMinutes.coerceIn(0, 168 * 60)
         this.incompleteMessage =
             incompleteMessage.trim().ifBlank { DEFAULT_INCOMPLETE }.take(200)
         this.buttonLabel =
@@ -41,5 +39,5 @@ object CalculateAdConfig {
     }
 
     fun cooldownWindowMs(): Long =
-        cooldownHours.toLong().coerceAtLeast(0L) * 60L * 60L * 1000L
+        cooldownMinutes.toLong().coerceAtLeast(0L) * 60L * 1000L
 }

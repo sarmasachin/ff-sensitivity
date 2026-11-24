@@ -1,10 +1,10 @@
 import type { AuthAdmin } from '../auth/current-admin.decorator';
-import { SupportService } from './support.service';
+import { SupportAdminInboxService } from './support-admin-inbox.service';
 import { AdminSupportReplyDto } from './dto/support.dto';
 export declare class SupportAdminController {
     private readonly support;
-    constructor(support: SupportService);
-    list(q?: string, status?: string): Promise<{
+    constructor(support: SupportAdminInboxService);
+    list(q?: string, status?: string, subject?: string, unread?: string): Promise<{
         threads: {
             id: string;
             name: string;

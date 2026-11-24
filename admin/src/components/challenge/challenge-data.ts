@@ -7,8 +7,10 @@ export type ChallengeRules = {
   requireCheckIn: boolean;
   requireQuiz: boolean;
   adBonusOptional: boolean;
-  /** Hours before another Watch Ad Bonus claim (admin-controlled). */
+  /** Legacy hours (synced from minutes for older clients). */
   adBonusCooldownHours: number;
+  /** Minutes before another Watch Ad Bonus claim (admin source of truth). */
+  adBonusCooldownMinutes: number;
   scratchCardsPerDay: number;
   cardExpiresSameDay: boolean;
   firstMilestoneDays: number;
@@ -71,6 +73,7 @@ export const CHALLENGE_DEFAULT_RULES: ChallengeRules = {
   requireQuiz: true,
   adBonusOptional: true,
   adBonusCooldownHours: 4,
+  adBonusCooldownMinutes: 240,
   scratchCardsPerDay: 1,
   cardExpiresSameDay: true,
   firstMilestoneDays: 7,

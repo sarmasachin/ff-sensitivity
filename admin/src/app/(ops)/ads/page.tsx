@@ -6,9 +6,10 @@ import { AdsHeader } from "@/components/ads/AdsHeader";
 import { DailyChallengeAdsForm } from "@/components/ads/DailyChallengeAdsForm";
 import { fetchAdsConfig, saveAdsConfig } from "@/components/ads/ads-api";
 import {
-  challengeCooldownFromAdBonus,
+  challengeCooldownMinutesFromAdBonus,
   cloneAdsConfig,
   DEFAULT_ADS_CONFIG,
+  legacyHoursFromMinutes,
   validateAdsConfig,
   type AdsConfigBundle,
 } from "@/components/ads/ads-data";
@@ -80,7 +81,13 @@ function mergeAdBonusFromChallenge(
     adBonus: {
       ...base,
       enabled: bundle.rules.adBonusOptional,
-      cooldownHours: bundle.rules.adBonusCooldownHours,
+      cooldownMinutes:
+        bundle.rules.adBonusCooldownMinutes ??
+        Math.max(0, bundle.rules.adBonusCooldownHours) * 60,
+      cooldownHours: legacyHoursFromMinutes(
+        bundle.rules.adBonusCooldownMinutes ??
+          Math.max(0, bundle.rules.adBonusCooldownHours) * 60,
+      ),
     },
   };
 }
@@ -177,6 +184,9 @@ export default function AdsPage() {
       );
       const nextAds = await saveAdsConfig({
         calculate: trimPlacement(config.calculate),
+        premium: trimPlacement(
+          config.premium ?? DEFAULT_ADS_CONFIG.premium,
+        ),
         dpi: trimPlacement(config.dpi ?? DEFAULT_ADS_CONFIG.dpi),
         quiz: trimPlacement(config.quiz ?? DEFAULT_ADS_CONFIG.quiz),
         secondChance: trimPlacement(
@@ -195,8 +205,11 @@ export default function AdsPage() {
           rules: {
             ...challengeBundle.rules,
             adBonusOptional: adBonus.enabled,
-            adBonusCooldownHours: challengeCooldownFromAdBonus(
-              adBonus.cooldownHours,
+            adBonusCooldownMinutes: challengeCooldownMinutesFromAdBonus(
+              adBonus.cooldownMinutes,
+            ),
+            adBonusCooldownHours: legacyHoursFromMinutes(
+              challengeCooldownMinutesFromAdBonus(adBonus.cooldownMinutes),
             ),
             wrongAnswerLockMinutes: daily.wrongAnswerLockMinutes,
           },
@@ -275,6 +288,15 @@ export default function AdsPage() {
                 readOnly={viewer}
                 onChange={(calculate) =>
                   setConfig((prev) => ({ ...prev, calculate }))
+                }
+              />
+              <AdPlacementForm
+                title="Premium Pro"
+                subtitle="Best / Pro Max / One Tap unlock + paid wizard gate. Separate from Calculate."
+                value={config.premium ?? DEFAULT_ADS_CONFIG.premium}
+                readOnly={viewer}
+                onChange={(premium) =>
+                  setConfig((prev) => ({ ...prev, premium }))
                 }
               />
               <AdPlacementForm

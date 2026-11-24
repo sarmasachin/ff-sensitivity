@@ -13,6 +13,7 @@ exports.DevicesService = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const app_error_1 = require("../common/errors/app-error");
+const devices_desk_1 = require("./devices-desk");
 const prisma_service_1 = require("../prisma/prisma.service");
 const analytics_service_1 = require("../analytics/analytics.service");
 const devices_security_1 = require("./devices-security");
@@ -150,13 +151,18 @@ let DevicesService = class DevicesService {
         return { ok: true, blocked: false };
     }
     async adminList() {
-        const rows = await this.prisma.deviceInstall.findMany({
-            orderBy: { lastSeenAt: 'desc' },
-            take: 500,
-            include: { user: { select: { coins: true } } },
-        });
         const now = new Date();
-        return { devices: rows.map((r) => this.toRow(r, now)) };
+        const [rows, stats] = await Promise.all([
+            this.prisma.deviceInstall.findMany({
+                orderBy: { lastSeenAt: 'desc' },
+                include: { user: { select: { coins: true } } },
+            }),
+            (0, devices_desk_1.countDeviceDeskStats)(this.prisma, now),
+        ]);
+        return {
+            devices: rows.map((r) => this.toRow(r, now)),
+            stats,
+        };
     }
     assertCanMutate(admin) {
         if (admin.role === client_1.AdminRole.VIEWER) {

@@ -59,18 +59,28 @@ object ChallengeQuizTimingConfig {
     @Volatile
     var adBonusOptional: Boolean = true
 
-    /** Hours before another Watch Ad Bonus claim. */
+    /** Hours before another Watch Ad Bonus claim (legacy; prefer minutes). */
     @Volatile
     var adBonusCooldownHours: Int = 4
         set(value) {
-            field = value.coerceIn(1, 168)
+            field = value.coerceIn(0, 168)
+        }
+
+    /** Minutes before another Watch Ad Bonus claim (admin source of truth). */
+    @Volatile
+    var adBonusCooldownMinutes: Int = 240
+        set(value) {
+            field = value.coerceIn(0, 168 * 60)
+            adBonusCooldownHours =
+                if (field <= 0) 0 else ((field + 59) / 60).coerceIn(1, 168)
         }
 
     fun lockDurationMs(): Long = wrongAnswerLockMinutes * 60L * 1000L
 
     fun openWindowMs(): Long = quizOpenWindowHours * 60L * 60L * 1000L
 
-    fun adCooldownDurationMs(): Long = adBonusCooldownHours * 60L * 60L * 1000L
+    fun adCooldownDurationMs(): Long =
+        adBonusCooldownMinutes.toLong().coerceAtLeast(0L) * 60L * 1000L
 
     fun signedCoins(delta: Int): String = if (delta > 0) "+$delta" else "$delta"
 }

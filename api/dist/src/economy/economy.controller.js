@@ -36,6 +36,12 @@ let EconomyController = class EconomyController {
     purchase(user, dto) {
         return this.economy.purchaseShop(user.id, dto.itemId, dto.requestId);
     }
+    premiumUnlockPrices() {
+        return this.economy.getPremiumUnlockPrices();
+    }
+    premiumUnlock(user, dto) {
+        return this.economy.spendPremiumUnlock(user.id, dto.product, dto.requestId);
+    }
     shopCatalog() {
         return this.economy.shopCatalog();
     }
@@ -67,6 +73,22 @@ __decorate([
     __metadata("design:paramtypes", [Object, economy_dto_1.ShopPurchaseDto]),
     __metadata("design:returntype", void 0)
 ], EconomyController.prototype, "purchase", null);
+__decorate([
+    (0, common_1.Get)('premium-unlock-prices'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], EconomyController.prototype, "premiumUnlockPrices", null);
+__decorate([
+    (0, common_1.Post)('premium-unlock'),
+    (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, economy_dto_1.PremiumUnlockDto]),
+    __metadata("design:returntype", void 0)
+], EconomyController.prototype, "premiumUnlock", null);
 __decorate([
     (0, common_1.Get)('shop/catalog'),
     (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),

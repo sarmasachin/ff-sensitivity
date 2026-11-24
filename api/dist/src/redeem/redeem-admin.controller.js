@@ -11,7 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var _a, _b, _c, _d;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RedeemAdminController = void 0;
 const common_1 = require("@nestjs/common");
@@ -111,7 +110,7 @@ __decorate([
     __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_a = typeof redeem_admin_dto_1.CreateRedeemTypeDto !== "undefined" && redeem_admin_dto_1.CreateRedeemTypeDto) === "function" ? _a : Object]),
+    __metadata("design:paramtypes", [Object, redeem_admin_dto_1.CreateRedeemTypeDto]),
     __metadata("design:returntype", void 0)
 ], RedeemAdminController.prototype, "createType", null);
 __decorate([
@@ -121,7 +120,7 @@ __decorate([
     __param(1, (0, common_1.Param)('id')),
     __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, typeof (_b = typeof redeem_admin_dto_1.UpdateRedeemTypeDto !== "undefined" && redeem_admin_dto_1.UpdateRedeemTypeDto) === "function" ? _b : Object]),
+    __metadata("design:paramtypes", [Object, String, redeem_admin_dto_1.UpdateRedeemTypeDto]),
     __metadata("design:returntype", void 0)
 ], RedeemAdminController.prototype, "updateType", null);
 __decorate([
@@ -146,7 +145,7 @@ __decorate([
     __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, typeof (_c = typeof redeem_admin_dto_1.CreateRedeemCadenceDto !== "undefined" && redeem_admin_dto_1.CreateRedeemCadenceDto) === "function" ? _c : Object]),
+    __metadata("design:paramtypes", [Object, redeem_admin_dto_1.CreateRedeemCadenceDto]),
     __metadata("design:returntype", void 0)
 ], RedeemAdminController.prototype, "createCadence", null);
 __decorate([
@@ -156,7 +155,7 @@ __decorate([
     __param(1, (0, common_1.Param)('id')),
     __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, typeof (_d = typeof redeem_admin_dto_1.UpdateRedeemCadenceDto !== "undefined" && redeem_admin_dto_1.UpdateRedeemCadenceDto) === "function" ? _d : Object]),
+    __metadata("design:paramtypes", [Object, String, redeem_admin_dto_1.UpdateRedeemCadenceDto]),
     __metadata("design:returntype", void 0)
 ], RedeemAdminController.prototype, "updateCadence", null);
 __decorate([

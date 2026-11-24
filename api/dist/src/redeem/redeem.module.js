@@ -21,8 +21,11 @@ const redeem_controller_1 = require("./redeem.controller");
 const redeem_module_guard_1 = require("./redeem-module.guard");
 const redeem_service_1 = require("./redeem.service");
 const redeem_scratch_service_1 = require("./redeem-scratch.service");
+const redeem_scratch_pass_service_1 = require("./redeem-scratch-pass.service");
 const redeem_claims_service_1 = require("./redeem-claims.service");
 const redeem_catalog_service_1 = require("./redeem-catalog.service");
+const redeem_vote_service_1 = require("./redeem-vote.service");
+const redeem_comment_service_1 = require("./redeem-comment.service");
 let RedeemModule = class RedeemModule {
 };
 exports.RedeemModule = RedeemModule;
@@ -33,8 +36,11 @@ exports.RedeemModule = RedeemModule = __decorate([
         providers: [
             redeem_service_1.RedeemService,
             redeem_scratch_service_1.RedeemScratchService,
+            redeem_scratch_pass_service_1.RedeemScratchPassService,
             redeem_claims_service_1.RedeemClaimsService,
             redeem_catalog_service_1.RedeemCatalogService,
+            redeem_vote_service_1.RedeemVoteService,
+            redeem_comment_service_1.RedeemCommentService,
             claims_module_guard_1.ClaimsModuleGuard,
             redeem_admin_service_1.RedeemAdminService,
             redeem_admin_pool_service_1.RedeemAdminPoolService,

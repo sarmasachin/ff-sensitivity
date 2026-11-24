@@ -17,4 +17,4 @@ Native Kotlin + Jetpack Compose Android app.
 
 ## Next
 
-See [PLAN.md](PLAN.md) for partial/missing items and planned features.
+See [PLAN.md](PLAN.md). R8 minify is ON for release; Compare keyboard overlap is fixed. Still pending: verify Sign-In / ads / Firebase on a release build.

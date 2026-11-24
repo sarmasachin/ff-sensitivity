@@ -15,6 +15,8 @@ const client_1 = require("@prisma/client");
 const app_error_1 = require("../common/errors/app-error");
 const prisma_service_1 = require("../prisma/prisma.service");
 const users_security_1 = require("./users-security");
+const users_row_1 = require("./users-row");
+const users_stats_1 = require("./users-stats");
 let UsersService = class UsersService {
     prisma;
     constructor(prisma) {
@@ -25,15 +27,6 @@ let UsersService = class UsersService {
             throw new app_error_1.AppError('FORBIDDEN_ROLE', 'Viewers cannot change users.', 403);
         }
     }
-    installSelect = {
-        installId: true,
-        userId: true,
-        brand: true,
-        model: true,
-        androidVersion: true,
-        appVersion: true,
-        lastSeenAt: true,
-    };
     async attachSharedInstalls(users) {
         const missing = users.filter((u) => u.deviceInstalls.length === 0);
         if (missing.length === 0)
@@ -56,7 +49,7 @@ let UsersService = class UsersService {
             return users;
         const extras = await this.prisma.deviceInstall.findMany({
             where: { installId: { in: [...new Set(installIdByUser.values())] } },
-            select: this.installSelect,
+            select: users_row_1.installSelect,
         });
         const byInstall = new Map(extras.map((row) => [row.installId, row]));
         return users.map((user) => {
@@ -67,93 +60,29 @@ let UsersService = class UsersService {
             return shared ? { ...user, deviceInstalls: [shared] } : user;
         });
     }
-    toUserRow(user, now = new Date()) {
-        const install = user.deviceInstalls[0];
-        const ownsInstall = Boolean(install?.userId && install.userId === user.id);
-        const activityAt = ownsInstall &&
-            install.lastSeenAt &&
-            (!user.lastLoginAt || install.lastSeenAt > user.lastLoginAt)
-            ? install.lastSeenAt
-            : (user.lastLoginAt ?? user.createdAt);
-        const h = (0, users_security_1.hoursAgo)(activityAt, now);
-        const deviceLabel = install
-            ? [install.model || install.brand || 'Device', install.androidVersion]
-                .filter(Boolean)
-                .join(' · ')
-            : '—';
-        return {
-            id: user.id,
-            displayName: user.displayName || 'Player',
-            email: (0, users_security_1.maskEmail)(user.email),
-            googleSubMasked: (0, users_security_1.maskGoogleSub)(user.googleSub),
-            status: (0, users_security_1.mapAccountStatus)(user.isActive, user.isRestricted),
-            joinedLabel: (0, users_security_1.formatJoined)(user.createdAt),
-            lastActiveLabel: (0, users_security_1.formatWhen)(h),
-            lastActiveHoursAgo: Math.round(h * 10) / 10,
-            deviceId: install?.installId ?? '—',
-            deviceLabel,
-            appVersion: install?.appVersion || '—',
-            coinBalance: user.coins,
-            claimsCount: user._count.claims,
-            redeemUnlocks: user._count.claims,
-            regionLabel: '—',
-            note: user.accountNote,
-        };
-    }
     async loadRow(userId) {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            select: {
-                id: true,
-                email: true,
-                displayName: true,
-                googleSub: true,
-                coins: true,
-                isActive: true,
-                isRestricted: true,
-                accountNote: true,
-                createdAt: true,
-                lastLoginAt: true,
-                _count: { select: { claims: true } },
-                deviceInstalls: {
-                    orderBy: { lastSeenAt: 'desc' },
-                    take: 1,
-                    select: this.installSelect,
-                },
-            },
+            select: users_row_1.userListSelect,
         });
         if (!user) {
             throw new app_error_1.AppError('USER_NOT_FOUND', 'User not found.', 404);
         }
         const [resolved] = await this.attachSharedInstalls([user]);
-        return this.toUserRow(resolved);
+        return (0, users_row_1.toUserRow)(resolved);
     }
     async adminListUsers() {
-        const users = await this.prisma.user.findMany({
-            orderBy: { updatedAt: 'desc' },
-            take: 500,
-            select: {
-                id: true,
-                email: true,
-                displayName: true,
-                googleSub: true,
-                coins: true,
-                isActive: true,
-                isRestricted: true,
-                accountNote: true,
-                createdAt: true,
-                lastLoginAt: true,
-                _count: { select: { claims: true } },
-                deviceInstalls: {
-                    orderBy: { lastSeenAt: 'desc' },
-                    take: 1,
-                    select: this.installSelect,
-                },
-            },
-        });
+        const [users, stats] = await Promise.all([
+            this.prisma.user.findMany({
+                orderBy: { updatedAt: 'desc' },
+                take: 500,
+                select: users_row_1.userListSelect,
+            }),
+            (0, users_stats_1.countUserDeskStats)(this.prisma),
+        ]);
         const now = new Date();
         const resolved = await this.attachSharedInstalls(users);
-        return { users: resolved.map((u) => this.toUserRow(u, now)) };
+        return { users: resolved.map((u) => (0, users_row_1.toUserRow)(u, now)), stats };
     }
     async adminSetStatus(admin, userIdRaw, dto) {
         this.assertCanMutate(admin);
@@ -164,6 +93,12 @@ let UsersService = class UsersService {
         const before = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!before) {
             throw new app_error_1.AppError('USER_NOT_FOUND', 'User not found.', 404);
+        }
+        if (before.googleBanned) {
+            throw new app_error_1.AppError('USER_STATUS_CONFLICT', 'This Gmail is banned after data delete. Cannot restore.', 409);
+        }
+        if (before.dataDeletedAt) {
+            throw new app_error_1.AppError('USER_STATUS_CONFLICT', 'This account was deleted by the user. They can sign in again with the same Google account.', 409);
         }
         let data;
         if (dto.action === 'suspend') {
@@ -185,10 +120,17 @@ let UsersService = class UsersService {
         if (note)
             data.accountNote = note;
         const after = await this.prisma.$transaction(async (tx) => {
-            const updated = await tx.user.update({
-                where: { id: userId },
+            const changed = await tx.user.updateMany({
+                where: { id: userId, dataDeletedAt: null },
                 data,
             });
+            if (changed.count !== 1) {
+                throw new app_error_1.AppError('USER_STATUS_CONFLICT', 'This Gmail is banned after data delete. Cannot restore.', 409);
+            }
+            const updated = await tx.user.findUnique({ where: { id: userId } });
+            if (!updated) {
+                throw new app_error_1.AppError('USER_NOT_FOUND', 'User not found.', 404);
+            }
             await tx.auditLog.create({
                 data: {
                     actorAdminId: admin.id,
@@ -229,6 +171,88 @@ let UsersService = class UsersService {
                     entity: `user:${userId}`,
                     beforeJson: { note: before.accountNote },
                     afterJson: { note },
+                },
+            });
+        });
+        return { user: await this.loadRow(userId) };
+    }
+    async adminDeleteData(admin, userIdRaw) {
+        this.assertCanMutate(admin);
+        const userId = (0, users_security_1.assertUserId)(userIdRaw);
+        const before = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!before) {
+            throw new app_error_1.AppError('USER_NOT_FOUND', 'User not found.', 404);
+        }
+        if (before.dataDeletedAt) {
+            throw new app_error_1.AppError('USER_STATUS_CONFLICT', 'App data for this Gmail is already deleted.', 409);
+        }
+        if (before.isActive) {
+            throw new app_error_1.AppError('USER_STATUS_CONFLICT', 'Suspend the account before deleting data.', 409);
+        }
+        await this.prisma.$transaction(async (tx) => {
+            await tx.communityPostReport.deleteMany({ where: { userId } });
+            await tx.communityPost.deleteMany({ where: { userId } });
+            await tx.redeemClaim.deleteMany({ where: { userId } });
+            await tx.redeemCodeVote.deleteMany({ where: { userId } });
+            await tx.redeemCodeComment.deleteMany({ where: { userId } });
+            await tx.redeemScratchRoll.deleteMany({ where: { userId } });
+            await tx.redeemScratchPass.deleteMany({ where: { userId } });
+            await tx.scratchArchiveEntry.deleteMany({ where: { userId } });
+            await tx.sensitivityCompare.deleteMany({ where: { userId } });
+            await tx.walletLedger.deleteMany({ where: { userId } });
+            await tx.userBoostCharge.deleteMany({ where: { userId } });
+            await tx.scratchRoll.deleteMany({ where: { userId } });
+            await tx.supportThread.deleteMany({ where: { userId } });
+            await tx.devicePushToken.deleteMany({ where: { userId } });
+            await tx.appAnalyticsEvent.deleteMany({ where: { userId } });
+            await tx.deviceInstall.updateMany({
+                where: { userId },
+                data: { userId: null },
+            });
+            await tx.redeemCodeSecret.updateMany({
+                where: { assignedUserId: userId },
+                data: { assignedUserId: null, assignedAt: null },
+            });
+            const wiped = await tx.user.updateMany({
+                where: { id: userId, isActive: false, dataDeletedAt: null },
+                data: {
+                    displayName: 'Deleted user',
+                    googleName: '',
+                    photoUrl: null,
+                    ffUid: '',
+                    playRole: '',
+                    region: '',
+                    notifyPush: false,
+                    coins: 0,
+                    streakDays: 0,
+                    lastCheckinDay: null,
+                    walletFrozen: false,
+                    walletNote: '',
+                    isActive: false,
+                    isRestricted: false,
+                    googleBanned: true,
+                    tokenVersion: { increment: 1 },
+                    dataDeletedAt: new Date(),
+                    lastLoginAt: null,
+                },
+            });
+            if (wiped.count !== 1) {
+                throw new app_error_1.AppError('USER_STATUS_CONFLICT', 'Suspend the account before deleting data.', 409);
+            }
+            await tx.auditLog.create({
+                data: {
+                    actorAdminId: admin.id,
+                    action: 'user:delete-data',
+                    entity: `user:${userId}`,
+                    beforeJson: {
+                        isActive: before.isActive,
+                        coins: before.coins,
+                        email: before.email,
+                    },
+                    afterJson: {
+                        dataDeleted: true,
+                        googleBanned: true,
+                    },
                 },
             });
         });

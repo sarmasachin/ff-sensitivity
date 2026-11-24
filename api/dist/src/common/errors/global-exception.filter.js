@@ -10,6 +10,7 @@ exports.GlobalExceptionFilter = void 0;
 const common_1 = require("@nestjs/common");
 const crypto_1 = require("crypto");
 const app_error_1 = require("./app-error");
+const remap_unauthorized_1 = require("./remap-unauthorized");
 let GlobalExceptionFilter = class GlobalExceptionFilter {
     catch(exception, host) {
         const ctx = host.switchToHttp();
@@ -53,6 +54,9 @@ let GlobalExceptionFilter = class GlobalExceptionFilter {
                 code = 'RATE_LIMITED';
                 message = 'Too many requests. Please wait a moment.';
             }
+            const remapped = (0, remap_unauthorized_1.remapUnauthorized)(status, code, message);
+            code = remapped.code;
+            message = remapped.message;
         }
         const payload = {
             error: { code, message, details, requestId, timestamp },

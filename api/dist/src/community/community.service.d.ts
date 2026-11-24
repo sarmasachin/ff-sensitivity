@@ -60,6 +60,10 @@ export declare class CommunityService {
         flagged: number;
         hidden: number;
     }>;
+    adminDeletePost(adminId: string, postId: string): Promise<{
+        ok: boolean;
+        id: string;
+    }>;
     adminSetStatus(adminId: string, postId: string, status: CommunityPostStatus): Promise<{
         id: string;
         name: string;

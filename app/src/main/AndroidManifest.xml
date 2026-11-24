@@ -14,6 +14,7 @@
     <queries>
         <package android:name="com.dts.freefireth" />
         <package android:name="com.dts.freefiremax" />
+        <package android:name="com.dts.freefireind" />
         <package android:name="com.samsung.android.game.gos" />
         <package android:name="com.samsung.android.game.gamehome" />
         <package android:name="com.enhance.gameservice" />

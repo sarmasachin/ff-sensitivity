@@ -28,6 +28,33 @@ data class EconomyPurchaseResult(
     val alreadyApplied: Boolean
 )
 
+data class EconomyPremiumUnlockResult(
+    val coins: Int,
+    val product: String,
+    val cost: Int,
+    val alreadyApplied: Boolean,
+    val label: String
+)
+
+/** Admin-set Premium unlock coin prices + which paths the dialog shows. */
+data class EconomyPremiumUnlockPrices(
+    val bestPremium: Int,
+    val premiumProMax: Int,
+    val oneTapPremium: Int,
+    val coinUnlockEnabled: Boolean = true,
+    val adUnlockEnabled: Boolean = true
+) {
+    companion object {
+        val DEFAULT = EconomyPremiumUnlockPrices(
+            bestPremium = 100,
+            premiumProMax = 200,
+            oneTapPremium = 150,
+            coinUnlockEnabled = true,
+            adUnlockEnabled = true
+        )
+    }
+}
+
 data class ShopCatalogRemoteItem(
     val id: String,
     val title: String,
@@ -147,6 +174,50 @@ object EconomyApi {
                 )
             }
         }.onFailure { AppLog.e("EconomyApi.purchaseShop failed", it) }
+    }
+
+    fun premiumUnlockPrices(accessToken: String): Result<EconomyPremiumUnlockPrices> {
+        return runCatching {
+            val req = ApiClient.get("/api/v1/economy/premium-unlock-prices", accessToken)
+            ApiClient.http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) throw ApiClient.parseError(raw, resp.code)
+                val root = JSONObject(raw)
+                EconomyPremiumUnlockPrices(
+                    bestPremium = root.optInt("best_premium", 100).coerceIn(0, 100_000),
+                    premiumProMax = root.optInt("premium_pro_max", 200).coerceIn(0, 100_000),
+                    oneTapPremium = root.optInt("one_tap_premium", 150).coerceIn(0, 100_000),
+                    coinUnlockEnabled = root.optBoolean("coinUnlockEnabled", true),
+                    adUnlockEnabled = root.optBoolean("adUnlockEnabled", true)
+                )
+            }
+        }.onFailure { AppLog.e("EconomyApi.premiumUnlockPrices failed", it) }
+    }
+
+    /** Server wallet debit for Premium Sensi unlock. */
+    fun premiumUnlock(
+        accessToken: String,
+        product: String,
+        requestId: String
+    ): Result<EconomyPremiumUnlockResult> {
+        return runCatching {
+            val body = JSONObject()
+                .put("product", product)
+                .put("requestId", requestId)
+            val req = ApiClient.post("/api/v1/economy/premium-unlock", body, accessToken)
+            ApiClient.http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) throw ApiClient.parseError(raw, resp.code)
+                val root = JSONObject(raw)
+                EconomyPremiumUnlockResult(
+                    coins = root.optInt("coins", 0),
+                    product = root.optString("product", product),
+                    cost = root.optInt("cost", 0),
+                    alreadyApplied = root.optBoolean("alreadyApplied", false),
+                    label = root.optString("label")
+                )
+            }
+        }.onFailure { AppLog.e("EconomyApi.premiumUnlock failed", it) }
     }
 
     fun shopCatalog(accessToken: String): Result<ShopCatalogPayload> {

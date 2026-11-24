@@ -11,6 +11,7 @@ import {
   mapMilestone,
   mapQuizAdmin,
   mapRules,
+  resolveAdBonusCooldownMinutes,
   sanitizeId,
 } from './challenge-shared';
 
@@ -44,6 +45,12 @@ export class ChallengeService {
     if (dto.quiz !== undefined) assertQuizList(dto.quiz);
     if (dto.milestones !== undefined) assertMilestoneList(dto.milestones);
 
+    const adBonusCooldownMinutes = resolveAdBonusCooldownMinutes(dto.rules);
+    const adBonusCooldownHours =
+      adBonusCooldownMinutes <= 0
+        ? 0
+        : Math.min(168, Math.max(1, Math.ceil(adBonusCooldownMinutes / 60)));
+
     await this.prisma.$transaction(async (tx) => {
       await tx.challengeConfig.upsert({
         where: { id: CONFIG_ID },
@@ -52,7 +59,8 @@ export class ChallengeService {
           requireCheckIn: dto.rules.requireCheckIn,
           requireQuiz: dto.rules.requireQuiz,
           adBonusOptional: dto.rules.adBonusOptional,
-          adBonusCooldownHours: dto.rules.adBonusCooldownHours,
+          adBonusCooldownHours,
+          adBonusCooldownMinutes,
           scratchCardsPerDay: dto.rules.scratchCardsPerDay,
           cardExpiresSameDay: dto.rules.cardExpiresSameDay,
           firstMilestoneDays: dto.rules.firstMilestoneDays,
@@ -66,6 +74,8 @@ export class ChallengeService {
           id: CONFIG_ID,
           ...DEFAULT_RULES,
           ...dto.rules,
+          adBonusCooldownHours,
+          adBonusCooldownMinutes,
         },
       });
 

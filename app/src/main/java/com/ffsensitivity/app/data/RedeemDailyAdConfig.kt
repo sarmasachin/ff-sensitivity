@@ -1,21 +1,19 @@
 package com.ffsensitivity.app.data
 
 /**
- * Remote Redeem Daily scratch gate
+ * Remote Redeem Daily interstitial gate
  * (GET /api/v1/app/config → ads.redeemDaily).
- *
- * Safe defaults: ad unlocks another scratch / coins — not “watch ad to get gift code”.
  */
 object RedeemDailyAdConfig {
-    const val DEFAULT_INCOMPLETE = "Watch the ad to scratch again and earn coins."
-    const val DEFAULT_BUTTON = "Scratch again · Watch Ad"
+    const val DEFAULT_INCOMPLETE = "Watch the ad to open today’s redeem card."
+    const val DEFAULT_BUTTON = "Redeem Now · Watch Ad"
 
     @Volatile
     var enabled: Boolean = true
         private set
 
     @Volatile
-    var cooldownHours: Int = 24
+    var cooldownMinutes: Int = 24 * 60
         private set
 
     @Volatile
@@ -28,12 +26,12 @@ object RedeemDailyAdConfig {
 
     fun apply(
         enabled: Boolean,
-        cooldownHours: Int,
+        cooldownMinutes: Int,
         incompleteMessage: String,
         buttonLabel: String
     ) {
         this.enabled = enabled
-        this.cooldownHours = cooldownHours.coerceIn(0, 168)
+        this.cooldownMinutes = cooldownMinutes.coerceIn(0, 168 * 60)
         this.incompleteMessage =
             incompleteMessage.trim().ifBlank { DEFAULT_INCOMPLETE }.take(200)
         this.buttonLabel =
@@ -41,5 +39,5 @@ object RedeemDailyAdConfig {
     }
 
     fun cooldownWindowMs(): Long =
-        cooldownHours.toLong().coerceAtLeast(0L) * 60L * 60L * 1000L
+        cooldownMinutes.toLong().coerceAtLeast(0L) * 60L * 1000L
 }

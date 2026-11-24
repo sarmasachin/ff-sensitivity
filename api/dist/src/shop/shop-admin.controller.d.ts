@@ -37,6 +37,9 @@ export declare class ShopAdminController {
         ok: boolean;
         id: string;
     }>;
+    purchases(): Promise<{
+        purchases: import("./shop-purchases").ShopPurchaseRow[];
+    }>;
     list(): Promise<{
         items: {
             id: string;

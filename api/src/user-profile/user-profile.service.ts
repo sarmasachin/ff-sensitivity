@@ -3,11 +3,11 @@ import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import {
-  PROFILE_REGIONS,
   PROFILE_ROLES,
   cleanChoice,
   cleanDisplayName,
   cleanFfUid,
+  cleanRegion,
 } from './user-profile.options';
 
 @Injectable()
@@ -23,7 +23,7 @@ export class UserProfileService {
     const displayName = cleanDisplayName(dto.displayName);
     const ffUid = cleanFfUid(dto.ffUid);
     const playRole = cleanChoice(dto.playRole, PROFILE_ROLES);
-    const region = cleanChoice(dto.region, PROFILE_REGIONS);
+    const region = cleanRegion(dto.region);
     if (!displayName || ffUid == null || playRole == null || region == null) {
       throw new AppError('PROFILE_INVALID', 'Check the profile fields and try again.', 400);
     }

@@ -78,21 +78,16 @@ internal fun MainBottomBar(
                     selected = selected,
                     alwaysShowLabel = true,
                     onClick = {
-                        if (route != path) {
-                            if (!AppConfigRepository.routeAllowed(path)) {
-                                SafeOps.toast(context, "$label is temporarily unavailable")
-                                return@NavigationBarItem
-                            }
-                            runCatching {
-                                navController.navigate(path) {
-                                    popUpTo("home") { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }.onFailure {
-                                AppLog.e("Bottom nav failed", it)
-                                SafeOps.toast(context, "Could not open $label")
-                            }
+                        if (route == path) return@NavigationBarItem
+                        if (!AppConfigRepository.routeAllowed(path)) {
+                            SafeOps.toast(context, "$label is temporarily unavailable")
+                            return@NavigationBarItem
+                        }
+                        runCatching {
+                            navController.navigateMainTab(path)
+                        }.onFailure {
+                            AppLog.e("Bottom nav failed path=$path", it)
+                            SafeOps.toast(context, "Could not open $label")
                         }
                     },
                     icon = {

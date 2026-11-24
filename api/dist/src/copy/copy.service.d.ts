@@ -45,6 +45,12 @@ export declare class CopyService {
         };
     }>;
     publicLive(): Promise<{
+        share: {
+            footerLine: string;
+            sheetTitle: string;
+            bodyTemplate: string;
+            hashtags: string;
+        };
         rate: {
             enabled: boolean;
             title: string;
@@ -52,12 +58,6 @@ export declare class CopyService {
             primaryCta: string;
             secondaryCta: string;
             minSessions: number;
-        };
-        share: {
-            sheetTitle: string;
-            bodyTemplate: string;
-            footerLine: string;
-            hashtags: string;
         };
         about: {
             headline: string;

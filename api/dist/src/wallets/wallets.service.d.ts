@@ -8,6 +8,7 @@ export declare class WalletsService {
     constructor(prisma: PrismaService, settings: SettingsService);
     private assertCanMutate;
     private toWalletRow;
+    private walletRowById;
     adminListWallets(): Promise<{
         wallets: {
             id: string;
@@ -21,6 +22,7 @@ export declare class WalletsService {
             lastTxnHoursAgo: number;
             note: string;
         }[];
+        stats: import("./wallets-desk").WalletDeskStats;
     }>;
     adminListLedger(): Promise<{
         ledger: {

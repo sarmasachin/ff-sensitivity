@@ -1,9 +1,9 @@
 import type { AuthUser } from '../user-auth/current-user.decorator';
-import { ChallengeService } from './challenge.service';
+import { ChallengeUserService } from './challenge-user.service';
 import { SubmitQuizDto } from './dto/challenge.dto';
 export declare class ChallengeController {
     private readonly challenge;
-    constructor(challenge: ChallengeService);
+    constructor(challenge: ChallengeUserService);
     today(user: AuthUser): Promise<{
         dayKey: string;
         dayOfYear: number;
@@ -14,11 +14,18 @@ export declare class ChallengeController {
         nextAdAvailableAtMs: number | null;
         claimedMilestoneDays: number[];
         rules: {
+            checkinCoins: number;
+            adBonusCoins: number;
+            checkInEnabled: boolean;
+            quizEnabled: boolean;
+            walletCap: number;
+            dailyEarnCap: number;
             missDayResetsStreak: boolean;
             requireCheckIn: boolean;
             requireQuiz: boolean;
             adBonusOptional: boolean;
             adBonusCooldownHours: number;
+            adBonusCooldownMinutes: number;
             scratchCardsPerDay: number;
             cardExpiresSameDay: boolean;
             firstMilestoneDays: number;

@@ -2,6 +2,7 @@ package com.ffsensitivity.app.data.remote
 
 import com.ffsensitivity.app.data.AdBonusAdConfig
 import com.ffsensitivity.app.data.CalculateAdConfig
+import com.ffsensitivity.app.data.PremiumAdConfig
 import com.ffsensitivity.app.data.CheckInAdConfig
 import com.ffsensitivity.app.data.DpiAdConfig
 import com.ffsensitivity.app.data.QuizAdConfig
@@ -39,49 +40,56 @@ object AppConfigRepository {
         val c = ads.calculate
         CalculateAdConfig.apply(
             enabled = c.enabled,
-            cooldownHours = c.cooldownHours,
+            cooldownMinutes = c.cooldownMinutes,
             incompleteMessage = c.incompleteMessage,
             buttonLabel = c.buttonLabel
+        )
+        val p = ads.premium
+        PremiumAdConfig.apply(
+            enabled = p.enabled,
+            cooldownMinutes = p.cooldownMinutes,
+            incompleteMessage = p.incompleteMessage,
+            buttonLabel = p.buttonLabel
         )
         val d = ads.dpi
         DpiAdConfig.apply(
             enabled = d.enabled,
-            cooldownHours = d.cooldownHours,
+            cooldownMinutes = d.cooldownMinutes,
             incompleteMessage = d.incompleteMessage,
             buttonLabel = d.buttonLabel
         )
         val q = ads.quiz
         QuizAdConfig.apply(
             enabled = q.enabled,
-            cooldownHours = q.cooldownHours,
+            cooldownMinutes = q.cooldownMinutes,
             incompleteMessage = q.incompleteMessage,
             buttonLabel = q.buttonLabel
         )
         val sc = ads.secondChance
         SecondChanceAdConfig.apply(
             enabled = sc.enabled,
-            cooldownHours = sc.cooldownHours,
+            cooldownMinutes = sc.cooldownMinutes,
             incompleteMessage = sc.incompleteMessage,
             buttonLabel = sc.buttonLabel
         )
         val ab = ads.adBonus
         AdBonusAdConfig.apply(
             enabled = ab.enabled,
-            cooldownHours = ab.cooldownHours,
+            cooldownMinutes = ab.cooldownMinutes,
             incompleteMessage = ab.incompleteMessage,
             buttonLabel = ab.buttonLabel
         )
         val ci = ads.checkIn
         CheckInAdConfig.apply(
             enabled = ci.enabled,
-            cooldownHours = ci.cooldownHours,
+            cooldownMinutes = ci.cooldownMinutes,
             incompleteMessage = ci.incompleteMessage,
             buttonLabel = ci.buttonLabel
         )
         val rd = ads.redeemDaily
         RedeemDailyAdConfig.apply(
             enabled = rd.enabled,
-            cooldownHours = rd.cooldownHours,
+            cooldownMinutes = rd.cooldownMinutes,
             incompleteMessage = rd.incompleteMessage,
             buttonLabel = rd.buttonLabel
         )

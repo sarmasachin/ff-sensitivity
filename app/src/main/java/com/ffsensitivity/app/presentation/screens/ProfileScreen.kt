@@ -41,8 +41,8 @@ import com.ffsensitivity.app.data.ProfileMenuBus
 import com.ffsensitivity.app.data.ProfileOptions
 import com.ffsensitivity.app.data.ProfileRepository
 import com.ffsensitivity.app.data.UserSessionStore
-import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.UserProfile
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
 import com.ffsensitivity.app.presentation.theme.Amber
@@ -76,7 +76,7 @@ fun ProfileScreen(contentPadding: PaddingValues, onBack: () -> Boolean) {
             .onSuccess { profile = it }
             .onFailure { err ->
                 AppLog.e("Profile load failed", err)
-                error = (err as? ApiException)?.message ?: "Could not load profile."
+                error = err.userMessage("Could not load profile. Please try again.")
             }
     }
 
@@ -99,7 +99,7 @@ fun ProfileScreen(contentPadding: PaddingValues, onBack: () -> Boolean) {
             result.onSuccess { profile = it }
                 .onFailure { err ->
                     AppLog.e("Profile save failed", err)
-                    error = (err as? ApiException)?.message ?: "Could not save profile."
+                    error = err.userMessage("Could not save profile. Please try again.")
                 }
         }
     }
@@ -114,7 +114,7 @@ fun ProfileScreen(contentPadding: PaddingValues, onBack: () -> Boolean) {
             result.onSuccess { ProfileMenuBus.onAccountDeleted?.invoke() }
                 .onFailure { err ->
                     AppLog.e("Profile delete failed", err)
-                    error = (err as? ApiException)?.message ?: "Could not delete account."
+                    error = err.userMessage("Could not delete account. Please try again.")
                 }
         }
     }
@@ -199,10 +199,15 @@ fun ProfileScreen(contentPadding: PaddingValues, onBack: () -> Boolean) {
         }) { pick = null }
     }
     if (pick == "region") {
-        ProfileChoiceDialog("Region", ProfileOptions.regions, profile.region, {
-            profile = profile.copy(region = it)
-            pick = null
-        }) { pick = null }
+        ProfileRegionDialog(
+            options = ProfileOptions.regions,
+            selected = profile.region,
+            onPick = {
+                profile = profile.copy(region = it)
+                pick = null
+            },
+            onDismiss = { pick = null }
+        )
     }
     if (confirmDelete) {
         ProfileDeleteDialog(onDismiss = { confirmDelete = false }, onConfirm = { runDelete() })

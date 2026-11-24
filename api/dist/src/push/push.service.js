@@ -18,6 +18,7 @@ const push_security_1 = require("./push-security");
 const push_fcm_1 = require("./push-fcm");
 const devices_service_1 = require("../devices/devices.service");
 const devices_security_1 = require("../devices/devices-security");
+const push_user_opt_1 = require("./push-user-opt");
 const MAX_CAMPAIGNS = 100;
 function assertCampaignId(id) {
     const clean = (0, push_security_1.sanitizePushText)(id, 64).toLowerCase();
@@ -43,7 +44,8 @@ let PushService = class PushService {
             topic: c.topic,
             status: c.status,
             scheduledAt: (0, push_security_1.stamp)(c.scheduledAt),
-            sentAt: (0, push_security_1.stamp)(c.sentAt),
+            sentAt: (0, push_security_1.stamp)(c.sentAt, true),
+            sentAtMs: c.sentAt ? c.sentAt.getTime() : null,
             delivered: c.delivered,
             failed: c.failed,
             createdBy: c.createdBy,
@@ -298,6 +300,7 @@ let PushService = class PushService {
             await this.devices.assertInstallNotBlocked(dto.installId);
             installId = (0, devices_security_1.assertInstallId)(dto.installId);
         }
+        const allowPush = await (0, push_user_opt_1.userAllowsPush)(this.prisma, userId);
         const row = await this.prisma.devicePushToken.upsert({
             where: { token },
             create: {
@@ -306,7 +309,7 @@ let PushService = class PushService {
                 platform,
                 topics,
                 installId,
-                pushEnabled: true,
+                pushEnabled: allowPush,
                 lastSeenAt: new Date(),
             },
             update: {
@@ -314,7 +317,7 @@ let PushService = class PushService {
                 platform,
                 topics,
                 ...(installId ? { installId } : {}),
-                pushEnabled: true,
+                pushEnabled: allowPush,
                 lastSeenAt: new Date(),
             },
         });
@@ -372,12 +375,16 @@ let PushService = class PushService {
             title: r.title,
             body: r.body,
             deepLink: r.deepLink,
-            sentAt: (0, push_security_1.stamp)(r.sentAt),
+            sentAt: (0, push_security_1.stamp)(r.sentAt, true),
+            sentAtMs: r.sentAt ? r.sentAt.getTime() : null,
         }));
         return { messages };
     }
     async resolveAudienceTokens(campaign) {
-        const enabled = { pushEnabled: true };
+        const enabled = {
+            pushEnabled: true,
+            user: { notifyPush: true },
+        };
         let rows = [];
         const select = {
             token: true,
@@ -406,7 +413,7 @@ let PushService = class PushService {
             rows = await this.prisma.devicePushToken.findMany({
                 where: {
                     ...enabled,
-                    user: { claims: { none: {} } },
+                    user: { notifyPush: true, claims: { none: {} } },
                 },
                 select,
                 orderBy: { lastSeenAt: 'desc' },

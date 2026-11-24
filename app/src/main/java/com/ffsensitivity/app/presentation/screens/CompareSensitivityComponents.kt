@@ -1,19 +1,26 @@
 package com.ffsensitivity.app.presentation.screens
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -23,14 +30,21 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ffsensitivity.app.data.CompareFeedback
@@ -122,12 +136,24 @@ internal fun SuggestedSummaryCard(suggested: SensitivityValues, deviceLabel: Str
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun CompareField(label: String, value: String, onChange: (String) -> Unit) {
+    val bring = remember { BringIntoViewRequester() }
+    var focused by remember { mutableStateOf(false) }
+    val imeBottomPx = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(focused, imeBottomPx) {
+        if (focused && imeBottomPx > 0) {
+            bring.bringIntoView()
+        }
+    }
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bring)
+            .onFocusChanged { focused = it.isFocused },
         singleLine = true,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -301,41 +327,250 @@ internal fun GhostAction(
     }
 }
 
+internal enum class CompareSavedViewMode {
+    ALL_IN_ONE,
+    PER_PLAYER
+}
+
 @Composable
-internal fun CompareSavedCard(entry: com.ffsensitivity.app.data.remote.SharedCompareEntry) {
-    val whenLabel = androidx.compose.runtime.remember(entry.createdAtMs) {
-        runCatching {
-            java.text.SimpleDateFormat("dd MMM · HH:mm", java.util.Locale.getDefault())
-                .format(java.util.Date(entry.createdAtMs))
-        }.getOrElse { "—" }
+internal fun CompareSavedViewModeToggle(
+    mode: CompareSavedViewMode,
+    onMode: (CompareSavedViewMode) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        CompareSavedViewChip(
+            label = "All in one",
+            selected = mode == CompareSavedViewMode.ALL_IN_ONE,
+            modifier = Modifier.weight(1f),
+            onClick = { onMode(CompareSavedViewMode.ALL_IN_ONE) }
+        )
+        CompareSavedViewChip(
+            label = "Per player",
+            selected = mode == CompareSavedViewMode.PER_PLAYER,
+            modifier = Modifier.weight(1f),
+            onClick = { onMode(CompareSavedViewMode.PER_PLAYER) }
+        )
     }
+}
+
+@Composable
+private fun CompareSavedViewChip(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Text(
+        text = label,
+        color = if (selected) AmberHot else InkPrimary,
+        fontSize = 13.sp,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) Amber.copy(alpha = 0.18f) else SurfaceLift)
+            .border(
+                1.dp,
+                if (selected) Amber.copy(alpha = 0.45f) else HairlineStrong,
+                RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 8.dp)
+    )
+}
+
+@Composable
+internal fun CompareSavedSensiTable(
+    entries: List<com.ffsensitivity.app.data.remote.SharedCompareEntry>
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceCard)
-            .border(1.dp, Hairline, RoundedCornerShape(16.dp))
-            .padding(14.dp)
+            .border(1.dp, HairlineStrong, RoundedCornerShape(16.dp))
+            .padding(vertical = 10.dp)
     ) {
         Text(
-            text = entry.displayName,
+            text = "LATEST ${entries.size} PLAYERS · SAVED FF SENSI",
+            color = Amber,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            CompareSensiTableHeader(showPlayer = true)
+            entries.forEachIndexed { index, entry ->
+                CompareSensiTableRow(
+                    entry = entry,
+                    zebra = index % 2 == 1,
+                    showPlayer = true
+                )
+            }
+        }
+    }
+}
+
+/** One table per player — same sensi columns, easier to read alone. */
+@Composable
+internal fun CompareSavedPerPlayerTables(
+    entries: List<com.ffsensitivity.app.data.remote.SharedCompareEntry>
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = "LATEST ${entries.size} PLAYERS · ONE TABLE EACH",
+            color = Amber,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp
+        )
+        entries.forEach { entry ->
+            CompareSavedSinglePlayerTable(entry = entry)
+        }
+    }
+}
+
+@Composable
+private fun CompareSavedSinglePlayerTable(
+    entry: com.ffsensitivity.app.data.remote.SharedCompareEntry
+) {
+    val name = entry.displayName.trim().ifBlank { "Player" }
+    val meta = listOf(
+        entry.deviceLabel.trim(),
+        entry.fingers.trim(),
+        entry.role.trim()
+    ).filter { it.isNotEmpty() }.joinToString(" · ")
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceCard)
+            .border(1.dp, HairlineStrong, RoundedCornerShape(16.dp))
+            .padding(vertical = 10.dp)
+    ) {
+        Text(
+            text = name,
             color = InkPrimary,
             fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp)
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "${entry.deviceLabel} · ${entry.fingers} · ${entry.role}",
-            color = InkSecondary,
-            fontSize = 12.sp
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "${entry.feedback.label} · General ${signed(entry.generalOffset)} · $whenLabel",
-            color = Amber,
-            fontSize = 12.sp
-        )
+        if (meta.isNotEmpty()) {
+            Text(
+                text = meta,
+                color = InkMuted,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            CompareSensiTableHeader(showPlayer = false)
+            CompareSensiTableRow(
+                entry = entry,
+                zebra = false,
+                showPlayer = false
+            )
+        }
     }
+}
+
+@Composable
+private fun CompareSensiTableHeader(showPlayer: Boolean) {
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showPlayer) {
+            Text(
+                text = "Player",
+                color = InkMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(88.dp),
+                maxLines = 1
+            )
+        }
+        CompareSensiColHeader("G")
+        CompareSensiColHeader("RD")
+        CompareSensiColHeader("2x")
+        CompareSensiColHeader("4x")
+        CompareSensiColHeader("SN")
+        CompareSensiColHeader("FL")
+        CompareSensiColHeader("Fire")
+    }
+}
+
+@Composable
+private fun CompareSensiColHeader(label: String) {
+    Text(
+        text = label,
+        color = InkMuted,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.width(40.dp)
+    )
+}
+
+@Composable
+private fun CompareSensiTableRow(
+    entry: com.ffsensitivity.app.data.remote.SharedCompareEntry,
+    zebra: Boolean,
+    showPlayer: Boolean
+) {
+    val a = entry.actual
+    Row(
+        modifier = Modifier
+            .background(if (zebra) SurfaceLift.copy(alpha = 0.55f) else SurfaceCard)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showPlayer) {
+            Text(
+                text = entry.displayName.trim().ifBlank { "Player" },
+                color = InkPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(88.dp)
+            )
+        }
+        CompareSensiColCell(a.general)
+        CompareSensiColCell(a.redDot)
+        CompareSensiColCell(a.scope2x)
+        CompareSensiColCell(a.scope4x)
+        CompareSensiColCell(a.sniper)
+        CompareSensiColCell(a.freeLook)
+        CompareSensiColCell(a.fireButton)
+    }
+}
+
+@Composable
+private fun CompareSensiColCell(value: Int) {
+    Text(
+        text = value.toString(),
+        color = InkPrimary,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.width(40.dp)
+    )
 }
 
 @Composable

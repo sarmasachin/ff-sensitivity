@@ -59,11 +59,7 @@ internal fun handleDrawerAction(
                 return
             }
             runCatching {
-                navController.navigate("redeem") {
-                    popUpTo("home") { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+                navController.navigateMainTab("redeem")
             }.onFailure {
                 AppLog.e("Open redeem failed", it)
                 SafeOps.toast(context, "Could not open Redeem")
@@ -75,11 +71,7 @@ internal fun handleDrawerAction(
                 return
             }
             runCatching {
-                navController.navigate("stylish") {
-                    popUpTo("home") { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+                navController.navigateMainTab("stylish")
             }.onFailure {
                 AppLog.e("Open stylish failed", it)
                 SafeOps.toast(context, "Could not open Stylish Names")

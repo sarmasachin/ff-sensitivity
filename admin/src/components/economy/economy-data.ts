@@ -14,9 +14,20 @@ export type EconomyLimits = {
   dailyEarnCap: number;
 };
 
+export type EconomyPremiumUnlock = {
+  bestPremium: number;
+  premiumProMax: number;
+  oneTapPremium: number;
+  /** Show “Unlock with coins” in the app. */
+  coinUnlockEnabled: boolean;
+  /** Show “Watch ad to unlock” in the app. */
+  adUnlockEnabled: boolean;
+};
+
 export type EconomyConfig = {
   earn: EconomyEarnRules;
   limits: EconomyLimits;
+  premiumUnlock: EconomyPremiumUnlock;
   /** Sources currently paying coins in the app. */
   checkInEnabled: boolean;
   quizEnabled: boolean;
@@ -30,6 +41,11 @@ export type EconomyFormValues = {
   adBonusCoins: string;
   walletCap: string;
   dailyEarnCap: string;
+  premiumUnlockBest: string;
+  premiumUnlockProMax: string;
+  premiumUnlockOneTap: string;
+  premiumUnlockCoinEnabled: boolean;
+  premiumUnlockAdEnabled: boolean;
   checkInEnabled: boolean;
   quizEnabled: boolean;
   adBonusEnabled: boolean;
@@ -46,12 +62,20 @@ export const ECONOMY_DEFAULTS: EconomyConfig = {
     walletCap: 9_999_999,
     dailyEarnCap: 0,
   },
+  premiumUnlock: {
+    bestPremium: 100,
+    premiumProMax: 200,
+    oneTapPremium: 150,
+    coinUnlockEnabled: true,
+    adUnlockEnabled: true,
+  },
   checkInEnabled: true,
   quizEnabled: true,
   adBonusEnabled: true,
 };
 
 export function configToForm(cfg: EconomyConfig): EconomyFormValues {
+  const pu = cfg.premiumUnlock ?? ECONOMY_DEFAULTS.premiumUnlock;
   return {
     checkInCoins: String(cfg.earn.checkInCoins),
     quizCorrectCoins: String(cfg.earn.quizCorrectCoins),
@@ -60,6 +84,11 @@ export function configToForm(cfg: EconomyConfig): EconomyFormValues {
     walletCap: String(cfg.limits.walletCap),
     dailyEarnCap:
       cfg.limits.dailyEarnCap === 0 ? "" : String(cfg.limits.dailyEarnCap),
+    premiumUnlockBest: String(pu.bestPremium),
+    premiumUnlockProMax: String(pu.premiumProMax),
+    premiumUnlockOneTap: String(pu.oneTapPremium),
+    premiumUnlockCoinEnabled: pu.coinUnlockEnabled ?? true,
+    premiumUnlockAdEnabled: pu.adUnlockEnabled ?? true,
     checkInEnabled: cfg.checkInEnabled,
     quizEnabled: cfg.quizEnabled,
     adBonusEnabled: cfg.adBonusEnabled,
@@ -89,6 +118,33 @@ export function formToConfig(
   if (typeof cap === "object") return cap;
   if (cap < 100) return { error: "Wallet cap should be at least 100." };
 
+  const best = parseNonNegInt(values.premiumUnlockBest, "Best Premium unlock");
+  if (typeof best === "object") return best;
+  if (best > 100_000) {
+    return { error: "Best Premium unlock must be ≤ 100,000." };
+  }
+  const proMax = parseNonNegInt(
+    values.premiumUnlockProMax,
+    "Premium Pro Max unlock",
+  );
+  if (typeof proMax === "object") return proMax;
+  if (proMax > 100_000) {
+    return { error: "Premium Pro Max unlock must be ≤ 100,000." };
+  }
+  const oneTap = parseNonNegInt(
+    values.premiumUnlockOneTap,
+    "One Tap Premium unlock",
+  );
+  if (typeof oneTap === "object") return oneTap;
+  if (oneTap > 100_000) {
+    return { error: "One Tap Premium unlock must be ≤ 100,000." };
+  }
+  if (!values.premiumUnlockCoinEnabled && !values.premiumUnlockAdEnabled) {
+    return {
+      error: "Enable at least one Premium unlock path (coins or watch ad).",
+    };
+  }
+
   const dailyRaw = values.dailyEarnCap.trim();
   let dailyEarnCap = 0;
   if (dailyRaw !== "") {
@@ -105,6 +161,13 @@ export function formToConfig(
       adBonusCoins: ad,
     },
     limits: { walletCap: cap, dailyEarnCap },
+    premiumUnlock: {
+      bestPremium: best,
+      premiumProMax: proMax,
+      oneTapPremium: oneTap,
+      coinUnlockEnabled: values.premiumUnlockCoinEnabled,
+      adUnlockEnabled: values.premiumUnlockAdEnabled,
+    },
     checkInEnabled: values.checkInEnabled,
     quizEnabled: values.quizEnabled,
     adBonusEnabled: values.adBonusEnabled,
@@ -154,6 +217,14 @@ export const ECONOMY_CAPABILITIES = [
   {
     title: "Wallet & daily caps",
     body: "Hard wallet ceiling and optional soft daily earn limit.",
+  },
+  {
+    title: "Premium Sensi unlock prices",
+    body: "Set coins for Best / Pro Max / One Tap unlock — app + server debit use these.",
+  },
+  {
+    title: "Premium unlock paths",
+    body: "Checkbox: show coin unlock, watch ad, or both in the Premium unlock dialog.",
   },
   {
     title: "Shop boosts",

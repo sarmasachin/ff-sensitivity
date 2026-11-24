@@ -15,12 +15,15 @@ const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../prisma/prisma.service");
 const redeem_mask_1 = require("./redeem-mask");
 const redeem_scratch_service_1 = require("./redeem-scratch.service");
+const redeem_vote_service_1 = require("./redeem-vote.service");
 let RedeemCatalogService = class RedeemCatalogService {
     prisma;
     scratchService;
-    constructor(prisma, scratchService) {
+    votes;
+    constructor(prisma, scratchService, votes) {
         this.prisma = prisma;
         this.scratchService = scratchService;
+        this.votes = votes;
     }
     async catalog(userId) {
         const now = new Date();
@@ -56,6 +59,8 @@ let RedeemCatalogService = class RedeemCatalogService {
         await Promise.all(scratchIds.map(async (id) => {
             scratchMeta.set(id, await this.scratchService.scratchMeta(userId, id));
         }));
+        const tallies = await this.votes.tally(userId, codes.map((row) => row.id));
+        const voteOf = (id) => tallies.get(id) ?? { yesCount: 0, noCount: 0, myVote: null };
         const [types, cadences] = await Promise.all([
             this.prisma.redeemTypeDef.findMany({
                 where: { enabled: true },
@@ -87,6 +92,8 @@ let RedeemCatalogService = class RedeemCatalogService {
                         allowedAttempts: 1,
                         needsAd: false,
                         canScratch: true,
+                        waitUntil: null,
+                        waitNext: null,
                     };
                     const listStatus = expiredByTime ||
                         scheduleEnded ||
@@ -122,6 +129,9 @@ let RedeemCatalogService = class RedeemCatalogService {
                         poolLeft,
                         needsAd: meta.needsAd,
                         canScratch: meta.canScratch && listStatus === 'ACTIVE',
+                        waitUntil: meta.waitUntil,
+                        waitNext: meta.waitNext,
+                        ...voteOf(row.id),
                     };
                 }
                 const listStatus = expiredByTime || row.status === client_1.RedeemCodeStatus.EXPIRED
@@ -160,6 +170,9 @@ let RedeemCatalogService = class RedeemCatalogService {
                     poolLeft: null,
                     needsAd: false,
                     canScratch: false,
+                    waitUntil: null,
+                    waitNext: null,
+                    ...voteOf(row.id),
                 };
             }),
         };
@@ -169,6 +182,7 @@ exports.RedeemCatalogService = RedeemCatalogService;
 exports.RedeemCatalogService = RedeemCatalogService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        redeem_scratch_service_1.RedeemScratchService])
+        redeem_scratch_service_1.RedeemScratchService,
+        redeem_vote_service_1.RedeemVoteService])
 ], RedeemCatalogService);
 //# sourceMappingURL=redeem-catalog.service.js.map

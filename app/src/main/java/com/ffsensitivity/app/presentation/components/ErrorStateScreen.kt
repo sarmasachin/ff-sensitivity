@@ -110,7 +110,7 @@ fun ErrorStateScreen(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "If this keeps happening, restart the app and try again.",
+                text = "If this keeps happening, close the app and open it again.",
                 color = Danger.copy(alpha = 0.85f),
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center

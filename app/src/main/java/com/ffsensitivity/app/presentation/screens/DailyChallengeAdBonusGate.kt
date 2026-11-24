@@ -87,8 +87,8 @@ object DailyChallengeAdBonusGate {
             onError(
                 ChallengeUiError(
                     code = "CHALLENGE_AD_NO_ACTIVITY",
-                    title = "Couldn’t show ad",
-                    message = "Restart the app and try again.",
+                    title = "Ad unavailable",
+                    message = "Couldn’t open the ad right now. Please try again.",
                     retryKind = ChallengeRetryKind.AD
                 )
             )
@@ -98,6 +98,7 @@ object DailyChallengeAdBonusGate {
         setBusy(true)
         CalculateRewardedAds.show(
             activity = activity,
+            slot = CalculateRewardedAds.Slot.AD_BONUS,
             onRewarded = { claim() },
             onNotCompleted = { message ->
                 setBusy(false)

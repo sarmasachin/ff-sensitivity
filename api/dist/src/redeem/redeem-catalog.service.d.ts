@@ -1,9 +1,11 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { RedeemScratchService } from './redeem-scratch.service';
+import { RedeemVoteService } from './redeem-vote.service';
 export declare class RedeemCatalogService {
     private readonly prisma;
     private readonly scratchService;
-    constructor(prisma: PrismaService, scratchService: RedeemScratchService);
+    private readonly votes;
+    constructor(prisma: PrismaService, scratchService: RedeemScratchService, votes: RedeemVoteService);
     catalog(userId: string): Promise<{
         types: {
             id: string;
@@ -16,6 +18,9 @@ export declare class RedeemCatalogService {
             windowHours: number;
         }[];
         items: ({
+            yesCount: number;
+            noCount: number;
+            myVote: boolean | null;
             id: string;
             type: string;
             title: string;
@@ -40,7 +45,12 @@ export declare class RedeemCatalogService {
             poolLeft: number;
             needsAd: boolean;
             canScratch: boolean;
+            waitUntil: string | null;
+            waitNext: string | null;
         } | {
+            yesCount: number;
+            noCount: number;
+            myVote: boolean | null;
             id: string;
             type: string;
             title: string;
@@ -65,6 +75,8 @@ export declare class RedeemCatalogService {
             poolLeft: number | null;
             needsAd: boolean;
             canScratch: boolean;
+            waitUntil: null;
+            waitNext: null;
         })[];
     }>;
 }

@@ -54,6 +54,56 @@ let RedeemClaimsService = class RedeemClaimsService {
             whenLabel: (0, redeem_labels_1.relativeRedeemLabel)(r.createdAt),
         }));
     }
+    async recentWinners(cadenceRaw) {
+        const cadence = (cadenceRaw ?? '').trim().toUpperCase();
+        const cadenceFilter = cadence === 'DAILY' || cadence === 'WEEKLY' ? cadence : undefined;
+        const rows = await this.prisma.redeemClaim.findMany({
+            where: {
+                ...(cadenceFilter
+                    ? { redeemCode: { cadence: cadenceFilter } }
+                    : {}),
+                user: {
+                    NOT: {
+                        OR: [
+                            { email: { startsWith: 'e2e.' } },
+                            { googleSub: { startsWith: 'e2e-' } },
+                            {
+                                displayName: {
+                                    in: ['ProMax Peer A', 'ProMax Peer B', 'ProMax E2E Viewer'],
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+            include: {
+                user: { select: { displayName: true } },
+                redeemCode: {
+                    select: { title: true, valueLabel: true, cadence: true },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 40,
+        });
+        return {
+            items: rows.map((r) => {
+                const rawName = (r.user.displayName ?? '').trim() || 'Player';
+                const rawPrize = (r.redeemCode.valueLabel ?? '').trim() ||
+                    (r.redeemCode.title ?? '').trim() ||
+                    'a reward';
+                const displayName = rawName.length > 18 ? `${rawName.slice(0, 16)}…` : rawName;
+                const prizeLabel = rawPrize.length > 40 ? `${rawPrize.slice(0, 38)}…` : rawPrize;
+                return {
+                    id: r.id,
+                    displayName,
+                    prizeLabel,
+                    cadence: r.redeemCode.cadence,
+                    text: `${displayName} won ${prizeLabel}`,
+                    createdAt: r.createdAt.toISOString(),
+                };
+            }),
+        };
+    }
     async adminListClaims(query) {
         const q = query?.trim();
         const where = q

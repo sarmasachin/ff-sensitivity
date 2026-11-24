@@ -18,8 +18,8 @@ const throttler_1 = require("@nestjs/throttler");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const current_admin_decorator_1 = require("../auth/current-admin.decorator");
 const app_error_1 = require("../common/errors/app-error");
+const support_admin_inbox_service_1 = require("./support-admin-inbox.service");
 const support_module_guard_1 = require("./support-module.guard");
-const support_service_1 = require("./support.service");
 const support_dto_1 = require("./dto/support.dto");
 function assertSupportId(id, label = 'thread') {
     if (!id?.trim() || id.includes('/') || id.length > 64) {
@@ -32,8 +32,8 @@ let SupportAdminController = class SupportAdminController {
     constructor(support) {
         this.support = support;
     }
-    list(q, status) {
-        return this.support.adminList(q, status);
+    list(q, status, subject, unread) {
+        return this.support.adminList(q, status, subject, unread);
     }
     stats() {
         return this.support.adminStats();
@@ -60,8 +60,10 @@ __decorate([
     (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
     __param(0, (0, common_1.Query)('q')),
     __param(1, (0, common_1.Query)('status')),
+    __param(2, (0, common_1.Query)('subject')),
+    __param(3, (0, common_1.Query)('unread')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], SupportAdminController.prototype, "list", null);
 __decorate([
@@ -121,6 +123,6 @@ __decorate([
 exports.SupportAdminController = SupportAdminController = __decorate([
     (0, common_1.Controller)('api/v1/admin/support'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, support_module_guard_1.SupportModuleGuard),
-    __metadata("design:paramtypes", [support_service_1.SupportService])
+    __metadata("design:paramtypes", [support_admin_inbox_service_1.SupportAdminInboxService])
 ], SupportAdminController);
 //# sourceMappingURL=support-admin.controller.js.map

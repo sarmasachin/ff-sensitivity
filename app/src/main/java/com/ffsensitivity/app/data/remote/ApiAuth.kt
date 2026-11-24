@@ -16,17 +16,10 @@ fun isAuthFailureCode(code: String): Boolean {
 }
 
 fun normalizeApiError(code: String, message: String, httpCode: Int): Pair<String, String> {
-    if (code == "AUTH_GOOGLE_INVALID" || code == "AUTH_SUSPENDED") {
-        return code to message.ifBlank { "Something went wrong. Please try again." }
-    }
     val auth = httpCode == 401 || isAuthFailureCode(code)
-    if (!auth) {
-        return code to message.ifBlank { "Something went wrong. Please try again." }
+    if (auth && code != "AUTH_SUSPENDED" && code != "AUTH_GOOGLE_INVALID") {
+        return "AUTH_REQUIRED" to friendlyApiMessage("AUTH_REQUIRED", message)
     }
-    val msg = when {
-        message.isBlank() || message.equals("Unauthorized", ignoreCase = true) ->
-            "Session expired. Sign in again."
-        else -> message
-    }
-    return "AUTH_REQUIRED" to msg
+    val resolvedCode = if (auth) code else code.trim().ifBlank { "HTTP_$httpCode" }
+    return resolvedCode to friendlyApiMessage(resolvedCode, message)
 }

@@ -12,4 +12,8 @@ object AppLog {
     fun w(message: String, throwable: Throwable? = null) {
         if (throwable != null) Log.w(TAG, message, throwable) else Log.w(TAG, message)
     }
+
+    fun i(message: String) {
+        Log.i(TAG, message)
+    }
 }

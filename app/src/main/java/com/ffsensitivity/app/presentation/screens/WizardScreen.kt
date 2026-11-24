@@ -1,4 +1,4 @@
-package com.ffsensitivity.app.presentation.screens
+﻿package com.ffsensitivity.app.presentation.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
@@ -71,7 +71,10 @@ import com.ffsensitivity.app.data.CalculateAdStore
 import com.ffsensitivity.app.data.DpiPreference
 import com.ffsensitivity.app.data.FingerCount
 import com.ffsensitivity.app.data.PlayerRole
+import com.ffsensitivity.app.data.PremiumAdConfig
+import com.ffsensitivity.app.data.PremiumAdStore
 import com.ffsensitivity.app.data.ScreenGuard
+import com.ffsensitivity.app.data.SensitivityEngineKind
 import com.ffsensitivity.app.data.WizardAnswers
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
@@ -147,9 +150,17 @@ fun WizardScreen(
     var adPassTick by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
     val featureId = AppSession.featureId
-    // Read tick so reward/markRewarded recomposes CTA; always re-check live store + remote config.
-    // Per-feature gate: sensi / hud / graphics each need their own rewarded unlock.
-    val needsCalculateAd = adPassTick.let { CalculateAdStore.needsAd(context, featureId) }
+    val oneTapRoleLocked =
+        AppSession.sensitivityEngine == SensitivityEngineKind.ONE_TAP_PREMIUM
+    // Classic → ads.calculate; Premium Pro engines → ads.premium (admin-separate).
+    val paidEngine = AppSession.isPaidSensitivityEngine()
+    val needsCalculateAd = adPassTick.let {
+        if (paidEngine) {
+            PremiumAdStore.needsAd(context, featureId)
+        } else {
+            CalculateAdStore.needsAd(context, featureId)
+        }
+    }
 
     val safeStep = step.coerceIn(0, wizardSteps.lastIndex)
     val current = wizardSteps[safeStep]
@@ -161,9 +172,23 @@ fun WizardScreen(
         else -> false
     }
 
-    LaunchedEffect(safeStep, needsCalculateAd) {
-        if (safeStep == 3 && needsCalculateAd) {
-            CalculateRewardedAds.preload(context)
+    LaunchedEffect(oneTapRoleLocked) {
+        if (oneTapRoleLocked) {
+            role = PlayerRole.ONE_TAP
+        }
+    }
+
+    // Preload from penultimate step so the ad is warm before Calculate CTA.
+    LaunchedEffect(safeStep, needsCalculateAd, paidEngine) {
+        if (safeStep >= 2 && needsCalculateAd) {
+            CalculateRewardedAds.preload(
+                context,
+                if (paidEngine) {
+                    CalculateRewardedAds.Slot.PREMIUM
+                } else {
+                    CalculateRewardedAds.Slot.CALCULATE
+                }
+            )
         }
     }
 
@@ -241,7 +266,12 @@ fun WizardScreen(
             )
             return
         }
-        if (!CalculateAdStore.needsAd(context, featureId)) {
+        val needsAdNow = if (paidEngine) {
+            PremiumAdStore.needsAd(context, featureId)
+        } else {
+            CalculateAdStore.needsAd(context, featureId)
+        }
+        if (!needsAdNow) {
             submitting = true
             openResults(answers)
             return
@@ -250,8 +280,8 @@ fun WizardScreen(
         if (activity == null) {
             showError(
                 code = "WIZARD_AD_NO_ACTIVITY",
-                title = "Couldn’t show ad",
-                message = "Restart the app and try Calculate again.",
+                title = "Ad unavailable",
+                message = "Couldn’t open the ad right now. Please try again.",
                 retryKind = WizardRetryKind.CALCULATE
             )
             return
@@ -259,8 +289,17 @@ fun WizardScreen(
         submitting = true
         CalculateRewardedAds.show(
             activity = activity,
+            slot = if (paidEngine) {
+                CalculateRewardedAds.Slot.PREMIUM
+            } else {
+                CalculateRewardedAds.Slot.CALCULATE
+            },
             onRewarded = {
-                CalculateAdStore.markRewarded(context, featureId)
+                if (paidEngine) {
+                    PremiumAdStore.markRewarded(context, featureId)
+                } else {
+                    CalculateAdStore.markRewarded(context, featureId)
+                }
                 adPassTick += 1
                 openResults(answers)
             },
@@ -273,7 +312,11 @@ fun WizardScreen(
                     retryKind = WizardRetryKind.CALCULATE
                 )
             },
-            incompleteMessage = CalculateAdConfig.incompleteMessage
+            incompleteMessage = if (paidEngine) {
+                PremiumAdConfig.incompleteMessage
+            } else {
+                CalculateAdConfig.incompleteMessage
+            }
         )
     }
 
@@ -396,7 +439,10 @@ fun WizardScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = s.hint,
+                            text = when {
+                                oneTapRoleLocked && animatedStep == 2 -> ONE_TAP_DPI_WIZARD_HINT
+                                else -> s.hint
+                            },
                             color = InkSecondary,
                             fontSize = 14.sp,
                             lineHeight = 20.sp
@@ -427,22 +473,38 @@ fun WizardScreen(
                                     }
                                 )
                             }
-                            1 -> PlayerRole.entries.forEach { option ->
-                                PremiumChoiceCard(
-                                    title = option.label,
-                                    subtitle = roleSubtitle(option),
-                                    icon = roleIcon(option),
-                                    selected = role == option,
-                                    onClick = {
-                                        clearError()
-                                        role = option
-                                    }
-                                )
+                            1 -> {
+                                val roleOptions = if (oneTapRoleLocked) {
+                                    listOf(PlayerRole.ONE_TAP)
+                                } else {
+                                    PlayerRole.entries.toList()
+                                }
+                                roleOptions.forEach { option ->
+                                    PremiumChoiceCard(
+                                        title = option.label,
+                                        subtitle = if (oneTapRoleLocked) {
+                                            "Locked for One Tap Premium · headshot path"
+                                        } else {
+                                            roleSubtitle(option)
+                                        },
+                                        icon = roleIcon(option),
+                                        selected = role == option,
+                                        onClick = {
+                                            if (oneTapRoleLocked) return@PremiumChoiceCard
+                                            clearError()
+                                            role = option
+                                        }
+                                    )
+                                }
                             }
                             2 -> DpiPreference.entries.forEach { option ->
                                 PremiumChoiceCard(
                                     title = option.label,
-                                    subtitle = dpiSubtitle(option),
+                                    subtitle = if (oneTapRoleLocked) {
+                                        oneTapDpiSubtitle(option)
+                                    } else {
+                                        dpiSubtitle(option)
+                                    },
                                     icon = dpiIcon(option),
                                     selected = dpiPref == option,
                                     onClick = {
@@ -476,6 +538,7 @@ fun WizardScreen(
                     submitting && needsCalculateAd -> "Watch ad…"
                     submitting -> "Calculating…"
                     safeStep < 3 -> "Continue"
+                    needsCalculateAd && paidEngine -> PremiumAdConfig.buttonLabel
                     needsCalculateAd -> CalculateAdConfig.buttonLabel
                     else -> "Calculate Best Pro Settings"
                 },

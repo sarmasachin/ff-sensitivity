@@ -34,6 +34,7 @@ internal fun RedeemScreenList(
     selectedCadenceId: String,
     selectedCadenceLabel: String,
     isDailyCadence: Boolean,
+    winnerLines: List<String>,
     tabCodes: List<RedeemCodeItem>,
     unlocked: Map<String, Boolean>,
     revealed: Map<String, Boolean>,
@@ -96,6 +97,9 @@ internal fun RedeemScreenList(
                             selectedId = selectedCadenceId,
                             onSelect = onSelectCadence
                         )
+                    }
+                    item {
+                        RedeemWinnersTicker(lines = winnerLines)
                     }
                     item {
                         Text(

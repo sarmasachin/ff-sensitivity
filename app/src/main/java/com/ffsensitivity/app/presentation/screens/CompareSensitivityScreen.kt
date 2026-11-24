@@ -8,12 +8,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.CompareArrows
 import androidx.compose.material.icons.outlined.Save
@@ -32,12 +32,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ffsensitivity.app.data.AppSession
 import com.ffsensitivity.app.data.CompareFeedback
 import com.ffsensitivity.app.data.SensitivityValues
 import com.ffsensitivity.app.data.WizardAnswers
-import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.CompareRepository
 import com.ffsensitivity.app.data.remote.SharedCompareEntry
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.engine.FullSettingsResult
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
@@ -78,6 +79,7 @@ fun CompareSensitivityScreen(
     var crowdOffset by remember { mutableStateOf<Int?>(null) }
     var offsetFromMatch by remember { mutableStateOf(false) }
     var sharedEntries by remember { mutableStateOf<List<SharedCompareEntry>>(emptyList()) }
+    var savedViewMode by remember { mutableStateOf(CompareSavedViewMode.ALL_IN_ONE) }
 
     LaunchedEffect(loadGeneration, answers.fingers.label, answers.role.label) {
         val loaded = withContext(Dispatchers.IO) {
@@ -92,12 +94,10 @@ fun CompareSensitivityScreen(
             },
             onFailure = {
                 AppLog.e("Compare list failed", it)
-                val msg = (it as? ApiException)?.message
-                    ?: "Could not load saved comparisons. Try again."
                 actionError = CompareUiError(
                     code = "COMPARE_LIST_FAILED",
                     title = "Saved comparisons unavailable",
-                    message = msg,
+                    message = it.userMessage("Could not load saved comparisons. Try again."),
                     retryKind = CompareRetryKind.RELOAD
                 )
             }
@@ -144,23 +144,6 @@ fun CompareSensitivityScreen(
         }
     }
 
-    fun fillAppValuesSafe() {
-        if (busy) {
-            showBusy()
-            return
-        }
-        clearError()
-        general = suggested.general.toString()
-        redDot = suggested.redDot.toString()
-        scope2x = suggested.scope2x.toString()
-        scope4x = suggested.scope4x.toString()
-        sniper = suggested.sniper.toString()
-        freeLook = suggested.freeLook.toString()
-        fireButton = suggested.fireButton.toString()
-        compared = null
-        saved = false
-    }
-
     fun clearFieldsSafe() {
         if (busy) {
             showBusy()
@@ -202,6 +185,16 @@ fun CompareSensitivityScreen(
             )
             return
         }
+        if (parsed == suggested) {
+            compared = null
+            showError(
+                code = "COMPARE_SAME_AS_APP",
+                title = "Use Free Fire values",
+                message = "Don’t copy the app suggestion. Open Free Fire → Sensitivity and enter your real numbers.",
+                retryKind = CompareRetryKind.COMPARE
+            )
+            return
+        }
         compared = parsed
         saved = false
     }
@@ -212,9 +205,19 @@ fun CompareSensitivityScreen(
             return
         }
         if (saved) return
+        if (actual == suggested) {
+            showError(
+                code = "COMPARE_SAME_AS_APP",
+                title = "Use Free Fire values",
+                message = "Don’t copy the app suggestion. Open Free Fire → Sensitivity and enter your real numbers.",
+                retryKind = CompareRetryKind.SAVE
+            )
+            return
+        }
         clearError()
         busy = true
         scope.launch {
+            val device = AppSession.deviceInfo
             val resultSave = withContext(Dispatchers.IO) {
                 CompareRepository.save(
                     context,
@@ -225,7 +228,15 @@ fun CompareSensitivityScreen(
                     screenGuard = answers.screenGuard.label,
                     suggested = suggested,
                     actual = actual,
-                    feedback = feedback
+                    feedback = feedback,
+                    ramGb = device?.ramGb,
+                    processorBrand = device?.processorBrand,
+                    processorType = device?.processorType,
+                    gpuLabel = device?.gpuLabel,
+                    gpuVendor = device?.gpuVendor,
+                    refreshHz = device?.let {
+                        it.maxRefreshRateHz.coerceAtLeast(it.refreshRateHz)
+                    }
                 )
             }
             busy = false
@@ -237,12 +248,10 @@ fun CompareSensitivityScreen(
                 },
                 onFailure = {
                     AppLog.e("Compare save failed", it)
-                    val msg = (it as? ApiException)?.message
-                        ?: "Could not save this comparison. Try again."
                     showError(
                         code = "COMPARE_SAVE_FAILED",
                         title = "Save failed",
-                        message = msg,
+                        message = it.userMessage("Could not save this comparison. Try again."),
                         retryKind = CompareRetryKind.SAVE
                     )
                 }
@@ -269,6 +278,7 @@ fun CompareSensitivityScreen(
                 .padding(contentPadding)
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .imePadding()
         ) {
             CompareTopBar(onBack = { backSafe() })
 
@@ -292,6 +302,7 @@ fun CompareSensitivityScreen(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Fill zone first — values stay on-screen without scrolling past saved list.
                 item {
                     Text(
                         text = "Open Free Fire → Settings → Sensitivity. Enter your current values here, then compare with the app suggestion.",
@@ -305,60 +316,12 @@ fun CompareSensitivityScreen(
                     SuggestedSummaryCard(suggested = suggested, deviceLabel = result.deviceLabel)
                 }
 
-                val offset = crowdOffset
-                if (offset != null) {
-                    val who = if (offsetFromMatch) {
-                        "For ${answers.fingers.label} · ${answers.role.label}"
-                    } else {
-                        "From all saved compares"
-                    }
-                    item {
-                        TipBanner(
-                            text = "$who, avg General offset is ${signed(offset)}. " +
-                                "Positive means faster than the app; negative means slower."
-                        )
-                    }
-                }
-
                 item {
-                    Text(
-                        text = "Saved by players",
-                        color = InkPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                if (sharedEntries.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No saved comparisons yet. A save here shows up for every player.",
-                            color = InkSecondary,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp
-                        )
-                    }
-                } else {
-                    items(sharedEntries, key = { it.id }) { entry ->
-                        CompareSavedCard(entry)
-                    }
-                }
-
-                item {
-                    Row(
+                    GhostAction(
+                        label = "Clear fields",
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        GhostAction(
-                            label = "Fill app values",
-                            modifier = Modifier.weight(1f),
-                            onClick = { fillAppValuesSafe() }
-                        )
-                        GhostAction(
-                            label = "Clear",
-                            modifier = Modifier.weight(1f),
-                            onClick = { clearFieldsSafe() }
-                        )
-                    }
+                        onClick = { clearFieldsSafe() }
+                    )
                 }
 
                 item {
@@ -466,6 +429,69 @@ fun CompareSensitivityScreen(
                     }
                     item {
                         TipBanner(insightText(diff.general, feedback))
+                    }
+                }
+
+                val offset = crowdOffset
+                if (offset != null) {
+                    val who = if (offsetFromMatch) {
+                        "For ${answers.fingers.label} · ${answers.role.label}"
+                    } else {
+                        "From all saved compares"
+                    }
+                    item {
+                        TipBanner(
+                            text = "$who, avg General offset is ${signed(offset)}. " +
+                                "Positive means faster than the app; negative means slower."
+                        )
+                    }
+                }
+
+                item {
+                    Text(
+                        text = "Saved by players",
+                        color = InkPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (sharedEntries.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No saved comparisons yet. A save here shows up for every player.",
+                            color = InkSecondary,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                } else {
+                    val topEntries = sharedEntries.take(50)
+                    item {
+                        CompareSavedViewModeToggle(
+                            mode = savedViewMode,
+                            onMode = { savedViewMode = it }
+                        )
+                    }
+                    item {
+                        Text(
+                            text = when (savedViewMode) {
+                                CompareSavedViewMode.ALL_IN_ONE ->
+                                    "One table with every player’s saved Free Fire sensi."
+                                CompareSavedViewMode.PER_PLAYER ->
+                                    "Separate table for each player — easier to read one by one."
+                            },
+                            color = InkSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+                    }
+                    item {
+                        when (savedViewMode) {
+                            CompareSavedViewMode.ALL_IN_ONE ->
+                                CompareSavedSensiTable(entries = topEntries)
+                            CompareSavedViewMode.PER_PLAYER ->
+                                CompareSavedPerPlayerTables(entries = topEntries)
+                        }
                     }
                 }
 

@@ -11,17 +11,21 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EconomyService = void 0;
 const common_1 = require("@nestjs/common");
-const crypto_1 = require("crypto");
 const prisma_service_1 = require("../prisma/prisma.service");
 const app_error_1 = require("../common/errors/app-error");
+const scratch_history_1 = require("../scratch/scratch-history");
+const shop_purchases_1 = require("../shop/shop-purchases");
 const shop_admin_service_1 = require("../shop/shop-admin.service");
-const economy_catalog_1 = require("./economy-catalog");
+const economy_earn_service_1 = require("./economy-earn.service");
+const premium_unlock_prices_1 = require("./premium-unlock-prices");
 let EconomyService = class EconomyService {
     prisma;
     shop;
-    constructor(prisma, shop) {
+    earn;
+    constructor(prisma, shop, earn) {
         this.prisma = prisma;
         this.shop = shop;
+        this.earn = earn;
     }
     async getWallet(userId) {
         const user = await this.requireUser(userId);
@@ -55,21 +59,7 @@ let EconomyService = class EconomyService {
         return this.shop.appCatalog();
     }
     async earnChallenge(userId, kind, opts) {
-        const user = await this.requireUser(userId);
-        this.assertNotFrozen(user);
-        const day = (0, economy_catalog_1.utcDateKey)();
-        switch (kind) {
-            case 'CHECKIN':
-                return this.earnCheckin(userId, day);
-            case 'QUIZ':
-                throw new app_error_1.AppError('ECONOMY_QUIZ_MOVED', 'Submit quiz via /api/v1/challenge/quiz/submit.', 400);
-            case 'AD':
-                return this.earnAd(userId);
-            case 'MILESTONE':
-                return this.earnMilestone(userId, opts.milestoneDays);
-            default:
-                throw new app_error_1.AppError('ECONOMY_INVALID', 'Unknown earn kind.', 400);
-        }
+        return this.earn.earnChallenge(userId, kind, opts);
     }
     async purchaseShop(userId, itemId, requestId) {
         const user = await this.requireUser(userId);
@@ -91,18 +81,11 @@ let EconomyService = class EconomyService {
                 throw new app_error_1.AppError('SHOP_ALREADY_OWNED', 'Already owned.', 409);
             }
         }
-        if (item.stockLimit != null) {
-            const buys = await this.prisma.walletLedger.count({
-                where: { userId, reason: `shop:${item.id}` },
-            });
-            if (buys >= item.stockLimit) {
-                throw new app_error_1.AppError('SHOP_OUT_OF_STOCK', 'Out of stock.', 409);
-            }
-        }
         const idempotencyKey = item.oneTime
             ? `${buyKeyBase}:once`
             : `${buyKeyBase}:req:${safeReq}`;
         return this.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw `SELECT id FROM shop_items WHERE id = ${item.id} FOR UPDATE`;
             const existing = await tx.walletLedger.findUnique({
                 where: { idempotencyKey },
             });
@@ -113,6 +96,12 @@ let EconomyService = class EconomyService {
                     alreadyApplied: true,
                 };
             }
+            if (item.stockLimit != null) {
+                const buys = await this.shop.countItemSales(item.id, tx);
+                if (buys >= item.stockLimit) {
+                    throw new app_error_1.AppError('SHOP_OUT_OF_STOCK', 'Out of stock.', 409);
+                }
+            }
             const paid = await tx.user.updateMany({
                 where: { id: userId, coins: { gte: item.priceCoins } },
                 data: { coins: { decrement: item.priceCoins } },
@@ -121,6 +110,11 @@ let EconomyService = class EconomyService {
                 throw new app_error_1.AppError('NOT_ENOUGH_COINS', `You need ${item.priceCoins} coins.`, 409);
             }
             const paidUser = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+            const install = await tx.deviceInstall.findFirst({
+                where: { userId },
+                orderBy: { lastSeenAt: 'desc' },
+                select: { installId: true, model: true, brand: true },
+            });
             await tx.walletLedger.create({
                 data: {
                     userId,
@@ -128,6 +122,13 @@ let EconomyService = class EconomyService {
                     balanceAfter: paidUser.coins,
                     reason: `shop:${item.id}`,
                     idempotencyKey,
+                    shopSnapshot: (0, shop_purchases_1.buildShopSnapshot)({
+                        oneTime: item.oneTime,
+                        title: item.title,
+                        category: item.category,
+                        deviceId: install?.installId ?? '',
+                        deviceLabel: (0, shop_purchases_1.deviceLabelFrom)(install?.model, install?.brand),
+                    }),
                 },
             });
             if (item.isBoost) {
@@ -139,223 +140,112 @@ let EconomyService = class EconomyService {
                     update: { charges: { increment: 1 } },
                 });
             }
+            if (item.id === 'pack_scratch_bonus') {
+                const sourceKey = item.oneTime
+                    ? `shop:${item.id}:once`
+                    : `shop:${item.id}:${safeReq}`;
+                await (0, scratch_history_1.saveScratchArchive)(tx, {
+                    userId,
+                    sourceKey,
+                    kind: 'SHOP',
+                    title: item.title,
+                    detail: 'Coin Shop purchase',
+                    rewardLabel: item.rewardTag,
+                    coins: 0,
+                });
+            }
             return { coins: paidUser.coins, itemId: item.id, alreadyApplied: false };
         });
     }
-    async earnQuizGraded(userId, correct, amounts) {
+    async getPremiumUnlockPrices() {
+        const [prices, options] = await Promise.all([
+            (0, premium_unlock_prices_1.loadPremiumUnlockPrices)(this.prisma),
+            (0, premium_unlock_prices_1.loadPremiumUnlockOptions)(this.prisma),
+        ]);
+        return {
+            best_premium: prices.best_premium,
+            premium_pro_max: prices.premium_pro_max,
+            one_tap_premium: prices.one_tap_premium,
+            coinUnlockEnabled: options.coinUnlockEnabled,
+            adUnlockEnabled: options.adUnlockEnabled,
+            labels: { ...premium_unlock_prices_1.PREMIUM_UNLOCK_LABEL },
+        };
+    }
+    async spendPremiumUnlock(userId, productRaw, requestId) {
         const user = await this.requireUser(userId);
         this.assertNotFrozen(user);
-        const day = (0, economy_catalog_1.utcDateKey)();
-        return this.earnQuiz(userId, day, correct, amounts);
-    }
-    async earnScratchCoins(userId, day, slot, amount) {
-        const user = await this.requireUser(userId);
-        this.assertNotFrozen(user);
-        const safe = Math.max(0, Math.min(100_000, Math.floor(amount)));
-        const key = `earn:scratch:${userId}:${day}:${slot}`;
-        return this.applyEarn(userId, key, async () => ({
-            delta: safe,
-            reason: 'earn:scratch',
-        }));
-    }
-    async requireUserPublic(userId) {
-        return this.requireUser(userId);
-    }
-    async earnCheckin(userId, day) {
-        const key = `earn:checkin:${userId}:${day}`;
-        return this.applyEarn(userId, key, async (tx) => {
-            const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-            const yesterday = (0, economy_catalog_1.utcDateKey)(new Date(Date.now() - 24 * 60 * 60 * 1000));
-            const streak = user.lastCheckinDay === yesterday
-                ? user.streakDays + 1
-                : user.lastCheckinDay === day
-                    ? user.streakDays
-                    : 1;
-            await tx.user.update({
-                where: { id: userId },
-                data: { streakDays: streak, lastCheckinDay: day },
-            });
-            let delta = economy_catalog_1.ECONOMY_AMOUNTS.checkin;
-            let usedBoost = false;
-            const boost = await tx.userBoostCharge.findUnique({
-                where: {
-                    userId_boostId: { userId, boostId: economy_catalog_1.BOOST_CHECKIN },
-                },
-            });
-            if (boost && boost.charges > 0) {
-                delta += economy_catalog_1.ECONOMY_AMOUNTS.checkinBoostExtra;
-                usedBoost = true;
-                await tx.userBoostCharge.update({
-                    where: { id: boost.id },
-                    data: { charges: { decrement: 1 } },
-                });
-            }
-            return { delta, reason: usedBoost ? 'earn:checkin:boost' : 'earn:checkin' };
-        });
-    }
-    async earnQuiz(userId, day, correct, amounts) {
-        const correctCoins = amounts?.correctCoins ?? economy_catalog_1.ECONOMY_AMOUNTS.quizCorrect;
-        const wrongCoins = amounts?.wrongCoins ?? economy_catalog_1.ECONOMY_AMOUNTS.quizWrong;
-        if (correct) {
-            const key = `earn:quiz:ok:${userId}:${day}`;
-            return this.applyEarn(userId, key, async (tx) => {
-                let delta = correctCoins;
-                let usedBoost = false;
-                const boost = await tx.userBoostCharge.findUnique({
-                    where: {
-                        userId_boostId: { userId, boostId: economy_catalog_1.BOOST_QUIZ },
-                    },
-                });
-                if (boost && boost.charges > 0) {
-                    delta = correctCoins * 2;
-                    usedBoost = true;
-                    await tx.userBoostCharge.update({
-                        where: { id: boost.id },
-                        data: { charges: { decrement: 1 } },
-                    });
-                }
-                return {
-                    delta,
-                    reason: usedBoost ? 'earn:quiz:ok:boost' : 'earn:quiz:ok',
-                };
-            });
+        const product = String(productRaw ?? '').trim();
+        if (!(0, premium_unlock_prices_1.isPremiumUnlockProduct)(product)) {
+            throw new app_error_1.AppError('PREMIUM_UNLOCK_BAD_PRODUCT', 'Unknown unlock.', 400);
         }
-        const wrongCount = await this.prisma.walletLedger.count({
-            where: {
-                userId,
-                reason: 'earn:quiz:wrong',
-                idempotencyKey: { startsWith: `earn:quiz:wrong:${userId}:${day}:` },
-            },
-        });
-        if (wrongCount >= 2) {
-            throw new app_error_1.AppError('ECONOMY_QUIZ_CLOSED', 'Quiz closed for today.', 409);
+        const safeReq = requestId.trim();
+        if (safeReq.length < 8 || safeReq.length > 80) {
+            throw new app_error_1.AppError('PREMIUM_UNLOCK_BAD_REQUEST', 'Invalid request id.', 400);
         }
-        const key = `earn:quiz:wrong:${userId}:${day}:${wrongCount + 1}`;
-        return this.applyEarn(userId, key, async () => ({
-            delta: wrongCoins,
-            reason: 'earn:quiz:wrong',
-        }));
-    }
-    async earnAd(userId) {
-        const config = await this.prisma.challengeConfig.findUnique({
-            where: { id: 'default' },
-        });
-        if (config && !config.adBonusOptional) {
-            throw new app_error_1.AppError('ECONOMY_AD_DISABLED', 'Ad bonus is disabled.', 403);
+        const options = await (0, premium_unlock_prices_1.loadPremiumUnlockOptions)(this.prisma);
+        if (!options.coinUnlockEnabled) {
+            throw new app_error_1.AppError('PREMIUM_UNLOCK_COIN_DISABLED', 'Coin unlock is disabled. Use watch ad instead.', 403);
         }
-        const cooldownHours = Math.max(1, config?.adBonusCooldownHours ?? 4);
-        const coins = Math.max(0, config?.adBonusCoins ?? economy_catalog_1.ECONOMY_AMOUNTS.adBonus);
-        const cooldownMs = cooldownHours * 60 * 60 * 1000;
-        const idempotencyKey = `earn:ad:${userId}:${(0, crypto_1.randomUUID)()}`;
-        return this.prisma.$transaction(async (tx) => {
-            const last = await tx.walletLedger.findFirst({
-                where: { userId, reason: 'earn:ad' },
-                orderBy: { createdAt: 'desc' },
-                select: { createdAt: true },
-            });
-            if (last) {
-                const nextAt = last.createdAt.getTime() + cooldownMs;
-                if (Date.now() < nextAt) {
-                    throw new app_error_1.AppError('ECONOMY_AD_COOLDOWN', 'Ad bonus is on cooldown. Try again later.', 409, { nextAdAvailableAtMs: nextAt });
-                }
-            }
-            const existing = await tx.walletLedger.findUnique({
-                where: { idempotencyKey },
-            });
-            if (existing) {
-                return {
-                    coins: existing.balanceAfter,
-                    delta: existing.delta,
-                    alreadyApplied: true,
-                    reason: existing.reason,
-                    nextAdAvailableAtMs: existing.createdAt.getTime() + cooldownMs,
-                };
-            }
-            const current = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-            if (current.walletFrozen) {
-                throw new app_error_1.AppError('WALLET_FROZEN', 'Wallet is frozen.', 403);
-            }
-            const nextCoins = Math.max(0, Math.min(9_999_999, current.coins + coins));
-            const delta = nextCoins - current.coins;
-            await tx.user.update({
-                where: { id: userId },
-                data: { coins: nextCoins },
-            });
-            const row = await tx.walletLedger.create({
-                data: {
-                    userId,
-                    delta,
-                    balanceAfter: nextCoins,
-                    reason: 'earn:ad',
-                    idempotencyKey,
-                },
-            });
-            return {
-                coins: nextCoins,
-                delta,
-                alreadyApplied: false,
-                reason: 'earn:ad',
-                nextAdAvailableAtMs: row.createdAt.getTime() + cooldownMs,
-            };
-        });
-    }
-    async earnMilestone(userId, days) {
-        if (days == null || days < 1 || days > 365) {
-            throw new app_error_1.AppError('ECONOMY_MILESTONE_INVALID', 'Unknown milestone.', 400);
-        }
-        const fromDb = await this.prisma.challengeMilestone.findFirst({
-            where: { days, enabled: true },
-        });
-        const reward = fromDb?.coinReward ?? economy_catalog_1.MILESTONE_REWARDS[days];
-        if (reward == null) {
-            throw new app_error_1.AppError('ECONOMY_MILESTONE_INVALID', 'Unknown milestone.', 400);
-        }
-        const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-        if (user.streakDays < days) {
-            throw new app_error_1.AppError('ECONOMY_STREAK_REQUIRED', `Need ${days}-day streak first.`, 409);
-        }
-        const key = `earn:milestone:${userId}:${days}`;
-        return this.applyEarn(userId, key, async () => ({
-            delta: reward,
-            reason: `earn:milestone:${days}`,
-        }));
-    }
-    async applyEarn(userId, idempotencyKey, build) {
+        const prices = await (0, premium_unlock_prices_1.loadPremiumUnlockPrices)(this.prisma);
+        const cost = (0, premium_unlock_prices_1.premiumUnlockCost)(prices, product);
+        const label = premium_unlock_prices_1.PREMIUM_UNLOCK_LABEL[product];
+        const reason = `premium_unlock:${product}`;
+        const idempotencyKey = `premium_unlock:${userId}:${product}:req:${safeReq}`;
         return this.prisma.$transaction(async (tx) => {
             const existing = await tx.walletLedger.findUnique({
                 where: { idempotencyKey },
             });
             if (existing) {
+                const live = await tx.user.findUniqueOrThrow({
+                    where: { id: userId },
+                    select: { coins: true },
+                });
                 return {
-                    coins: existing.balanceAfter,
-                    delta: existing.delta,
+                    coins: live.coins,
+                    product,
+                    cost: Math.abs(existing.delta),
                     alreadyApplied: true,
-                    reason: existing.reason,
+                    label,
                 };
             }
-            const { delta, reason } = await build(tx);
-            const current = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-            const nextCoins = Math.max(0, Math.min(9_999_999, current.coins + delta));
-            await tx.user.update({
+            if (cost > 0) {
+                const paid = await tx.user.updateMany({
+                    where: { id: userId, coins: { gte: cost } },
+                    data: { coins: { decrement: cost } },
+                });
+                if (paid.count !== 1) {
+                    throw new app_error_1.AppError('NOT_ENOUGH_COINS', `You need ${cost} coins.`, 409);
+                }
+            }
+            const paidUser = await tx.user.findUniqueOrThrow({
                 where: { id: userId },
-                data: { coins: nextCoins },
             });
             await tx.walletLedger.create({
                 data: {
                     userId,
-                    delta: nextCoins - current.coins,
-                    balanceAfter: nextCoins,
+                    delta: -cost,
+                    balanceAfter: paidUser.coins,
                     reason,
                     idempotencyKey,
                 },
             });
             return {
-                coins: nextCoins,
-                delta: nextCoins - current.coins,
+                coins: paidUser.coins,
+                product,
+                cost,
                 alreadyApplied: false,
-                reason,
+                label,
             };
         });
+    }
+    async earnQuizGraded(userId, correct, amounts) {
+        return this.earn.earnQuizGraded(userId, correct, amounts);
+    }
+    async earnScratchCoins(userId, day, slot, amount) {
+        return this.earn.earnScratchCoins(userId, day, slot, amount);
+    }
+    async requireUserPublic(userId) {
+        return this.requireUser(userId);
     }
     async requireUser(userId) {
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -374,6 +264,7 @@ exports.EconomyService = EconomyService;
 exports.EconomyService = EconomyService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        shop_admin_service_1.ShopAdminService])
+        shop_admin_service_1.ShopAdminService,
+        economy_earn_service_1.EconomyEarnService])
 ], EconomyService);
 //# sourceMappingURL=economy.service.js.map

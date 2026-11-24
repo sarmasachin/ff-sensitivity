@@ -3,7 +3,6 @@ import type { SavePromosDto } from './dto/promos.dto';
 export declare class PromosService {
     private readonly prisma;
     constructor(prisma: PrismaService);
-    private toRow;
     adminList(): Promise<{
         promos: {
             id: string;

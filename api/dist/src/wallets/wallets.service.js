@@ -15,7 +15,21 @@ const client_1 = require("@prisma/client");
 const app_error_1 = require("../common/errors/app-error");
 const prisma_service_1 = require("../prisma/prisma.service");
 const settings_service_1 = require("../settings/settings.service");
+const wallets_desk_1 = require("./wallets-desk");
 const wallets_security_1 = require("./wallets-security");
+const walletUserSelect = {
+    id: true,
+    email: true,
+    displayName: true,
+    coins: true,
+    walletFrozen: true,
+    walletNote: true,
+    deviceInstalls: {
+        orderBy: { lastSeenAt: 'desc' },
+        take: 1,
+        select: { installId: true, brand: true, model: true },
+    },
+};
 let WalletsService = class WalletsService {
     prisma;
     settings;
@@ -28,7 +42,7 @@ let WalletsService = class WalletsService {
             throw new app_error_1.AppError('FORBIDDEN_ROLE', 'Viewers cannot change wallets.', 403);
         }
     }
-    toWalletRow(user, now = new Date()) {
+    toWalletRow(user, life, now = new Date()) {
         const install = user.deviceInstalls[0];
         const deviceId = install?.installId ?? `user_${user.id.slice(-8)}`;
         const label = install?.model || install?.brand
@@ -36,59 +50,49 @@ let WalletsService = class WalletsService {
                 .filter(Boolean)
                 .join(' · ')
             : `${user.displayName || 'User'} · ${(0, wallets_security_1.maskEmail)(user.email)}`;
-        let lifetimeEarned = 0;
-        let lifetimeSpent = 0;
-        for (const e of user.ledger) {
-            if (e.delta > 0)
-                lifetimeEarned += e.delta;
-            if (e.delta < 0)
-                lifetimeSpent += -e.delta;
-        }
-        const last = user.ledger[0];
-        const h = last ? (0, wallets_security_1.hoursAgo)(last.createdAt, now) : (0, wallets_security_1.hoursAgo)(now, now);
+        const last = life?.lastAt ?? null;
+        const h = last ? (0, wallets_security_1.hoursAgo)(last, now) : (0, wallets_security_1.hoursAgo)(now, now);
         return {
             id: user.id,
             deviceId,
             label,
             balance: user.coins,
-            lifetimeEarned,
-            lifetimeSpent,
+            lifetimeEarned: life?.earned ?? 0,
+            lifetimeSpent: life?.spent ?? 0,
             status: user.walletFrozen ? 'FROZEN' : 'ACTIVE',
             lastTxnLabel: last ? (0, wallets_security_1.formatWhen)(h) : '—',
             lastTxnHoursAgo: last ? Math.round(h * 10) / 10 : 9999,
             note: user.walletNote,
         };
     }
-    async adminListWallets() {
-        const users = await this.prisma.user.findMany({
-            orderBy: { updatedAt: 'desc' },
-            take: 500,
-            select: {
-                id: true,
-                email: true,
-                displayName: true,
-                coins: true,
-                walletFrozen: true,
-                walletNote: true,
-                deviceInstalls: {
-                    orderBy: { lastSeenAt: 'desc' },
-                    take: 1,
-                    select: { installId: true, brand: true, model: true },
-                },
-                ledger: {
-                    orderBy: { createdAt: 'desc' },
-                    take: 200,
-                    select: { delta: true, createdAt: true },
-                },
-            },
+    async walletRowById(userId) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: walletUserSelect,
         });
+        if (!user)
+            return undefined;
+        const life = await (0, wallets_desk_1.loadWalletLifetime)(this.prisma, userId);
+        return this.toWalletRow(user, life, new Date());
+    }
+    async adminListWallets() {
+        const [users, lives, stats] = await Promise.all([
+            this.prisma.user.findMany({
+                orderBy: { updatedAt: 'desc' },
+                select: walletUserSelect,
+            }),
+            (0, wallets_desk_1.loadWalletLifetimes)(this.prisma),
+            (0, wallets_desk_1.countWalletDeskStats)(this.prisma),
+        ]);
         const now = new Date();
-        return { wallets: users.map((u) => this.toWalletRow(u, now)) };
+        return {
+            wallets: users.map((u) => this.toWalletRow(u, lives.get(u.id), now)),
+            stats,
+        };
     }
     async adminListLedger() {
         const rows = await this.prisma.walletLedger.findMany({
             orderBy: { createdAt: 'desc' },
-            take: 500,
             include: {
                 user: {
                     select: {
@@ -186,8 +190,7 @@ let WalletsService = class WalletsService {
                 afterJson: { userId, amount, requestId, ...result },
             },
         });
-        const wallets = await this.adminListWallets();
-        const wallet = wallets.wallets.find((w) => w.id === userId);
+        const wallet = await this.walletRowById(userId);
         return { wallet, ...result };
     }
     async adminRevoke(admin, userIdRaw, dto) {
@@ -246,8 +249,7 @@ let WalletsService = class WalletsService {
                 afterJson: { userId, amount, requestId, ...result },
             },
         });
-        const wallets = await this.adminListWallets();
-        const wallet = wallets.wallets.find((w) => w.id === userId);
+        const wallet = await this.walletRowById(userId);
         return { wallet, ...result };
     }
     async adminFreeze(admin, userIdRaw, action) {
@@ -283,8 +285,7 @@ let WalletsService = class WalletsService {
                 afterJson: { userId, walletFrozen: frozen },
             },
         });
-        const wallets = await this.adminListWallets();
-        return { wallet: wallets.wallets.find((w) => w.id === userId) };
+        return { wallet: await this.walletRowById(userId) };
     }
 };
 exports.WalletsService = WalletsService;

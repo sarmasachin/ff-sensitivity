@@ -1,6 +1,6 @@
 import type { AuthUser } from '../user-auth/current-user.decorator';
 import { EconomyService } from './economy.service';
-import { ChallengeEarnDto, ShopPurchaseDto } from './dto/economy.dto';
+import { ChallengeEarnDto, PremiumUnlockDto, ShopPurchaseDto } from './dto/economy.dto';
 export declare class EconomyController {
     private readonly economy;
     constructor(economy: EconomyService);
@@ -24,6 +24,25 @@ export declare class EconomyController {
         itemId: string;
         alreadyApplied: boolean;
     }>;
+    premiumUnlockPrices(): Promise<{
+        best_premium: number;
+        premium_pro_max: number;
+        one_tap_premium: number;
+        coinUnlockEnabled: boolean;
+        adUnlockEnabled: boolean;
+        labels: {
+            best_premium: string;
+            premium_pro_max: string;
+            one_tap_premium: string;
+        };
+    }>;
+    premiumUnlock(user: AuthUser, dto: PremiumUnlockDto): Promise<{
+        coins: number;
+        product: import("./premium-unlock-prices").PremiumUnlockProduct;
+        cost: number;
+        alreadyApplied: boolean;
+        label: string;
+    }>;
     shopCatalog(): Promise<{
         categories: {
             id: string;
@@ -40,6 +59,7 @@ export declare class EconomyController {
             enabled: boolean;
             oneTime: boolean;
             stockLimit: number | null;
+            stockSold: number;
             rewardTag: string;
         }[];
     }>;

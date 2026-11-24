@@ -34,6 +34,7 @@ import com.ffsensitivity.app.data.SharedSensiCard
 import com.ffsensitivity.app.data.UserSessionStore
 import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.CommunityRepository
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
 import com.ffsensitivity.app.presentation.theme.InkMuted
@@ -308,15 +309,7 @@ fun ShareSensitivityScreen(
                                 else -> "SHARE_SUBMIT_FAILED"
                             },
                             title = if (auth) "Sign in required" else "Couldn’t submit to Community",
-                            message = when (err) {
-                                is ApiException -> err.message
-                                is java.net.ConnectException,
-                                is java.net.SocketTimeoutException,
-                                is java.net.UnknownHostException,
-                                is java.io.IOException ->
-                                    "Can't reach the server. Check your connection and try again."
-                                else -> "Submit failed. Try again."
-                            },
+                            message = err.userMessage("Couldn’t submit. Please try again."),
                             retryKind = if (auth) {
                                 ShareRetryKind.SIGN_IN
                             } else {

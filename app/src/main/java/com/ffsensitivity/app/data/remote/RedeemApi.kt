@@ -35,6 +35,11 @@ data class RedeemScratchResult(
     val tip: String
 )
 
+data class RedeemWinnerLine(
+    val id: String,
+    val text: String
+)
+
 object RedeemApi {
     fun catalog(accessToken: String): Result<RedeemCatalogPayload> {
         return runCatching {
@@ -98,6 +103,32 @@ object RedeemApi {
             }
         }.onFailure {
             AppLog.e("RedeemApi.catalog failed", it)
+        }
+    }
+
+    fun winners(accessToken: String, cadence: String): Result<List<RedeemWinnerLine>> {
+        return runCatching {
+            val path =
+                "/api/v1/redeem/winners?cadence=${java.net.URLEncoder.encode(cadence, "UTF-8")}"
+            val req = ApiClient.get(path, accessToken)
+            ApiClient.http.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) throw ApiClient.parseError(raw, resp.code)
+                val root = JSONObject(raw)
+                val arr = root.optJSONArray("items") ?: JSONArray()
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue
+                        val id = o.optString("id").trim()
+                        val text = o.optString("text").trim()
+                        if (id.isNotBlank() && text.isNotBlank()) {
+                            add(RedeemWinnerLine(id = id, text = text))
+                        }
+                    }
+                }
+            }
+        }.onFailure {
+            AppLog.e("RedeemApi.winners failed", it)
         }
     }
 

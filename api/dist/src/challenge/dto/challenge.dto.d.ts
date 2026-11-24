@@ -4,6 +4,7 @@ export declare class ChallengeRulesDto {
     requireQuiz: boolean;
     adBonusOptional: boolean;
     adBonusCooldownHours: number;
+    adBonusCooldownMinutes?: number;
     scratchCardsPerDay: number;
     cardExpiresSameDay: boolean;
     firstMilestoneDays: number;
@@ -31,8 +32,8 @@ export declare class MilestoneDto {
 }
 export declare class SaveChallengeDto {
     rules: ChallengeRulesDto;
-    quiz: QuizQuestionDto[];
-    milestones: MilestoneDto[];
+    quiz?: QuizQuestionDto[];
+    milestones?: MilestoneDto[];
 }
 export declare class SubmitQuizDto {
     questionId: string;

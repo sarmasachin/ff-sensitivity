@@ -39,8 +39,8 @@ internal object RedeemDailyAdGate {
             onError(
                 RedeemUiError(
                     code = "REDEEM_AD_NO_ACTIVITY",
-                    title = "Couldn’t show ad",
-                    message = "Restart the app and try again.",
+                    title = "Ad unavailable",
+                    message = "Couldn’t open the ad right now. Please try again.",
                     retryKind = RedeemRetryKind.SCRATCH,
                     retryItemId = retryItemId
                 )

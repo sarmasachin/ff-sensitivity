@@ -25,6 +25,16 @@ object RedeemRepository {
         }
     }
 
+    fun loadWinners(context: Context, cadence: String): Result<List<RedeemWinnerLine>> {
+        val token = UserSessionStore(context).accessToken()
+        if (token.isBlank()) {
+            return Result.failure(
+                ApiException("AUTH_REQUIRED", "Please sign in again.")
+            )
+        }
+        return RedeemApi.winners(token, cadence.trim().ifBlank { "DAILY" })
+    }
+
     fun findInCatalog(context: Context, itemId: String): Result<RedeemCodeItem?> {
         RedeemCatalogCache.get(itemId)?.let { return Result.success(it) }
         return loadCatalog(context).map { payload ->

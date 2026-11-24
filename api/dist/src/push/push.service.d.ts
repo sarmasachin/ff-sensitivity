@@ -18,6 +18,7 @@ export declare class PushService {
             status: import(".prisma/client").$Enums.PushStatus;
             scheduledAt: string | null;
             sentAt: string | null;
+            sentAtMs: number | null;
             delivered: number;
             failed: number;
             createdBy: string;
@@ -35,6 +36,7 @@ export declare class PushService {
             status: import(".prisma/client").$Enums.PushStatus;
             scheduledAt: string | null;
             sentAt: string | null;
+            sentAtMs: number | null;
             delivered: number;
             failed: number;
             createdBy: string;
@@ -52,6 +54,7 @@ export declare class PushService {
             status: import(".prisma/client").$Enums.PushStatus;
             scheduledAt: string | null;
             sentAt: string | null;
+            sentAtMs: number | null;
             delivered: number;
             failed: number;
             createdBy: string;
@@ -70,6 +73,7 @@ export declare class PushService {
             status: import(".prisma/client").$Enums.PushStatus;
             scheduledAt: string | null;
             sentAt: string | null;
+            sentAtMs: number | null;
             delivered: number;
             failed: number;
             createdBy: string;
@@ -92,6 +96,7 @@ export declare class PushService {
             body: string;
             deepLink: string;
             sentAt: string | null;
+            sentAtMs: number | null;
         }[];
     }>;
     private resolveAudienceTokens;

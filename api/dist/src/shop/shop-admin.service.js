@@ -14,6 +14,7 @@ const common_1 = require("@nestjs/common");
 const app_error_1 = require("../common/errors/app-error");
 const prisma_service_1 = require("../prisma/prisma.service");
 const shop_admin_security_1 = require("./shop-admin.security");
+const shop_purchases_1 = require("./shop-purchases");
 let ShopAdminService = class ShopAdminService {
     prisma;
     constructor(prisma) {
@@ -87,6 +88,9 @@ let ShopAdminService = class ShopAdminService {
         });
         return { ok: true, id };
     }
+    async listPurchases() {
+        return (0, shop_purchases_1.listShopPurchases)(this.prisma);
+    }
     async list() {
         const [rows, cats] = await Promise.all([
             this.prisma.shopItem.findMany({
@@ -112,6 +116,7 @@ let ShopAdminService = class ShopAdminService {
             }),
         ]);
         const labelById = Object.fromEntries(cats.map((c) => [c.id, c.label]));
+        const sold = await this.salesByItemId();
         return {
             categories: cats.map((c) => ({
                 id: c.id,
@@ -128,9 +133,32 @@ let ShopAdminService = class ShopAdminService {
                 enabled: row.enabled,
                 oneTime: row.oneTime,
                 stockLimit: row.stockLimit,
+                stockSold: sold[row.id] ?? 0,
                 rewardTag: row.rewardTag,
             })),
         };
+    }
+    async countItemSales(itemId, db = this.prisma) {
+        return db.walletLedger.count({
+            where: { reason: `shop:${itemId}` },
+        });
+    }
+    async salesByItemId() {
+        const rows = await this.prisma.walletLedger.groupBy({
+            by: ['reason'],
+            where: { reason: { startsWith: 'shop:' } },
+            _count: { _all: true },
+        });
+        const sold = {};
+        for (const row of rows) {
+            const id = row.reason.startsWith('shop:')
+                ? row.reason.slice('shop:'.length)
+                : '';
+            if (!id)
+                continue;
+            sold[id] = row._count._all;
+        }
+        return sold;
     }
     async findPurchaseItem(itemId) {
         const id = (0, shop_admin_security_1.assertShopItemId)(itemId);
@@ -142,6 +170,9 @@ let ShopAdminService = class ShopAdminService {
         });
         return {
             id: row.id,
+            title: row.title,
+            category: row.category,
+            rewardTag: row.rewardTag,
             priceCoins: row.priceCoins,
             oneTime: row.oneTime,
             stockLimit: row.stockLimit,

@@ -39,6 +39,37 @@ object PushInboxSeenStore {
     }
 }
 
+/** Local cleared ids — inbox API has no clear/delete; hide until new campaigns. */
+object PushInboxDismissStore {
+    private const val PREFS = "ff_push_inbox_dismiss_v1"
+    private const val MAX = 300
+
+    private fun keyFor(userId: String): String = "ids_$userId"
+
+    fun ids(context: Context, userId: String): Set<String> {
+        val uid = userId.trim()
+        if (uid.isEmpty()) return emptySet()
+        val raw = context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(keyFor(uid), "")
+            .orEmpty()
+        if (raw.isBlank()) return emptySet()
+        return raw.split('\u001f').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    fun add(context: Context, userId: String, next: Collection<String>) {
+        val uid = userId.trim()
+        val clean = next.map { it.trim() }.filter { it.isNotEmpty() }
+        if (uid.isEmpty() || clean.isEmpty()) return
+        val merged = (ids(context, uid) + clean).toList().takeLast(MAX)
+        context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(keyFor(uid), merged.joinToString("\u001f"))
+            .apply()
+    }
+}
+
 object PushInboxBadge {
     var unread by mutableIntStateOf(0)
         private set

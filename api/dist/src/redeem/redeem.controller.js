@@ -18,6 +18,8 @@ const throttler_1 = require("@nestjs/throttler");
 const user_jwt_auth_guard_1 = require("../user-auth/user-jwt-auth.guard");
 const current_user_decorator_1 = require("../user-auth/current-user.decorator");
 const redeem_service_1 = require("./redeem.service");
+const redeem_comment_dto_1 = require("./dto/redeem-comment.dto");
+const redeem_vote_dto_1 = require("./dto/redeem-vote.dto");
 const redeem_scratch_dto_1 = require("./dto/redeem-scratch.dto");
 let RedeemController = class RedeemController {
     redeem;
@@ -29,6 +31,18 @@ let RedeemController = class RedeemController {
     }
     myClaims(user) {
         return this.redeem.myClaims(user.id);
+    }
+    winners(cadence) {
+        return this.redeem.recentWinners(cadence);
+    }
+    comments(id) {
+        return this.redeem.comments(id);
+    }
+    addComment(user, id, dto) {
+        return this.redeem.addComment(user.id, id, dto.name, dto.text);
+    }
+    vote(user, id, dto) {
+        return this.redeem.vote(user.id, id, dto.worked);
     }
     scratch(user, id, dto) {
         return this.redeem.scratch(user.id, id, dto.attemptKey);
@@ -57,6 +71,42 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], RedeemController.prototype, "myClaims", null);
+__decorate([
+    (0, common_1.Get)('winners'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __param(0, (0, common_1.Query)('cadence')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], RedeemController.prototype, "winners", null);
+__decorate([
+    (0, common_1.Get)(':id/comments'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], RedeemController.prototype, "comments", null);
+__decorate([
+    (0, common_1.Post)(':id/comments'),
+    (0, throttler_1.Throttle)({ default: { limit: 12, ttl: 60_000 } }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, redeem_comment_dto_1.RedeemCommentDto]),
+    __metadata("design:returntype", void 0)
+], RedeemController.prototype, "addComment", null);
+__decorate([
+    (0, common_1.Post)(':id/vote'),
+    (0, throttler_1.Throttle)({ default: { limit: 30, ttl: 60_000 } }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, redeem_vote_dto_1.RedeemVoteDto]),
+    __metadata("design:returntype", void 0)
+], RedeemController.prototype, "vote", null);
 __decorate([
     (0, common_1.Post)(':id/scratch'),
     (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),

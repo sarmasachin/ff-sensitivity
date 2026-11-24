@@ -34,11 +34,13 @@ object CheckInInterstitialAds {
 
     fun preload(context: Context) {
         if (cached != null || loading) return
-        loadIntoCache(context.applicationContext, presentPending = true)
+        CalculateRewardedAds.initialize(context)
+        loadIntoCache(context.applicationContext)
     }
 
-    private fun loadIntoCache(appCtx: Context, presentPending: Boolean) {
+    private fun loadIntoCache(appCtx: Context) {
         loading = true
+        CalculateRewardedAds.initialize(appCtx)
         InterstitialAd.load(
             appCtx,
             BuildConfig.ADMOB_INTERSTITIAL_CHECKIN,
@@ -47,7 +49,8 @@ object CheckInInterstitialAds {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     loading = false
                     val pending = pendingShow
-                    if (presentPending && pending != null) {
+                    if (pending != null) {
+                        // Honor in-flight show() even if load started from preload().
                         pendingShow = null
                         present(
                             pending.activity,
@@ -83,6 +86,7 @@ object CheckInInterstitialAds {
         onNotCompleted: (message: String) -> Unit,
         incompleteMessage: String = "Watch the ad to claim check-in."
     ) {
+        CalculateRewardedAds.initialize(activity)
         val ready = cached
         if (ready != null) {
             cached = null
@@ -94,7 +98,7 @@ object CheckInInterstitialAds {
             return
         }
         pendingShow = PendingShow(activity, onCompleted, onNotCompleted, incompleteMessage)
-        loadIntoCache(activity.applicationContext, presentPending = true)
+        loadIntoCache(activity.applicationContext)
     }
 
     private fun present(

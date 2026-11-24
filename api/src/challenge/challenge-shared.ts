@@ -11,6 +11,7 @@ export const DEFAULT_RULES = {
   requireQuiz: true,
   adBonusOptional: true,
   adBonusCooldownHours: 4,
+  adBonusCooldownMinutes: 240,
   scratchCardsPerDay: 1,
   cardExpiresSameDay: true,
   firstMilestoneDays: 7,
@@ -21,6 +22,9 @@ export const DEFAULT_RULES = {
   quizWrongCoins: -10,
   checkinCoins: 20,
   adBonusCoins: 30,
+  premiumUnlockBestCoins: 100,
+  premiumUnlockProMaxCoins: 200,
+  premiumUnlockOneTapCoins: 150,
 };
 
 export async function ensureChallengeDefaults(prisma: PrismaService) {
@@ -37,6 +41,7 @@ export function mapRules(c: {
   requireQuiz: boolean;
   adBonusOptional: boolean;
   adBonusCooldownHours: number;
+  adBonusCooldownMinutes?: number;
   scratchCardsPerDay: number;
   cardExpiresSameDay: boolean;
   firstMilestoneDays: number;
@@ -46,12 +51,18 @@ export function mapRules(c: {
   quizCorrectCoins: number;
   quizWrongCoins: number;
 }) {
+  const minutes =
+    c.adBonusCooldownMinutes ??
+    Math.max(0, Math.trunc(c.adBonusCooldownHours) * 60);
+  const hours =
+    minutes <= 0 ? 0 : Math.min(168, Math.max(1, Math.ceil(minutes / 60)));
   return {
     missDayResetsStreak: c.missDayResetsStreak,
     requireCheckIn: c.requireCheckIn,
     requireQuiz: c.requireQuiz,
     adBonusOptional: c.adBonusOptional,
-    adBonusCooldownHours: c.adBonusCooldownHours,
+    adBonusCooldownHours: hours,
+    adBonusCooldownMinutes: minutes,
     scratchCardsPerDay: c.scratchCardsPerDay,
     cardExpiresSameDay: c.cardExpiresSameDay,
     firstMilestoneDays: c.firstMilestoneDays,
@@ -69,6 +80,7 @@ export function mapRulesForApp(c: {
   requireQuiz: boolean;
   adBonusOptional: boolean;
   adBonusCooldownHours: number;
+  adBonusCooldownMinutes?: number;
   scratchCardsPerDay: number;
   cardExpiresSameDay: boolean;
   firstMilestoneDays: number;
@@ -93,6 +105,27 @@ export function mapRulesForApp(c: {
     walletCap: c.walletCap,
     dailyEarnCap: c.dailyEarnCap,
   };
+}
+
+/** Resolve ad-bonus cooldown minutes from DTO (minutes preferred). */
+export function resolveAdBonusCooldownMinutes(rules: {
+  adBonusCooldownMinutes?: number;
+  adBonusCooldownHours: number;
+}): number {
+  if (
+    rules.adBonusCooldownMinutes !== undefined &&
+    rules.adBonusCooldownMinutes !== null &&
+    Number.isFinite(rules.adBonusCooldownMinutes)
+  ) {
+    return Math.min(
+      168 * 60,
+      Math.max(0, Math.trunc(rules.adBonusCooldownMinutes)),
+    );
+  }
+  return Math.min(
+    168 * 60,
+    Math.max(0, Math.trunc(rules.adBonusCooldownHours) * 60),
+  );
 }
 
 export function mapQuizAdmin(q: {

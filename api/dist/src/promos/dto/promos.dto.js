@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SavePromosDto = exports.PromoDto = exports.PROMO_PLACEMENTS = void 0;
+exports.ReorderPromosDto = exports.SavePromosDto = exports.PromoDto = exports.PROMO_PLACEMENTS = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
 exports.PROMO_PLACEMENTS = ['HOME_BANNER', 'HOME_STRIP'];
@@ -89,4 +89,15 @@ __decorate([
     (0, class_transformer_1.Type)(() => PromoDto),
     __metadata("design:type", Array)
 ], SavePromosDto.prototype, "promos", void 0);
+class ReorderPromosDto {
+    ids;
+}
+exports.ReorderPromosDto = ReorderPromosDto;
+__decorate([
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ArrayMinSize)(1),
+    (0, class_validator_1.ArrayMaxSize)(40),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], ReorderPromosDto.prototype, "ids", void 0);
 //# sourceMappingURL=promos.dto.js.map

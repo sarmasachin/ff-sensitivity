@@ -3,13 +3,17 @@ import { AnalyticsService } from '../analytics/analytics.service';
 import { RedeemScratchService } from './redeem-scratch.service';
 import { RedeemClaimsService } from './redeem-claims.service';
 import { RedeemCatalogService } from './redeem-catalog.service';
+import { RedeemVoteService } from './redeem-vote.service';
+import { RedeemCommentService } from './redeem-comment.service';
 export declare class RedeemService {
     private readonly prisma;
     private readonly analytics;
     private readonly scratchService;
     private readonly claimsService;
     private readonly catalogService;
-    constructor(prisma: PrismaService, analytics: AnalyticsService, scratchService: RedeemScratchService, claimsService: RedeemClaimsService, catalogService: RedeemCatalogService);
+    private readonly voteService;
+    private readonly commentService;
+    constructor(prisma: PrismaService, analytics: AnalyticsService, scratchService: RedeemScratchService, claimsService: RedeemClaimsService, catalogService: RedeemCatalogService, voteService: RedeemVoteService, commentService: RedeemCommentService);
     catalog(userId: string): Promise<{
         types: {
             id: string;
@@ -22,6 +26,9 @@ export declare class RedeemService {
             windowHours: number;
         }[];
         items: ({
+            yesCount: number;
+            noCount: number;
+            myVote: boolean | null;
             id: string;
             type: string;
             title: string;
@@ -46,7 +53,12 @@ export declare class RedeemService {
             poolLeft: number;
             needsAd: boolean;
             canScratch: boolean;
+            waitUntil: string | null;
+            waitNext: string | null;
         } | {
+            yesCount: number;
+            noCount: number;
+            myVote: boolean | null;
             id: string;
             type: string;
             title: string;
@@ -71,6 +83,8 @@ export declare class RedeemService {
             poolLeft: number | null;
             needsAd: boolean;
             canScratch: boolean;
+            waitUntil: null;
+            waitNext: null;
         })[];
     }>;
     claim(userId: string, redeemCodeId: string): Promise<{
@@ -111,6 +125,35 @@ export declare class RedeemService {
         createdAt: string;
         whenLabel: string;
     }[]>;
+    recentWinners(cadence?: string): Promise<{
+        items: {
+            id: string;
+            displayName: string;
+            prizeLabel: string;
+            cadence: string;
+            text: string;
+            createdAt: string;
+        }[];
+    }>;
+    vote(userId: string, redeemCodeId: string, worked: boolean): Promise<{
+        worked: boolean;
+        yesCount: number;
+        noCount: number;
+    }>;
+    comments(redeemCodeId: string): Promise<{
+        items: {
+            id: string;
+            name: string;
+            text: string;
+            createdAt: string;
+        }[];
+    }>;
+    addComment(userId: string, redeemCodeId: string, name: string, text: string): Promise<{
+        id: string;
+        name: string;
+        text: string;
+        createdAt: string;
+    }>;
     private assertRedeemId;
     private assertCadenceWindow;
 }

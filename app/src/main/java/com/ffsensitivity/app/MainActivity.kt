@@ -59,11 +59,25 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // DEBUG-only: adb … --ez e2e_signed_in true  (menu black-screen QA; never in release)
+        // Optional live JWT via app filesDir (intent extras truncate; /data/local/tmp often unreadable):
+        //   run-as … cp … files/e2e_access_token.txt (+ e2e_user_id.txt / e2e_email.txt)
         if (BuildConfig.DEBUG && intent.getBooleanExtra("e2e_signed_in", false)) {
+            fun e2eFile(name: String): String = runCatching {
+                java.io.File(filesDir, name).takeIf { it.isFile }
+                    ?.readText(Charsets.UTF_8)
+                    ?.trim()
+                    ?.removePrefix("\uFEFF")
+                    .orEmpty()
+            }.getOrDefault("")
+            val e2eToken = e2eFile("e2e_access_token.txt")
+            val e2eUserId = e2eFile("e2e_user_id.txt").ifBlank { "e2e-local" }
+            val e2eEmail = e2eFile("e2e_email.txt").ifBlank { "e2e@test.local" }
+            SessionExpiry.reset()
             UserSessionStore(this).signInLocal(
                 displayName = "E2E Tester",
-                email = "e2e@test.local",
-                userId = "e2e-local"
+                email = e2eEmail,
+                userId = e2eUserId,
+                accessToken = e2eToken,
             )
         }
         capturePushDeepLink(intent)
@@ -107,7 +121,10 @@ class MainActivity : ComponentActivity() {
                 // during a graph swap would wrongly show the bottom bar on login.
                 val route = backStack?.destination?.route.orEmpty()
                 val showBottomBar =
-                    route == "home" || route == "redeem" || route == "stylish"
+                    route == "home" ||
+                        route == "redeem" ||
+                        route == "stylish" ||
+                        route == "sensi_pro"
                 val versionCode = remember {
                     runCatching {
                         if (Build.VERSION.SDK_INT >= 28) {
@@ -173,12 +190,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 fun goHome() {
-                    runCatching {
-                        navController.navigate("home") {
-                            popUpTo("home") { inclusive = true }
-                            launchSingleTop = true
-                        }
-                    }.onFailure { AppLog.e("Navigate home failed", it) }
+                    navController.navigateToHomeSafe()
                 }
 
                 fun goLogin() {
@@ -350,11 +362,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun capturePushDeepLink(intent: Intent?) {
-        val link = intent?.getStringExtra(FfFirebaseMessagingService.EXTRA_DEEP_LINK)
+        if (intent == null) return
+        val link = intent.getStringExtra(FfFirebaseMessagingService.EXTRA_DEEP_LINK)
             ?.trim()
             .orEmpty()
         if (link.isNotEmpty()) {
             PushDeepLinkBus.offer(link)
+            // Prevent rotation / recreate from re-opening Redeem and fighting Home.
+            intent.removeExtra(FfFirebaseMessagingService.EXTRA_DEEP_LINK)
         }
     }
 

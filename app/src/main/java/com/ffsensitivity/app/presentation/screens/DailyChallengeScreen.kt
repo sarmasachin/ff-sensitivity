@@ -26,6 +26,7 @@ import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.isAuthFailure
 import com.ffsensitivity.app.data.remote.ChallengeRepository
 import com.ffsensitivity.app.data.remote.EconomyRepository
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
 import com.ffsensitivity.app.presentation.components.InlineErrorBanner
 import com.ffsensitivity.app.util.AppLog
@@ -115,7 +116,7 @@ fun DailyChallengeScreen(
                         ChallengeUiError(
                             code = "AUTH_REQUIRED",
                             title = "Sign in required",
-                            message = authErr.message,
+                            message = authErr.userMessage("Please sign in again."),
                             retryKind = ChallengeRetryKind.SIGN_IN
                         )
                     )
@@ -138,9 +139,10 @@ fun DailyChallengeScreen(
                     showError(
                         ChallengeUiError(
                             code = "CHALLENGE_SYNC_FAILED",
-                            title = "Challenge sync failed",
-                            message = (challengeErr as? ApiException)?.message
-                                ?: "Could not load today’s challenge. Try again.",
+                            title = "Challenge unavailable",
+                            message = challengeErr.userMessage(
+                                "Could not load today’s challenge. Try again."
+                            ),
                             retryKind = ChallengeRetryKind.REFRESH_SNAPSHOT
                         )
                     )
@@ -151,9 +153,8 @@ fun DailyChallengeScreen(
                     showError(
                         ChallengeUiError(
                             code = "CHALLENGE_WALLET_FAILED",
-                            title = "Wallet sync failed",
-                            message = (walletErr as? ApiException)?.message
-                                ?: "Coins may be outdated. Try again.",
+                            title = "Coins unavailable",
+                            message = walletErr.userMessage("Could not update your coins. Try again."),
                             retryKind = ChallengeRetryKind.REFRESH_SNAPSHOT
                         )
                     )

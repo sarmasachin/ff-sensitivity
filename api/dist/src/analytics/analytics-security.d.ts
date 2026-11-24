@@ -1,5 +1,5 @@
 export declare const OPEN_EVENT_NAMES: readonly ["app_open", "home_open"];
-export declare const ALLOWED_EVENT_NAMES: readonly ["app_open", "home_open", "screen_session", "logout", "redeem_claim", "scratch_roll", "challenge_quiz_submit"];
+export declare const ALLOWED_EVENT_NAMES: readonly ["app_open", "home_open", "screen_session", "login", "logout", "redeem_claim", "scratch_roll", "challenge_quiz_submit"];
 export declare const CLIENT_EVENT_NAMES: readonly ["app_open", "home_open", "screen_session"];
 export type AllowedEventName = (typeof ALLOWED_EVENT_NAMES)[number];
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];

@@ -35,6 +35,7 @@ export declare class DevicesService {
             coinBalance: number;
             note: string;
         }[];
+        stats: import("./devices-desk").DeviceDeskStats;
     }>;
     private assertCanMutate;
     private loadOrThrow;

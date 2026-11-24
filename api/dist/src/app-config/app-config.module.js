@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const auth_module_1 = require("../auth/auth.module");
 const app_config_admin_controller_1 = require("./app-config-admin.controller");
 const app_config_ads_admin_controller_1 = require("./app-config-ads-admin.controller");
+const app_config_promax_admin_controller_1 = require("./app-config-promax-admin.controller");
 const app_config_controller_1 = require("./app-config.controller");
 const app_config_module_guard_1 = require("./app-config-module.guard");
 const app_config_service_1 = require("./app-config.service");
@@ -24,8 +25,10 @@ exports.AppConfigModule = AppConfigModule = __decorate([
             app_config_controller_1.AppConfigController,
             app_config_admin_controller_1.AppConfigAdminController,
             app_config_ads_admin_controller_1.AppConfigAdsAdminController,
+            app_config_promax_admin_controller_1.AppConfigProMaxAdminController,
         ],
         providers: [app_config_service_1.AppConfigService, app_config_module_guard_1.AppConfigModuleGuard],
+        exports: [app_config_service_1.AppConfigService],
     })
 ], AppConfigModule);
 //# sourceMappingURL=app-config.module.js.map

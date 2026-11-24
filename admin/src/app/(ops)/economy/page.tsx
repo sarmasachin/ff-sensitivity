@@ -7,6 +7,7 @@ import { EconomyCapabilities } from "@/components/economy/EconomyCapabilities";
 import { EconomyEarnPanel } from "@/components/economy/EconomyEarnPanel";
 import { EconomyHeader } from "@/components/economy/EconomyHeader";
 import { EconomyLimitsPanel } from "@/components/economy/EconomyLimitsPanel";
+import { EconomyPremiumUnlockPanel } from "@/components/economy/EconomyPremiumUnlockPanel";
 import { EconomyStats } from "@/components/economy/EconomyStats";
 import {
   fetchEconomyConfig,
@@ -78,7 +79,9 @@ export default function EconomyPage() {
       const cfg = await saveEconomyConfig(parsed);
       setSaved(cfg);
       setForm(configToForm(cfg));
-      setNotice("Economy saved. The app uses these rates on the next earn.");
+      setNotice(
+        "Economy saved. Earn rates + Premium unlock prices apply on the next app request.",
+      );
     } catch (err: unknown) {
       setError(err instanceof ApiClientError ? err.message : "Could not save economy.");
     } finally {
@@ -130,6 +133,14 @@ export default function EconomyPage() {
         }}
       />
       <EconomyLimitsPanel
+        values={form}
+        onChange={(next) => {
+          setForm(next);
+          setError(null);
+          setNotice(null);
+        }}
+      />
+      <EconomyPremiumUnlockPanel
         values={form}
         onChange={(next) => {
           setForm(next);

@@ -12,6 +12,7 @@ object DeviceInfoFetcher {
 
     private const val PKG_FF = "com.dts.freefireth"
     private const val PKG_FF_MAX = "com.dts.freefiremax"
+    private const val PKG_FF_INDIA = "com.dts.freefireind"
 
     fun fetch(context: Context): DeviceInfo {
         val appContext = context.applicationContext
@@ -91,6 +92,7 @@ object DeviceInfoFetcher {
         val gyro = hasGyro(appContext)
         val ff = isPackageInstalled(appContext, PKG_FF)
         val ffMax = isPackageInstalled(appContext, PKG_FF_MAX)
+        val ffIndia = isPackageInstalled(appContext, PKG_FF_INDIA)
 
         return DeviceInfo(
             brand = brand,
@@ -152,6 +154,7 @@ object DeviceInfoFetcher {
             gyroAvailable = gyro,
             freeFireInstalled = ff,
             freeFireMaxInstalled = ffMax,
+            freeFireIndiaInstalled = ffIndia,
             batteryHealthPercent = batteryHealth.percent,
             batteryHealthLabel = batteryHealth.label,
             batteryHealthStatusLabel = batteryHealth.statusLabel,

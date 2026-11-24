@@ -17,6 +17,7 @@ export declare class WalletsAdminController {
             lastTxnHoursAgo: number;
             note: string;
         }[];
+        stats: import("./wallets-desk").WalletDeskStats;
     }>;
     ledger(): Promise<{
         ledger: {

@@ -16,6 +16,8 @@ const scratch_admin_controller_1 = require("./scratch-admin.controller");
 const scratch_controller_1 = require("./scratch.controller");
 const scratch_module_guard_1 = require("./scratch-module.guard");
 const scratch_service_1 = require("./scratch.service");
+const scratch_admin_prizes_service_1 = require("./scratch-admin-prizes.service");
+const scratch_user_service_1 = require("./scratch-user.service");
 let ScratchModule = class ScratchModule {
 };
 exports.ScratchModule = ScratchModule;
@@ -23,7 +25,12 @@ exports.ScratchModule = ScratchModule = __decorate([
     (0, common_1.Module)({
         imports: [auth_module_1.AuthModule, economy_module_1.EconomyModule, redeem_module_1.RedeemModule, analytics_module_1.AnalyticsModule],
         controllers: [scratch_controller_1.ScratchController, scratch_admin_controller_1.ScratchAdminController],
-        providers: [scratch_service_1.ScratchService, scratch_module_guard_1.ScratchModuleGuard],
+        providers: [
+            scratch_service_1.ScratchService,
+            scratch_admin_prizes_service_1.ScratchAdminPrizesService,
+            scratch_user_service_1.ScratchUserService,
+            scratch_module_guard_1.ScratchModuleGuard,
+        ],
     })
 ], ScratchModule);
 //# sourceMappingURL=scratch.module.js.map

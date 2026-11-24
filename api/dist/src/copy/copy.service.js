@@ -84,7 +84,14 @@ let CopyService = class CopyService {
         return this.toBundle(await this.ensureDefaults());
     }
     async publicLive() {
-        return this.toBundle(await this.ensureDefaults());
+        const bundle = this.toBundle(await this.ensureDefaults());
+        return {
+            ...bundle,
+            share: {
+                ...bundle.share,
+                footerLine: (0, copy_security_1.shareLinkForApp)(bundle.share.footerLine),
+            },
+        };
     }
     normalizePayload(dto) {
         const rateTitle = (0, copy_security_1.sanitizeCopyText)(dto.rate.title, 120);

@@ -89,7 +89,7 @@ export function OpsSidebar({
     if (item.href === "/push") {
       return canSeeModule("push", role, allowedModules);
     }
-    if (item.href === "/app") {
+    if (item.href === "/ads" || item.href === "/promax" || item.href === "/app") {
       return canSeeModule("app", role, allowedModules);
     }
     if (item.href === "/devices") {

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { UserJwtAuthGuard } from '../user-auth/user-jwt-auth.guard';
 import { CurrentUser } from '../user-auth/current-user.decorator';
@@ -27,6 +35,12 @@ export class RedeemController {
     return this.redeem.myClaims(user.id);
   }
   // --- End: Claims live wire (Sachin) ---
+
+  @Get('winners')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  winners(@Query('cadence') cadence?: string) {
+    return this.redeem.recentWinners(cadence);
+  }
 
   @Get(':id/comments')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })

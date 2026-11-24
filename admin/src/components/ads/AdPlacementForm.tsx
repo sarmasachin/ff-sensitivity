@@ -53,22 +53,25 @@ export function AdPlacementForm({
 
       <div className="mt-3 grid flex-1 gap-3">
         <label className={labelClass}>
-          Cooldown (hours)
+          Cooldown (minutes)
           <input
             type="number"
             min={0}
-            max={168}
+            max={10080}
             disabled={readOnly || !value.enabled}
             className={`${fieldClass} tabular-nums`}
-            value={value.cooldownHours}
-            onChange={(e) =>
-              patch({
-                cooldownHours: Math.trunc(Number(e.target.value) || 0),
-              })
-            }
+            value={value.cooldownMinutes}
+            onChange={(e) => {
+              const cooldownMinutes = Math.trunc(Number(e.target.value) || 0);
+              const hours =
+                cooldownMinutes <= 0
+                  ? 0
+                  : Math.min(168, Math.max(1, Math.ceil(cooldownMinutes / 60)));
+              patch({ cooldownMinutes, cooldownHours: hours });
+            }}
           />
           <span className="mt-1 block text-[10px] font-normal text-slate-400">
-            0 = every time · max 168
+            Minutes until this ad can show again · 0 = every time · max 10080 (7d)
           </span>
         </label>
 

@@ -1,12 +1,11 @@
 import { PrismaService } from '../prisma/prisma.service';
-import type { NamesPolicyDto, SaveNamesDto } from './dto/names.dto';
+import type { SaveNamesDto } from './dto/names.dto';
 export declare class NamesService {
     private readonly prisma;
     constructor(prisma: PrismaService);
     ensureDefaults(): Promise<void>;
-    private mapPolicy;
     adminGetBundle(): Promise<{
-        policy: NamesPolicyDto;
+        policy: import("./dto/names.dto").NamesPolicyDto;
         frames: {
             id: string;
             label: string;
@@ -23,7 +22,7 @@ export declare class NamesService {
         }[];
     }>;
     adminSave(adminId: string, dto: SaveNamesDto): Promise<{
-        policy: NamesPolicyDto;
+        policy: import("./dto/names.dto").NamesPolicyDto;
         frames: {
             id: string;
             label: string;

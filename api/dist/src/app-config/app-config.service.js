@@ -14,6 +14,7 @@ const common_1 = require("@nestjs/common");
 const app_error_1 = require("../common/errors/app-error");
 const prisma_service_1 = require("../prisma/prisma.service");
 const app_config_ads_1 = require("./app-config-ads");
+const app_config_promax_1 = require("./app-config-promax");
 const app_config_security_1 = require("./app-config-security");
 const CONFIG_ID = 1;
 let AppConfigService = class AppConfigService {
@@ -61,6 +62,7 @@ let AppConfigService = class AppConfigService {
                 featuresJson: d.features,
                 navigationJson: d.navigation,
                 adsJson: app_config_ads_1.DEFAULT_ADS_CONFIG,
+                promaxJson: app_config_promax_1.DEFAULT_PROMAX_CONFIG,
                 playStoreUrl: d.links.playStoreUrl,
                 privacyUrl: d.links.privacyUrl,
                 websiteUrl: d.links.websiteUrl,
@@ -96,6 +98,31 @@ let AppConfigService = class AppConfigService {
             },
         });
         return (0, app_config_ads_1.normalizeAdsConfig)(row.adsJson);
+    }
+    async adminGetProMax() {
+        const row = await this.ensureDefaults();
+        return (0, app_config_promax_1.normalizeProMaxConfig)(row.promaxJson);
+    }
+    async publicProMaxShareConflict() {
+        const row = await this.ensureDefaults();
+        return (0, app_config_promax_1.normalizeProMaxConfig)(row.promaxJson).shareConflict;
+    }
+    async adminSaveProMax(adminId, dto) {
+        await this.ensureDefaults();
+        const promax = (0, app_config_promax_1.assertProMaxConfigForSave)(dto);
+        const row = await this.prisma.appConfig.update({
+            where: { id: CONFIG_ID },
+            data: { promaxJson: promax },
+        });
+        await this.prisma.auditLog.create({
+            data: {
+                actorAdminId: adminId,
+                action: 'app.promax_save',
+                entity: 'app_config',
+                afterJson: promax,
+            },
+        });
+        return (0, app_config_promax_1.normalizeProMaxConfig)(row.promaxJson);
     }
     async adminSave(adminId, dto) {
         await this.ensureDefaults();

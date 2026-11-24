@@ -14,3 +14,6 @@ export declare class PromoDto {
 export declare class SavePromosDto {
     promos: PromoDto[];
 }
+export declare class ReorderPromosDto {
+    ids: string[];
+}

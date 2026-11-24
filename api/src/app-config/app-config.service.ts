@@ -10,6 +10,12 @@ import {
   normalizeAdsConfig,
 } from './app-config-ads';
 import {
+  assertProMaxConfigForSave,
+  DEFAULT_PROMAX_CONFIG,
+  normalizeProMaxConfig,
+} from './app-config-promax';
+import type { SaveProMaxConfigDto } from './dto/promax-config.dto';
+import {
   APP_FEATURE_KEYS,
   APP_NAV_KEYS,
   DEFAULT_APP_CONFIG,
@@ -31,6 +37,7 @@ type AppConfigRow = {
   featuresJson: Prisma.JsonValue;
   navigationJson: Prisma.JsonValue;
   adsJson: Prisma.JsonValue;
+  promaxJson: Prisma.JsonValue;
   playStoreUrl: string;
   privacyUrl: string;
   websiteUrl: string;
@@ -87,6 +94,7 @@ export class AppConfigService {
         featuresJson: d.features,
         navigationJson: d.navigation,
         adsJson: DEFAULT_ADS_CONFIG,
+        promaxJson: DEFAULT_PROMAX_CONFIG,
         playStoreUrl: d.links.playStoreUrl,
         privacyUrl: d.links.privacyUrl,
         websiteUrl: d.links.websiteUrl,
@@ -127,6 +135,35 @@ export class AppConfigService {
       },
     });
     return normalizeAdsConfig(row.adsJson);
+  }
+
+  async adminGetProMax() {
+    const row = await this.ensureDefaults();
+    return normalizeProMaxConfig(row.promaxJson);
+  }
+
+  /** Live knobs for ProMax crowd dampen (attached to promax-offset). */
+  async publicProMaxShareConflict() {
+    const row = await this.ensureDefaults();
+    return normalizeProMaxConfig(row.promaxJson).shareConflict;
+  }
+
+  async adminSaveProMax(adminId: string, dto: SaveProMaxConfigDto) {
+    await this.ensureDefaults();
+    const promax = assertProMaxConfigForSave(dto);
+    const row = await this.prisma.appConfig.update({
+      where: { id: CONFIG_ID },
+      data: { promaxJson: promax },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorAdminId: adminId,
+        action: 'app.promax_save',
+        entity: 'app_config',
+        afterJson: promax as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return normalizeProMaxConfig(row.promaxJson);
   }
 
   async adminSave(adminId: string, dto: SaveAppConfigDto) {

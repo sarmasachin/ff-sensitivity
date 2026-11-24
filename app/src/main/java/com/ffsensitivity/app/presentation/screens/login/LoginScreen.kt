@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ffsensitivity.app.BuildConfig
 import com.ffsensitivity.app.data.AppLinks
 import com.ffsensitivity.app.data.GoogleAuthClient
 import com.ffsensitivity.app.data.GoogleSignInOutcome
@@ -40,6 +39,7 @@ import com.ffsensitivity.app.data.GoogleSignInResult
 import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.NestUserSession
 import com.ffsensitivity.app.data.remote.UserAuthApi
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.presentation.theme.Amber
 import com.ffsensitivity.app.presentation.theme.Danger
 import com.ffsensitivity.app.presentation.theme.InkMuted
@@ -202,10 +202,12 @@ fun LoginScreen(
                                                     is ApiException -> when (err.code) {
                                                         "RATE_LIMITED" ->
                                                             "Too many login attempts. Wait a minute and try again."
-                                                        "AUTH_GOOGLE_INVALID" -> err.message
+                                                        "AUTH_GOOGLE_INVALID" ->
+                                                            err.userMessage("Google sign-in failed. Please try again.")
                                                         "AUTH_SUSPENDED" ->
                                                             "This account is suspended. Contact support if you think this is a mistake."
-                                                        else -> err.message
+                                                        else ->
+                                                            err.userMessage("Couldn't sign in right now. Please try again.")
                                                     }
                                                     is java.net.ConnectException,
                                                     is java.net.SocketTimeoutException,
@@ -213,12 +215,8 @@ fun LoginScreen(
                                                         "Can't reach the server. Check your connection and try again."
                                                     is java.io.IOException ->
                                                         "Can't reach the server. Check your connection and try again."
-                                                    // Google succeeded; the API exchange is what failed.
-                                                    else -> if (BuildConfig.DEBUG) {
-                                                        "Signed in with Google, but the server call failed.\n[debug] ${err.javaClass.simpleName}: ${err.message?.take(240)}"
-                                                    } else {
+                                                    else ->
                                                         "Couldn't sign in right now. Please try again."
-                                                    }
                                                 }
                                             }
                                         )

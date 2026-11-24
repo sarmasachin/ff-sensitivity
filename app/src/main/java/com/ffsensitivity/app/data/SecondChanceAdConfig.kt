@@ -1,7 +1,7 @@
 package com.ffsensitivity.app.data
 
 /**
- * Remote Quiz second-chance rewarded gate
+ * Remote second-chance quiz ad gate
  * (GET /api/v1/app/config → ads.secondChance).
  */
 object SecondChanceAdConfig {
@@ -13,7 +13,7 @@ object SecondChanceAdConfig {
         private set
 
     @Volatile
-    var cooldownHours: Int = 0
+    var cooldownMinutes: Int = 0
         private set
 
     @Volatile
@@ -26,12 +26,12 @@ object SecondChanceAdConfig {
 
     fun apply(
         enabled: Boolean,
-        cooldownHours: Int,
+        cooldownMinutes: Int,
         incompleteMessage: String,
         buttonLabel: String
     ) {
         this.enabled = enabled
-        this.cooldownHours = cooldownHours.coerceIn(0, 168)
+        this.cooldownMinutes = cooldownMinutes.coerceIn(0, 168 * 60)
         this.incompleteMessage =
             incompleteMessage.trim().ifBlank { DEFAULT_INCOMPLETE }.take(200)
         this.buttonLabel =
@@ -39,5 +39,5 @@ object SecondChanceAdConfig {
     }
 
     fun cooldownWindowMs(): Long =
-        cooldownHours.toLong().coerceAtLeast(0L) * 60L * 60L * 1000L
+        cooldownMinutes.toLong().coerceAtLeast(0L) * 60L * 1000L
 }

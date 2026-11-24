@@ -129,6 +129,7 @@ __decorate([
     __metadata("design:type", NamesPolicyDto)
 ], SaveNamesDto.prototype, "policy", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.ArrayMinSize)(0),
     (0, class_validator_1.ArrayMaxSize)(80),
@@ -137,6 +138,7 @@ __decorate([
     __metadata("design:type", Array)
 ], SaveNamesDto.prototype, "frames", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.ArrayMinSize)(1),
     (0, class_validator_1.ArrayMaxSize)(20),

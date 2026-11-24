@@ -2,6 +2,7 @@
 
 export function adsBody(opts?: {
   calculate?: Record<string, unknown>;
+  premium?: Record<string, unknown>;
   dpi?: Record<string, unknown>;
   quiz?: Record<string, unknown>;
   secondChance?: Record<string, unknown>;
@@ -16,6 +17,14 @@ export function adsBody(opts?: {
       incompleteMessage: 'Watch the full ad to see your settings.',
       buttonLabel: 'Calculate Best Pro Settings \u00b7 Watch Ad',
       ...(opts?.calculate ?? {}),
+    },
+    premium: {
+      enabled: true,
+      cooldownHours: 24,
+      incompleteMessage:
+        'Watch the full ad to unlock Premium Pro settings.',
+      buttonLabel: 'Premium Pro Settings \u00b7 Watch Ad',
+      ...(opts?.premium ?? {}),
     },
     dpi: {
       enabled: true,

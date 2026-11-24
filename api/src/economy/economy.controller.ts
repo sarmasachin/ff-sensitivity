@@ -4,7 +4,11 @@ import { UserJwtAuthGuard } from '../user-auth/user-jwt-auth.guard';
 import { CurrentUser } from '../user-auth/current-user.decorator';
 import type { AuthUser } from '../user-auth/current-user.decorator';
 import { EconomyService } from './economy.service';
-import { ChallengeEarnDto, ShopPurchaseDto } from './dto/economy.dto';
+import {
+  ChallengeEarnDto,
+  PremiumUnlockDto,
+  ShopPurchaseDto,
+} from './dto/economy.dto';
 
 // --- Start: Economy live wire (Sachin) ---
 @Controller('api/v1/economy')
@@ -31,6 +35,27 @@ export class EconomyController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   purchase(@CurrentUser() user: AuthUser, @Body() dto: ShopPurchaseDto) {
     return this.economy.purchaseShop(user.id, dto.itemId, dto.requestId);
+  }
+
+  /** Admin-set Premium unlock coin prices for app UI. */
+  @Get('premium-unlock-prices')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  premiumUnlockPrices() {
+    return this.economy.getPremiumUnlockPrices();
+  }
+
+  /** Server wallet debit for Premium Sensi unlock (Best / Pro Max / One Tap). */
+  @Post('premium-unlock')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  premiumUnlock(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: PremiumUnlockDto,
+  ) {
+    return this.economy.spendPremiumUnlock(
+      user.id,
+      dto.product,
+      dto.requestId,
+    );
   }
 
   @Get('shop/catalog')

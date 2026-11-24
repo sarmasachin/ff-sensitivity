@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateShopCategoryDto, CreateShopItemDto, UpdateShopCategoryDto, UpdateShopItemDto } from './dto/shop-admin.dto';
 export declare class ShopAdminService {
@@ -35,6 +36,9 @@ export declare class ShopAdminService {
     removeCategory(adminId: string, idRaw: string): Promise<{
         ok: boolean;
         id: string;
+    }>;
+    listPurchases(): Promise<{
+        purchases: import("./shop-purchases").ShopPurchaseRow[];
     }>;
     list(): Promise<{
         items: {
@@ -76,11 +80,17 @@ export declare class ShopAdminService {
             enabled: boolean;
             oneTime: boolean;
             stockLimit: number | null;
+            stockSold: number;
             rewardTag: string;
         }[];
     }>;
+    countItemSales(itemId: string, db?: Prisma.TransactionClient | PrismaService): Promise<number>;
+    private salesByItemId;
     findPurchaseItem(itemId: string): Promise<{
         id: string;
+        title: string;
+        category: string;
+        rewardTag: string;
         priceCoins: number;
         oneTime: boolean;
         stockLimit: number | null;

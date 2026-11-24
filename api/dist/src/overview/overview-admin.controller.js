@@ -18,6 +18,7 @@ const throttler_1 = require("@nestjs/throttler");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const overview_module_guard_1 = require("./overview-module.guard");
 const overview_service_1 = require("./overview.service");
+const overview_desk_1 = require("./overview-desk");
 const overview_series_1 = require("./overview-series");
 let OverviewAdminController = class OverviewAdminController {
     overview;
@@ -29,6 +30,9 @@ let OverviewAdminController = class OverviewAdminController {
     }
     series(range) {
         return this.overview.adminSeries((0, overview_series_1.parseOverviewSeriesRange)(range));
+    }
+    desk(range) {
+        return this.overview.adminDesk((0, overview_desk_1.parseDeskRange)(range));
     }
 };
 exports.OverviewAdminController = OverviewAdminController;
@@ -47,6 +51,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], OverviewAdminController.prototype, "series", null);
+__decorate([
+    (0, common_1.Get)('desk'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __param(0, (0, common_1.Query)('range')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], OverviewAdminController.prototype, "desk", null);
 exports.OverviewAdminController = OverviewAdminController = __decorate([
     (0, common_1.Controller)('api/v1/admin/overview'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, overview_module_guard_1.OverviewModuleGuard),

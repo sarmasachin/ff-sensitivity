@@ -34,11 +34,13 @@ object QuizInterstitialAds {
 
     fun preload(context: Context) {
         if (cached != null || loading) return
-        loadIntoCache(context.applicationContext, presentPending = true)
+        CalculateRewardedAds.initialize(context)
+        loadIntoCache(context.applicationContext)
     }
 
-    private fun loadIntoCache(appCtx: Context, presentPending: Boolean) {
+    private fun loadIntoCache(appCtx: Context) {
         loading = true
+        CalculateRewardedAds.initialize(appCtx)
         InterstitialAd.load(
             appCtx,
             BuildConfig.ADMOB_INTERSTITIAL_QUIZ,
@@ -47,7 +49,7 @@ object QuizInterstitialAds {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     loading = false
                     val pending = pendingShow
-                    if (presentPending && pending != null) {
+                    if (pending != null) {
                         pendingShow = null
                         present(
                             pending.activity,
@@ -83,6 +85,7 @@ object QuizInterstitialAds {
         onNotCompleted: (message: String) -> Unit,
         incompleteMessage: String = "Watch the ad to submit the quiz."
     ) {
+        CalculateRewardedAds.initialize(activity)
         val ready = cached
         if (ready != null) {
             cached = null
@@ -94,7 +97,7 @@ object QuizInterstitialAds {
             return
         }
         pendingShow = PendingShow(activity, onCompleted, onNotCompleted, incompleteMessage)
-        loadIntoCache(activity.applicationContext, presentPending = true)
+        loadIntoCache(activity.applicationContext)
     }
 
     private fun present(

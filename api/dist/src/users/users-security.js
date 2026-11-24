@@ -74,7 +74,9 @@ function formatJoined(d) {
         year: 'numeric',
     });
 }
-function mapAccountStatus(isActive, isRestricted) {
+function mapAccountStatus(isActive, isRestricted, dataDeletedAt) {
+    if (dataDeletedAt)
+        return 'DELETED';
     if (!isActive)
         return 'SUSPENDED';
     if (isRestricted)

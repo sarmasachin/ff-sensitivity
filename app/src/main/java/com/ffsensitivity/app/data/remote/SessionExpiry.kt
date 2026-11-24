@@ -48,6 +48,9 @@ object SessionExpiry {
         // Login/logout own their 401s — don't kick mid Google sign-in or Sign out.
         if (requestPath.contains("/user/auth/google")) return
         if (requestPath.contains("/user/auth/logout")) return
+        // Push/device soft paths can 401 on FCM quirks — don't wipe a valid session.
+        if (requestPath.contains("/push/")) return
+        if (requestPath.contains("/devices/")) return
         notifyExpired()
     }
 
@@ -67,9 +70,13 @@ object SessionExpiry {
         val parts = token.split('.')
         if (parts.size < 2) return true
         val payload = runCatching {
+            // Pad base64url payload — some devices reject unpadded URL_SAFE decode.
+            var b64 = parts[1]
+            val pad = (4 - (b64.length % 4)) % 4
+            if (pad > 0) b64 += "=".repeat(pad)
             val raw = Base64.decode(
-                parts[1],
-                Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+                b64,
+                Base64.URL_SAFE or Base64.NO_WRAP
             )
             JSONObject(String(raw, Charsets.UTF_8))
         }.getOrNull() ?: return true

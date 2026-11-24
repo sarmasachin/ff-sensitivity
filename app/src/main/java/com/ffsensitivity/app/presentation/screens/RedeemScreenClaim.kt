@@ -4,8 +4,8 @@ import android.content.Context
 import com.ffsensitivity.app.data.RedeemCatalogCache
 import com.ffsensitivity.app.data.RedeemCodeItem
 import com.ffsensitivity.app.data.RedeemStatus
-import com.ffsensitivity.app.data.remote.ApiException
 import com.ffsensitivity.app.data.remote.RedeemRepository
+import com.ffsensitivity.app.data.remote.userMessage
 import com.ffsensitivity.app.util.AppLog
 import com.ffsensitivity.app.util.SafeOps
 import kotlinx.coroutines.Dispatchers
@@ -52,10 +52,7 @@ internal object RedeemScreenClaim {
             },
             onFailure = { err ->
                 AppLog.e("Redeem claim failed", err)
-                val message = when (err) {
-                    is ApiException -> err.message
-                    else -> "Couldn't unlock this code. Please try again."
-                }
+                val message = err.userMessage("Couldn't unlock this code. Please try again.")
                 ScratchClaimUiResult(ok = false, message = message)
             }
         )
@@ -112,10 +109,7 @@ internal object RedeemScreenClaim {
             },
             onFailure = { err ->
                 AppLog.e("Redeem scratch failed", err)
-                val message = when (err) {
-                    is ApiException -> err.message
-                    else -> "Couldn't complete scratch. Please try again."
-                }
+                val message = err.userMessage("Couldn't complete scratch. Please try again.")
                 ScratchClaimUiResult(ok = false, message = message)
             }
         )

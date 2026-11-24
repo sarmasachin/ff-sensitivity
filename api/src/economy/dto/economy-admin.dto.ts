@@ -42,6 +42,32 @@ export class EconomyLimitsDto {
   dailyEarnCap!: number;
 }
 
+/** Coin cost + which unlock paths the app shows. */
+export class EconomyPremiumUnlockDto {
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  bestPremium!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  premiumProMax!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  oneTapPremium!: number;
+
+  /** Show “Unlock with coins” in the app dialog. */
+  @IsBoolean()
+  coinUnlockEnabled!: boolean;
+
+  /** Show “Watch ad to unlock” in the app dialog. */
+  @IsBoolean()
+  adUnlockEnabled!: boolean;
+}
+
 export class SaveEconomyDto {
   @ValidateNested()
   @Type(() => EconomyEarnDto)
@@ -50,6 +76,10 @@ export class SaveEconomyDto {
   @ValidateNested()
   @Type(() => EconomyLimitsDto)
   limits!: EconomyLimitsDto;
+
+  @ValidateNested()
+  @Type(() => EconomyPremiumUnlockDto)
+  premiumUnlock!: EconomyPremiumUnlockDto;
 
   @IsBoolean()
   checkInEnabled!: boolean;

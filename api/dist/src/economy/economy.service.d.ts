@@ -1,9 +1,12 @@
 import { PrismaService } from '../prisma/prisma.service';
 import { ShopAdminService } from '../shop/shop-admin.service';
+import { EconomyEarnService } from './economy-earn.service';
+import { type PremiumUnlockProduct } from './premium-unlock-prices';
 export declare class EconomyService {
     private readonly prisma;
     private readonly shop;
-    constructor(prisma: PrismaService, shop: ShopAdminService);
+    private readonly earn;
+    constructor(prisma: PrismaService, shop: ShopAdminService, earn: EconomyEarnService);
     getWallet(userId: string): Promise<{
         coins: number;
         frozen: boolean;
@@ -29,6 +32,7 @@ export declare class EconomyService {
             enabled: boolean;
             oneTime: boolean;
             stockLimit: number | null;
+            stockSold: number;
             rewardTag: string;
         }[];
     }>;
@@ -45,6 +49,25 @@ export declare class EconomyService {
         coins: number;
         itemId: string;
         alreadyApplied: boolean;
+    }>;
+    getPremiumUnlockPrices(): Promise<{
+        best_premium: number;
+        premium_pro_max: number;
+        one_tap_premium: number;
+        coinUnlockEnabled: boolean;
+        adUnlockEnabled: boolean;
+        labels: {
+            best_premium: string;
+            premium_pro_max: string;
+            one_tap_premium: string;
+        };
+    }>;
+    spendPremiumUnlock(userId: string, productRaw: string, requestId: string): Promise<{
+        coins: number;
+        product: PremiumUnlockProduct;
+        cost: number;
+        alreadyApplied: boolean;
+        label: string;
     }>;
     earnQuizGraded(userId: string, correct: boolean, amounts: {
         correctCoins: number;
@@ -69,22 +92,24 @@ export declare class EconomyService {
         displayName: string;
         createdAt: Date;
         updatedAt: Date;
-        streakDays: number;
         googleSub: string;
         photoUrl: string | null;
         coins: number;
+        streakDays: number;
         lastCheckinDay: string | null;
         walletFrozen: boolean;
         walletNote: string;
         isRestricted: boolean;
         accountNote: string;
+        googleName: string;
+        ffUid: string;
+        playRole: string;
+        region: string;
+        notifyPush: boolean;
         tokenVersion: number;
+        dataDeletedAt: Date | null;
+        googleBanned: boolean;
     }>;
-    private earnCheckin;
-    private earnQuiz;
-    private earnAd;
-    private earnMilestone;
-    private applyEarn;
     private requireUser;
     private assertNotFrozen;
 }

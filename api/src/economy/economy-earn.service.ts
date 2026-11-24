@@ -157,7 +157,7 @@ export class EconomyEarnService {
     if (!rates.adBonusEnabled) {
       throw new AppError('ECONOMY_AD_DISABLED', 'Ad bonus is disabled.', 403);
     }
-    const cooldownMs = rates.adBonusCooldownHours * 60 * 60 * 1000;
+    const cooldownMs = Math.max(0, rates.adBonusCooldownMinutes) * 60 * 1000;
     const coins = rates.adBonusCoins;
     const idempotencyKey = `earn:ad:${userId}:${randomUUID()}`;
 

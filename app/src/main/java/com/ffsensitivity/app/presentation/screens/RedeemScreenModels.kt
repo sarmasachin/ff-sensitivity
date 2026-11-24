@@ -1,5 +1,9 @@
 package com.ffsensitivity.app.presentation.screens
 
+import com.ffsensitivity.app.data.remote.ApiException
+import com.ffsensitivity.app.data.remote.isAuthFailure
+import com.ffsensitivity.app.data.remote.userMessage
+
 internal enum class RedeemRetryKind { COMMENTS, SCRATCH, COPY }
 
 internal data class RedeemUiError(
@@ -9,6 +13,25 @@ internal data class RedeemUiError(
     val retryKind: RedeemRetryKind? = null,
     val retryItemId: String? = null
 )
+
+/** Map catalog load failure to UI — never hide AUTH as a fake “connection” error. */
+internal fun redeemCatalogLoadError(error: Throwable?): RedeemUiError {
+    val api = error as? ApiException
+    if (api != null && api.isAuthFailure()) {
+        return RedeemUiError(
+            code = "AUTH_REQUIRED",
+            title = "Sign in required",
+            message = api.userMessage("Session expired. Sign in again to load rewards.")
+        )
+    }
+    return RedeemUiError(
+        code = api?.code ?: "REDEEM_CATALOG_FAILED",
+        title = "Rewards unavailable",
+        message = error?.userMessage(
+            "Could not load rewards. Check your connection and try again."
+        ) ?: "Could not load rewards. Check your connection and try again."
+    )
+}
 
 internal fun maskCode(code: String): String {
     val parts = code.split("-")

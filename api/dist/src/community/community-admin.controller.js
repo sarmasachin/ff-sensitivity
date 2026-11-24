@@ -38,6 +38,12 @@ let CommunityAdminController = class CommunityAdminController {
         }
         return this.community.adminSetStatus(admin.id, id.trim(), dto.status);
     }
+    remove(admin, id) {
+        if (!id?.trim() || id.includes('/') || id.length > 64) {
+            throw new app_error_1.AppError('COMMUNITY_BAD_ID', 'Invalid post id.', 400);
+        }
+        return this.community.adminDeletePost(admin.id, id.trim());
+    }
 };
 exports.CommunityAdminController = CommunityAdminController;
 __decorate([
@@ -66,6 +72,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, community_dto_1.UpdateCommunityStatusDto]),
     __metadata("design:returntype", void 0)
 ], CommunityAdminController.prototype, "setStatus", null);
+__decorate([
+    (0, common_1.Delete)('posts/:id'),
+    (0, throttler_1.Throttle)({ default: { limit: 40, ttl: 60_000 } }),
+    __param(0, (0, current_admin_decorator_1.CurrentAdmin)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], CommunityAdminController.prototype, "remove", null);
 exports.CommunityAdminController = CommunityAdminController = __decorate([
     (0, common_1.Controller)('api/v1/admin/community'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, community_module_guard_1.CommunityModuleGuard),

@@ -2,7 +2,7 @@ package com.ffsensitivity.app.data
 
 import android.content.Context
 
-/** Local unlock window after a shown Redeem Daily interstitial. */
+/** Local unlock window after a shown Redeem Daily interstitial. Minutes from [RedeemDailyAdConfig]. */
 object RedeemDailyAdStore {
     private const val PREFS = "ff_redeem_daily_ad_v1"
     private const val KEY_LAST_SHOWN_MS = "last_interstitial_ms"

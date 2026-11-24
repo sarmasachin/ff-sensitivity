@@ -1,0 +1,44 @@
+import { PrismaService } from '../prisma/prisma.service';
+import { type CommunityPull } from './compare-promax-community';
+import { type FieldAgreement, type PeerFieldOffsets } from './compare-promax-peer-quality';
+export type { FieldAgreement } from './compare-promax-peer-quality';
+export type ProMaxOffsetQuery = {
+    fingers?: string;
+    role?: string;
+    deviceLabel?: string;
+    ramGb?: number;
+    processorBrand?: string;
+    processorType?: string;
+    gpuLabel?: string;
+    gpuVendor?: string;
+    dpiPreference?: string;
+    screenGuard?: string;
+    refreshHz?: number;
+    excludeUserId?: string;
+    engine?: string;
+};
+export type SensitivityOffsets = PeerFieldOffsets;
+export type ProMaxOffsetFrom = 'device_hz_play' | 'device_play' | 'device_family_hz_play' | 'device_family_play' | 'chip_hz_play' | 'chip_play' | 'hw_play' | 'ram_play' | 'hz_play' | 'dpi_guard_play' | 'play' | 'all' | 'none';
+export type ProMaxOffsetResult = {
+    offsetFrom: ProMaxOffsetFrom | `${ProMaxOffsetFrom}_blend`;
+    matchCount: number;
+    confidence: number;
+    averageOffsets: SensitivityOffsets;
+    blendFrom?: ProMaxOffsetFrom;
+    fieldAgreement?: FieldAgreement;
+    community?: CommunityPull;
+};
+type Scored = {
+    name: ProMaxOffsetFrom;
+    n: number;
+    offsets: SensitivityOffsets;
+    confidence: number;
+    fieldAgreement: FieldAgreement;
+};
+export { deviceFamilyKey } from './compare-promax-family';
+export { computeWeightedOffsets, confidenceScale, dedupePeersByUser, feedbackSignConsistent, } from './compare-promax-peer-quality';
+export declare function ramBucket(ramGb: number): number;
+export declare function refreshBucket(hz: number): number;
+export declare function cleanFilter(raw?: string, maxLen?: number): string;
+export declare function blendScored(primary: Scored, secondary: Scored): ProMaxOffsetResult;
+export declare function resolveProMaxOffsets(prisma: PrismaService, query: ProMaxOffsetQuery): Promise<ProMaxOffsetResult>;

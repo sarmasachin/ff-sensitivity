@@ -32,8 +32,11 @@ import com.ffsensitivity.app.data.CheckInAdConfig
 import com.ffsensitivity.app.data.ChallengeQuizTimingConfig
 import com.ffsensitivity.app.data.CheckInAdStore
 import com.ffsensitivity.app.data.DailyChallengeStore
+import com.ffsensitivity.app.data.QuizAdConfig
 import com.ffsensitivity.app.data.QuizAdStore
 import com.ffsensitivity.app.data.QuizUiPhase
+import com.ffsensitivity.app.data.SecondChanceAdConfig
+import com.ffsensitivity.app.data.SecondChanceAdStore
 import com.ffsensitivity.app.data.ShopStore
 import com.ffsensitivity.app.data.remote.ChallengeRemoteCache
 import com.ffsensitivity.app.data.remote.ChallengeRepository
@@ -124,22 +127,44 @@ fun DailyChallengeTodayTab(
         runCatching { onSnapshot(DailyChallengeStore.snapshot(context)) }
     }
 
-    LaunchedEffect(snapshot.adAvailable) {
-        if (snapshot.adAvailable && snapshot.adBonusEnabled) {
-            CalculateRewardedAds.preload(context)
+    LaunchedEffect(snapshot.adAvailable, snapshot.adBonusEnabled) {
+        if (
+            snapshot.adAvailable &&
+            snapshot.adBonusEnabled &&
+            AdBonusAdConfig.enabled
+        ) {
+            CalculateRewardedAds.preload(context, CalculateRewardedAds.Slot.AD_BONUS)
         }
     }
 
-    LaunchedEffect(snapshot.checkedInToday) {
-        if (!snapshot.checkedInToday && CheckInAdStore.needsAd(context)) {
+    LaunchedEffect(snapshot.checkedInToday, checkInAdPassTick) {
+        if (
+            !snapshot.checkedInToday &&
+            CheckInAdConfig.enabled &&
+            CheckInAdStore.needsAd(context)
+        ) {
             CheckInInterstitialAds.preload(context)
         }
     }
 
-    LaunchedEffect(snapshot.quizPhase) {
+    LaunchedEffect(snapshot.quizPhase, quizAdPassTick) {
         if (
             (snapshot.quizPhase == QuizUiPhase.AVAILABLE ||
                 snapshot.quizPhase == QuizUiPhase.OPEN) &&
+            QuizAdConfig.enabled &&
+            QuizAdStore.needsAd(context)
+        ) {
+            QuizInterstitialAds.preload(context)
+        }
+    }
+
+    // Re-warm quiz interstitial when user picks an answer (closer to submit).
+    LaunchedEffect(selectedOption, snapshot.quizPhase) {
+        if (
+            selectedOption >= 0 &&
+            (snapshot.quizPhase == QuizUiPhase.AVAILABLE ||
+                snapshot.quizPhase == QuizUiPhase.OPEN) &&
+            QuizAdConfig.enabled &&
             QuizAdStore.needsAd(context)
         ) {
             QuizInterstitialAds.preload(context)
@@ -154,8 +179,15 @@ fun DailyChallengeTodayTab(
         ) {
             selectedOption = -1
         }
-        if (snapshot.quizPhase == QuizUiPhase.AWAITING_AD) {
-            CalculateRewardedAds.preload(context)
+        if (
+            snapshot.quizPhase == QuizUiPhase.AWAITING_AD &&
+            SecondChanceAdConfig.enabled &&
+            SecondChanceAdStore.needsAd(context)
+        ) {
+            CalculateRewardedAds.preload(
+                context,
+                CalculateRewardedAds.Slot.SECOND_CHANCE
+            )
         }
     }
 
@@ -246,6 +278,41 @@ fun DailyChallengeTodayTab(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
+        val adRemainingMs = remember(snapshot.nextAdAvailableAtMs, adTick) {
+            (snapshot.nextAdAvailableAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
+        }
+        val adAvailable = snapshot.adAvailable
+        ChallengeTaskCard(
+            icon = Icons.Outlined.PlayCircle,
+            title = "Watch Ad Bonus",
+            subtitle = when {
+                !snapshot.adBonusEnabled -> "Ad bonus is turned off"
+                adAvailable -> "Watch a full ad to earn bonus coins"
+                else -> "Next Ad Available in ${formatAdCooldown(adRemainingMs)}"
+            },
+            done = !adAvailable && snapshot.adBonusEnabled,
+            actionLabel = when {
+                !snapshot.adBonusEnabled -> "Unavailable"
+                busy && adAvailable -> "Watch ad…"
+                adAvailable -> AdBonusAdConfig.buttonLabel
+                else -> "On cooldown"
+            },
+            actionEnabled = adAvailable && snapshot.adBonusEnabled && !busy,
+            onAction = {
+                DailyChallengeAdBonusGate.run(
+                    context = context,
+                    activity = context.findActivity(),
+                    busy = busy,
+                    scope = scope,
+                    setBusy = { busy = it },
+                    onClearError = onClearError,
+                    onError = onError,
+                    onSnapshot = onSnapshot
+                )
+            }
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+
         val checkInPlus = runCatching {
             ShopStore.boostCharges(context, ShopStore.ID_BOOST_CHECKIN_PLUS)
         }.getOrDefault(0)
@@ -323,41 +390,6 @@ fun DailyChallengeTodayTab(
             onSnapshot = onSnapshot
         )
         }
-        Spacer(modifier = Modifier.height(14.dp))
-
-        val adRemainingMs = remember(snapshot.nextAdAvailableAtMs, adTick) {
-            (snapshot.nextAdAvailableAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
-        }
-        val adAvailable = snapshot.adAvailable
-        ChallengeTaskCard(
-            icon = Icons.Outlined.PlayCircle,
-            title = "Watch Ad Bonus",
-            subtitle = when {
-                !snapshot.adBonusEnabled -> "Ad bonus is turned off"
-                adAvailable -> "Watch a full ad to earn bonus coins"
-                else -> "Next Ad Available in ${formatAdCooldown(adRemainingMs)}"
-            },
-            done = !adAvailable && snapshot.adBonusEnabled,
-            actionLabel = when {
-                !snapshot.adBonusEnabled -> "Unavailable"
-                busy && adAvailable -> "Watch ad…"
-                adAvailable -> AdBonusAdConfig.buttonLabel
-                else -> "On cooldown"
-            },
-            actionEnabled = adAvailable && snapshot.adBonusEnabled && !busy,
-            onAction = {
-                DailyChallengeAdBonusGate.run(
-                    context = context,
-                    activity = context.findActivity(),
-                    busy = busy,
-                    scope = scope,
-                    setBusy = { busy = it },
-                    onClearError = onClearError,
-                    onError = onError,
-                    onSnapshot = onSnapshot
-                )
-            }
-        )
         Spacer(modifier = Modifier.height(28.dp))
     }
 }

@@ -120,7 +120,10 @@ export class ChallengeUserService {
       }
     }
 
-    const adCooldownMs = Math.max(1, config.adBonusCooldownHours) * 60 * 60 * 1000;
+    const adCooldownMinutes =
+      config.adBonusCooldownMinutes ??
+      Math.max(0, config.adBonusCooldownHours) * 60;
+    const adCooldownMs = Math.max(0, adCooldownMinutes) * 60 * 1000;
     let nextAdAvailableAtMs: number | null = null;
     let adAvailable = !!config.adBonusOptional;
     if (adAvailable && lastAd) {

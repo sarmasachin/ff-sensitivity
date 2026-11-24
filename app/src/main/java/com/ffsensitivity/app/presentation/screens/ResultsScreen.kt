@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.outlined.CompareArrows
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +46,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ffsensitivity.app.data.AppSession
+import com.ffsensitivity.app.data.SensitivityEngineKind
 import com.ffsensitivity.app.engine.FullSettingsResult
 import com.ffsensitivity.app.engine.SensitivityResult
 import com.ffsensitivity.app.presentation.components.AtmosphereScaffold
@@ -89,6 +92,10 @@ fun ResultsScreen(
     }.coerceIn(0, tabs.lastIndex)
     var selectedTab by remember { mutableIntStateOf(unlockedTab) }
     val context = LocalContext.current
+    val engineKind = AppSession.sensitivityEngine
+    val isPremiumPro = engineKind == SensitivityEngineKind.BEST_PREMIUM
+    val isProMax = engineKind == SensitivityEngineKind.PREMIUM_PRO_MAX
+    val isOneTapPremium = engineKind == SensitivityEngineKind.ONE_TAP_PREMIUM
     var actionError by remember { mutableStateOf<ResultsUiError?>(null) }
     var busy by remember { mutableStateOf(false) }
 
@@ -139,13 +146,20 @@ fun ResultsScreen(
         }
         clearError()
         busy = true
-        val ok = runCatching { copySensitivity(context, result) }.getOrElse {
+        val ok = runCatching {
+            copySensitivity(context, result, engineKind)
+        }.getOrElse {
             AppLog.e("Results copy crashed", it)
             false
         }
         busy = false
         if (ok) {
-            SafeOps.toast(context, "Sensitivity copied")
+            val toast = if (isOneTapPremium) {
+                "One Tap Premium · Headshot copied"
+            } else {
+                "Sensitivity copied"
+            }
+            SafeOps.toast(context, toast)
         } else {
             showError(
                 code = "RESULTS_COPY_FAILED",
@@ -194,7 +208,10 @@ fun ResultsScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            ResultsTopBar(onBack = { backSafe() })
+            ResultsTopBar(
+                onBack = { backSafe() },
+                engineKind = engineKind
+            )
 
             actionError?.let { err ->
                 InlineErrorBanner(
@@ -251,11 +268,27 @@ fun ResultsScreen(
                                 general = result.sensitivity.general,
                                 deviceLabel = result.deviceLabel,
                                 hardwareSummary = result.hardwareSummary,
-                                playstyleSummary = result.playstyleSummary
+                                playstyleSummary = result.playstyleSummary,
+                                engineKind = engineKind
                             )
                         }
                         item {
                             SensitivityGrid(result.sensitivity)
+                        }
+                        if (isOneTapPremium) {
+                            item {
+                                OneTapHeadshotPanel(
+                                    general = result.sensitivity.general,
+                                    redDot = result.sensitivity.redDot,
+                                    scope2x = result.sensitivity.scope2x
+                                )
+                            }
+                            item {
+                                OneTapDrillTipsPanel(
+                                    redDot = result.sensitivity.redDot,
+                                    scope2x = result.sensitivity.scope2x
+                                )
+                            }
                         }
                         item {
                             FireButtonCard(percent = result.sensitivity.fireButton)
@@ -267,7 +300,18 @@ fun ResultsScreen(
                             CopySettingsButton(onClick = { copySafe() })
                         }
                         item {
-                            TipCard("Overshoot ho to General -5. Sirf body hit ho to General +5.")
+                            TipCard(
+                                when {
+                                    isProMax ->
+                                        "Pro Max: peers by model/CPU/GPU/RAM. Overshoot → General -3. Body-only → General +3."
+                                    isOneTapPremium ->
+                                        "One Tap: peers + last-compare prior + Red Dot track. Overshoot → General -3. Body-only → Red Dot +3. Prefer Mid DPI."
+                                    isPremiumPro ->
+                                        "Premium Pro: role-tuned values. Overshoot → General -4. Body-only → General +4."
+                                    else ->
+                                        "Overshoot ho to General -5. Sirf body hit ho to General +5."
+                                }
+                            )
                         }
                     }
                     1 -> {
@@ -304,7 +348,11 @@ fun ResultsScreen(
 }
 
 @Composable
-private fun ResultsTopBar(onBack: () -> Unit) {
+private fun ResultsTopBar(
+    onBack: () -> Unit,
+    engineKind: SensitivityEngineKind
+) {
+    val isPaid = engineKind != SensitivityEngineKind.CLASSIC
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -329,17 +377,36 @@ private fun ResultsTopBar(onBack: () -> Unit) {
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "CALCULATED SETTINGS",
+                text = when (engineKind) {
+                    SensitivityEngineKind.PREMIUM_PRO_MAX -> "PRO MAX SETTINGS"
+                    SensitivityEngineKind.ONE_TAP_PREMIUM -> "ONE TAP PREMIUM"
+                    SensitivityEngineKind.BEST_PREMIUM -> "PREMIUM PRO SETTINGS"
+                    SensitivityEngineKind.CLASSIC -> "CALCULATED SETTINGS"
+                },
                 color = Amber,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.8.sp
             )
             Text(
-                text = "Best match for your phone",
+                text = when (engineKind) {
+                    SensitivityEngineKind.PREMIUM_PRO_MAX -> "Peers + community share tuned"
+                    SensitivityEngineKind.ONE_TAP_PREMIUM ->
+                        "Headshot peers + community tuned"
+                    SensitivityEngineKind.BEST_PREMIUM -> "Role-tuned Premium match"
+                    SensitivityEngineKind.CLASSIC -> "Best match for your phone"
+                },
                 color = InkPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold
+            )
+        }
+        if (isPaid) {
+            Icon(
+                imageVector = Icons.Outlined.WorkspacePremium,
+                contentDescription = null,
+                tint = AmberHot,
+                modifier = Modifier.size(22.dp)
             )
         }
     }
@@ -417,8 +484,16 @@ private fun SensitivityHero(
     general: Int,
     deviceLabel: String,
     hardwareSummary: String,
-    playstyleSummary: String
+    playstyleSummary: String,
+    engineKind: SensitivityEngineKind
 ) {
+    val isPaid = engineKind != SensitivityEngineKind.CLASSIC
+    val badge = when (engineKind) {
+        SensitivityEngineKind.PREMIUM_PRO_MAX -> "PRO MAX · DEVICE + CROWD"
+        SensitivityEngineKind.ONE_TAP_PREMIUM -> "ONE TAP PREMIUM · HEADSHOT"
+        SensitivityEngineKind.BEST_PREMIUM -> "PREMIUM PRO · ROLE TUNED"
+        SensitivityEngineKind.CLASSIC -> ""
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -426,15 +501,45 @@ private fun SensitivityHero(
             .background(
                 Brush.linearGradient(
                     listOf(
-                        Amber.copy(alpha = 0.20f),
+                        Amber.copy(alpha = if (isPaid) 0.28f else 0.20f),
                         SurfaceCard,
                         SurfaceLift
                     )
                 )
             )
-            .border(1.dp, Amber.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
+            .border(
+                1.dp,
+                Amber.copy(alpha = if (isPaid) 0.50f else 0.35f),
+                RoundedCornerShape(24.dp)
+            )
             .padding(20.dp)
     ) {
+        if (badge.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Amber.copy(alpha = 0.16f))
+                    .border(1.dp, Amber.copy(alpha = 0.40f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Outlined.WorkspacePremium,
+                    contentDescription = null,
+                    tint = AmberHot,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = badge,
+                    color = AmberHot,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -474,6 +579,10 @@ private fun SensitivityHero(
         Text(text = hardwareSummary, color = InkSecondary, fontSize = 12.sp)
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = playstyleSummary, color = InkMuted, fontSize = 12.sp)
+        if (engineKind == SensitivityEngineKind.PREMIUM_PRO_MAX) {
+            Spacer(modifier = Modifier.height(12.dp))
+            ProMaxTrustBadge()
+        }
     }
 }
 
@@ -734,25 +843,49 @@ private fun TipCard(text: String) {
     }
 }
 
-private fun copySensitivity(context: Context, result: FullSettingsResult): Boolean {
+private fun copySensitivity(
+    context: Context,
+    result: FullSettingsResult,
+    engineKind: SensitivityEngineKind
+): Boolean {
     return runCatching {
         val s = result.sensitivity
-        val text = buildString {
-            appendLine("FF Sensitivity — ${result.deviceLabel}")
-            appendLine("General: ${s.general}")
-            appendLine("Red Dot: ${s.redDot}")
-            appendLine("2x: ${s.scope2x}")
-            appendLine("4x: ${s.scope4x}")
-            appendLine("Sniper: ${s.sniper}")
-            appendLine("Free Look: ${s.freeLook}")
-            appendLine("Fire Button: ${s.fireButton}")
-            appendLine("Playstyle: ${result.playstyleSummary}")
-        }.trim()
+        val oneTap = engineKind == SensitivityEngineKind.ONE_TAP_PREMIUM
+        val text = if (oneTap) {
+            oneTapCopyText(
+                deviceLabel = result.deviceLabel,
+                playstyleSummary = result.playstyleSummary,
+                s = s
+            )
+        } else {
+            buildString {
+                appendLine("FF Sensitivity — ${result.deviceLabel}")
+                appendLine("General: ${s.general}")
+                appendLine("Red Dot: ${s.redDot}")
+                appendLine("2x: ${s.scope2x}")
+                appendLine("4x: ${s.scope4x}")
+                appendLine("Sniper: ${s.sniper}")
+                appendLine("Free Look: ${s.freeLook}")
+                appendLine("Fire Button: ${s.fireButton}")
+                appendLine("Playstyle: ${result.playstyleSummary}")
+            }.trim()
+        }
         if (text.isBlank()) {
             AppLog.w("Results copy blocked: empty text")
             false
         } else {
-            SafeOps.copyText(context, "FF Sensitivity", text)
+            val clipLabel = if (oneTap) ONE_TAP_COPY_LABEL else "FF Sensitivity"
+            // Guard: One Tap clipboard must stay clearly labelled.
+            check(!oneTap || text.startsWith(ONE_TAP_COPY_LABEL)) {
+                "One Tap copy missing headshot label"
+            }
+            val ok = SafeOps.copyText(context, clipLabel, text)
+            if (ok && oneTap) {
+                AppLog.i(
+                    "ONE_TAP_COPY_OK|$ONE_TAP_COPY_LABEL|g=${s.general}|rd=${s.redDot}|delta=${s.redDot - s.general}|apply=1|dpiTip=1|drill=1"
+                )
+            }
+            ok
         }
     }.getOrElse {
         AppLog.e("Results copySensitivity failed", it)

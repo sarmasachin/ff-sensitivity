@@ -88,21 +88,42 @@ function assertTopic(raw) {
 function parseStamp(raw) {
     const m = raw
         .trim()
-        .match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/);
+        .match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
     if (!m) {
         throw new app_error_1.AppError('PUSH_BAD_STAMP', 'Invalid schedule stamp.', 400);
     }
-    const [, y, mo, d, h, mi] = m;
-    const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), 0, 0);
+    const [, y, mo, d, h, mi, sec] = m;
+    const dt = new Date(`${y}-${mo}-${d}T${h}:${mi}:${sec ?? '00'}+05:30`);
     if (!Number.isFinite(dt.getTime())) {
         throw new app_error_1.AppError('PUSH_BAD_STAMP', 'Invalid schedule stamp.', 400);
     }
     return dt;
 }
-function stamp(d) {
+const IST = 'Asia/Kolkata';
+function istPart(d, type) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: IST,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+    }).formatToParts(d);
+    return parts.find((p) => p.type === type)?.value ?? '';
+}
+function stamp(d, withSeconds = false) {
     if (!d)
         return null;
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const y = istPart(d, 'year');
+    const mo = istPart(d, 'month');
+    const day = istPart(d, 'day');
+    const h = istPart(d, 'hour');
+    const mi = istPart(d, 'minute');
+    if (!withSeconds)
+        return `${y}-${mo}-${day} ${h}:${mi}`;
+    const s = istPart(d, 'second');
+    return `${y}-${mo}-${day} ${h}:${mi}:${s}`;
 }
 //# sourceMappingURL=push-security.js.map

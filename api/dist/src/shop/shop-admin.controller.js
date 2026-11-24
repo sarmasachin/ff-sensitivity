@@ -42,6 +42,9 @@ let ShopAdminController = class ShopAdminController {
         this.assertCanMutate(admin);
         return this.shop.removeCategory(admin.id, id);
     }
+    purchases() {
+        return this.shop.listPurchases();
+    }
     list() {
         return this.shop.list();
     }
@@ -99,6 +102,13 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", void 0)
 ], ShopAdminController.prototype, "removeCategory", null);
+__decorate([
+    (0, common_1.Get)('purchases'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], ShopAdminController.prototype, "purchases", null);
 __decorate([
     (0, common_1.Get)(),
     (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),

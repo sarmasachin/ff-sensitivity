@@ -4,6 +4,8 @@ export declare function assertSafeCopyText(text: string, field: string): void;
 export declare function assertSafeFooterLine(raw: string): string;
 export declare function assertAllowedPlaceholders(template: string): void;
 export declare function normalizePlaceholders(template: string): string;
+export declare const PLAY_STORE_SHARE_URL = "https://play.google.com/store/apps/details?id=com.ffsensitivity.app";
+export declare function shareLinkForApp(footerLine: string): string;
 export declare const DEFAULT_COPY_CONFIG: {
     rate: {
         enabled: boolean;

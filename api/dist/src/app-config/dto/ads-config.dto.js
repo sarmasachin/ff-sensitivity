@@ -12,8 +12,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SaveAdsConfigDto = exports.AdPlacementDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
+const app_config_ads_1 = require("../app-config-ads");
 class AdPlacementDto {
     enabled;
+    cooldownMinutes;
     cooldownHours;
     incompleteMessage;
     buttonLabel;
@@ -24,6 +26,14 @@ __decorate([
     __metadata("design:type", Boolean)
 ], AdPlacementDto.prototype, "enabled", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(0),
+    (0, class_validator_1.Max)(app_config_ads_1.MAX_AD_COOLDOWN_MINUTES),
+    __metadata("design:type", Number)
+], AdPlacementDto.prototype, "cooldownMinutes", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
     (0, class_validator_1.Max)(168),
@@ -43,6 +53,7 @@ __decorate([
 ], AdPlacementDto.prototype, "buttonLabel", void 0);
 class SaveAdsConfigDto {
     calculate;
+    premium;
     dpi;
     quiz;
     secondChance;
@@ -56,6 +67,11 @@ __decorate([
     (0, class_transformer_1.Type)(() => AdPlacementDto),
     __metadata("design:type", AdPlacementDto)
 ], SaveAdsConfigDto.prototype, "calculate", void 0);
+__decorate([
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => AdPlacementDto),
+    __metadata("design:type", AdPlacementDto)
+], SaveAdsConfigDto.prototype, "premium", void 0);
 __decorate([
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => AdPlacementDto),

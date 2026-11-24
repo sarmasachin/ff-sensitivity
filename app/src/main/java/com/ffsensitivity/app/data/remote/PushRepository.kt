@@ -115,12 +115,48 @@ object PushRepository {
             return Result.failure(IllegalStateException("Not signed in"))
         }
         return PushApi.getInbox(access).map { list ->
-            PushInboxCache.set(list)
-            PushInboxBadge.recount(context, list)
-            list
+            val visible = filterDismissed(context, list)
+            PushInboxCache.set(visible)
+            PushInboxBadge.recount(context, visible)
+            visible
         }.onFailure {
             AppLog.e("PushRepository.refreshInbox failed", it)
         }
+    }
+
+    /**
+     * Clear all currently visible inbox rows locally (API has no clear endpoint).
+     * Cleared ids stay hidden on later refresh; new campaigns still appear.
+     */
+    fun clearInbox(context: Context): Result<Unit> {
+        return runCatching {
+            val session = UserSessionStore(context)
+            val userId = session.userId().trim()
+            if (userId.isEmpty() || session.accessToken().isBlank()) {
+                throw IllegalStateException("Not signed in")
+            }
+            val current = PushInboxCache.messages
+            val ids = current.map { it.id }.filter { it.isNotBlank() }
+            if (ids.isNotEmpty()) {
+                PushInboxDismissStore.add(context, userId, ids)
+                PushInboxSeenStore.add(context, userId, ids)
+            }
+            PushInboxCache.set(emptyList())
+            PushInboxBadge.clear()
+        }.onFailure {
+            AppLog.e("PushRepository.clearInbox failed", it)
+        }
+    }
+
+    private fun filterDismissed(
+        context: Context,
+        list: List<PushInboxMessage>
+    ): List<PushInboxMessage> {
+        val userId = UserSessionStore(context).userId().trim()
+        if (userId.isEmpty()) return list
+        val dismissed = PushInboxDismissStore.ids(context, userId)
+        if (dismissed.isEmpty()) return list
+        return list.filter { it.id.isBlank() || it.id !in dismissed }
     }
 
     fun routeForDeepLink(deepLink: String): String? =

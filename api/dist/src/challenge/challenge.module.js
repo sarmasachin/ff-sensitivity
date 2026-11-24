@@ -14,6 +14,8 @@ const economy_module_1 = require("../economy/economy.module");
 const challenge_admin_controller_1 = require("./challenge-admin.controller");
 const challenge_controller_1 = require("./challenge.controller");
 const challenge_module_guard_1 = require("./challenge-module.guard");
+const challenge_admin_items_service_1 = require("./challenge-admin-items.service");
+const challenge_user_service_1 = require("./challenge-user.service");
 const challenge_service_1 = require("./challenge.service");
 let ChallengeModule = class ChallengeModule {
 };
@@ -22,8 +24,13 @@ exports.ChallengeModule = ChallengeModule = __decorate([
     (0, common_1.Module)({
         imports: [auth_module_1.AuthModule, economy_module_1.EconomyModule, analytics_module_1.AnalyticsModule],
         controllers: [challenge_controller_1.ChallengeController, challenge_admin_controller_1.ChallengeAdminController],
-        providers: [challenge_service_1.ChallengeService, challenge_module_guard_1.ChallengeModuleGuard],
-        exports: [challenge_service_1.ChallengeService],
+        providers: [
+            challenge_service_1.ChallengeService,
+            challenge_admin_items_service_1.ChallengeAdminItemsService,
+            challenge_user_service_1.ChallengeUserService,
+            challenge_module_guard_1.ChallengeModuleGuard,
+        ],
+        exports: [challenge_service_1.ChallengeService, challenge_user_service_1.ChallengeUserService],
     })
 ], ChallengeModule);
 //# sourceMappingURL=challenge.module.js.map

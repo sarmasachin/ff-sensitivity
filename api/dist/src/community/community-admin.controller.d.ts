@@ -55,4 +55,8 @@ export declare class CommunityAdminController {
         createdAt: string;
         submittedLabel: string;
     }>;
+    remove(admin: AuthAdmin, id: string): Promise<{
+        ok: boolean;
+        id: string;
+    }>;
 }

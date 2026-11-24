@@ -6,4 +6,4 @@ export declare function maskGoogleSub(googleSub: string): string;
 export declare function hoursAgo(from: Date, now?: Date): number;
 export declare function formatWhen(hours: number): string;
 export declare function formatJoined(d: Date): string;
-export declare function mapAccountStatus(isActive: boolean, isRestricted: boolean): 'ACTIVE' | 'RESTRICTED' | 'SUSPENDED';
+export declare function mapAccountStatus(isActive: boolean, isRestricted: boolean, dataDeletedAt?: Date | null): 'ACTIVE' | 'RESTRICTED' | 'SUSPENDED' | 'DELETED';

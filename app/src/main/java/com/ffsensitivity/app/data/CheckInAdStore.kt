@@ -2,7 +2,7 @@ package com.ffsensitivity.app.data
 
 import android.content.Context
 
-/** Local unlock window after a shown Check-in interstitial. Hours from [CheckInAdConfig]. */
+/** Local unlock window after a shown Check-in interstitial. Minutes from [CheckInAdConfig]. */
 object CheckInAdStore {
     private const val PREFS = "ff_checkin_ad_v1"
     private const val KEY_LAST_SHOWN_MS = "last_interstitial_ms"

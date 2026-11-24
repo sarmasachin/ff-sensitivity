@@ -79,6 +79,57 @@ object EconomyRepository {
         }
     }
 
+    fun premiumUnlockPrices(context: Context): Result<EconomyPremiumUnlockPrices> {
+        val token = UserSessionStore(context).accessToken()
+        if (token.isBlank()) {
+            return Result.failure(
+                ApiException("AUTH_REQUIRED", "Please sign in again.")
+            )
+        }
+        return EconomyApi.premiumUnlockPrices(token)
+            .onFailure { AppLog.e("EconomyRepository.premiumUnlockPrices failed", it) }
+    }
+
+    /**
+     * Debit server wallet for Premium Sensi unlock, then sync local coins.
+     * product: best_premium | premium_pro_max | one_tap_premium
+     */
+    fun premiumUnlock(
+        context: Context,
+        product: String,
+        requestId: String
+    ): Result<EconomyPremiumUnlockResult> {
+        val token = UserSessionStore(context).accessToken()
+        if (token.isBlank()) {
+            return Result.failure(
+                ApiException("AUTH_REQUIRED", "Please sign in again to unlock with coins.")
+            )
+        }
+        val safeReq = requestId.trim()
+        if (safeReq.length < 8 || safeReq.length > 80) {
+            return Result.failure(
+                ApiException(
+                    "PREMIUM_UNLOCK_BAD_REQUEST",
+                    "Invalid unlock request. Try again."
+                )
+            )
+        }
+        val safeProduct = product.trim()
+        if (safeProduct.isBlank()) {
+            return Result.failure(
+                ApiException(
+                    "PREMIUM_UNLOCK_BAD_PRODUCT",
+                    "That Premium unlock isn’t available right now."
+                )
+            )
+        }
+        return EconomyApi.premiumUnlock(token, safeProduct, safeReq).map { result ->
+            val note = result.label.ifBlank { "Premium unlock · $safeProduct" }
+            DailyChallengeStore.setCoins(context, result.coins, note)
+            result
+        }.onFailure { AppLog.e("EconomyRepository.premiumUnlock failed", it) }
+    }
+
     private fun earn(
         context: Context,
         kind: String,

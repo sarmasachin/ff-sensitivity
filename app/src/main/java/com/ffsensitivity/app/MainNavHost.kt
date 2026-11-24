@@ -14,25 +14,14 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.ffsensitivity.app.data.AppSession
 import com.ffsensitivity.app.data.UserSessionStore
-import com.ffsensitivity.app.presentation.components.ErrorStateScreen
 import com.ffsensitivity.app.presentation.screens.AboutScreen
-import com.ffsensitivity.app.presentation.screens.CoinShopScreen
-import com.ffsensitivity.app.presentation.screens.CompareSensitivityScreen
 import com.ffsensitivity.app.presentation.screens.ContactScreen
-import com.ffsensitivity.app.presentation.screens.DailyChallengeScreen
-import com.ffsensitivity.app.presentation.screens.DeviceFetchScreen
-import com.ffsensitivity.app.presentation.screens.DpiResultScreen
 import com.ffsensitivity.app.presentation.screens.HomeScreen
 import com.ffsensitivity.app.presentation.screens.PushInboxScreen
 import com.ffsensitivity.app.presentation.screens.RedeemCommentsScreen
 import com.ffsensitivity.app.presentation.screens.RedeemScreen
-import com.ffsensitivity.app.presentation.screens.ResultsScreen
-import com.ffsensitivity.app.presentation.screens.ScratchCardsScreen
-import com.ffsensitivity.app.presentation.screens.ShareSensitivityScreen
 import com.ffsensitivity.app.presentation.screens.StylishNameScreen
-import com.ffsensitivity.app.presentation.screens.WizardScreen
 import com.ffsensitivity.app.presentation.screens.login.LoginScreen
 import com.ffsensitivity.app.push.PushDeepLinkBus
 import com.ffsensitivity.app.util.AppLog
@@ -63,9 +52,10 @@ internal fun MainNavHost(
                 val route =
                     com.ffsensitivity.app.data.remote.PushRepository.routeForDeepLink(deep)
                 if (route != null && sessionStore.isSignedIn()) {
-                    runCatching {
-                        navController.navigate(route) { launchSingleTop = true }
-                    }.onFailure { AppLog.e("Push deep link navigate failed", it) }
+                    navController.navigatePushDeepLink(
+                        route = route,
+                        accessToken = sessionStore.accessToken()
+                    )
                 }
             }
             delay(400)
@@ -154,18 +144,10 @@ internal fun MainNavHost(
                         return@HomeScreen false
                     }
                     runCatching {
-                        when (route) {
-                            "home" -> {
-                                navController.navigate("home") {
-                                    launchSingleTop = true
-                                }
-                            }
-                            else -> {
-                                navController.navigate(route) {
-                                    launchSingleTop = true
-                                }
-                            }
-                        }
+                        navController.navigatePushDeepLink(
+                            route = route,
+                            accessToken = sessionStore.accessToken()
+                        )
                         true
                     }.getOrElse {
                         AppLog.e("Open promo deep link failed route=$route", it)
@@ -210,12 +192,25 @@ internal fun MainNavHost(
                         }
                         "sensi", "hud", "graphics", "dpi" -> {
                             runCatching {
+                                // Classic path — never use Premium engines here.
+                                com.ffsensitivity.app.data.AppSession.clearPremiumSensitivity()
                                 navController.navigate(
                                     "device_fetch/" + feature.id
                                 )
                                 true
                             }.getOrElse {
                                 AppLog.e("Open feature failed", it)
+                                false
+                            }
+                        }
+                        "sensi_pro" -> {
+                            runCatching {
+                                navController.navigate("sensi_pro") {
+                                    launchSingleTop = true
+                                }
+                                true
+                            }.getOrElse {
+                                AppLog.e("Open sensi pro unlock failed", it)
                                 false
                             }
                         }
@@ -348,9 +343,10 @@ internal fun MainNavHost(
                         return@PushInboxScreen false
                     }
                     runCatching {
-                        navController.navigate(route) {
-                            launchSingleTop = true
-                        }
+                        navController.navigatePushDeepLink(
+                            route = route,
+                            accessToken = sessionStore.accessToken()
+                        )
                         true
                     }.getOrElse {
                         AppLog.e("Push inbox open deep link failed", it)
@@ -359,301 +355,11 @@ internal fun MainNavHost(
                 }
             )
         }
-        composable("scratch_cards") {
-            ScratchCardsScreen(
-                contentPadding = padding,
-                onBack = {
-                    runCatching {
-                        navController.popBackStack()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Scratch cards back failed", it)
-                        false
-                    }
-                }
-            )
-        }
-        composable("coin_shop") {
-            CoinShopScreen(
-                contentPadding = padding,
-                onBack = {
-                    runCatching {
-                        navController.popBackStack()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Coin shop back failed", it)
-                        false
-                    }
-                },
-                onRequireSignIn = {
-                    runCatching {
-                        onSessionExpired()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Coin shop session expired nav failed", it)
-                        false
-                    }
-                }
-            )
-        }
-        composable("share_sensi") {
-            ShareSensitivityScreen(
-                contentPadding = padding,
-                onBack = {
-                    runCatching {
-                        navController.popBackStack()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Share sensi back failed", it)
-                        false
-                    }
-                },
-                onRequireSignIn = {
-                    runCatching {
-                        onSessionExpired()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Share sensi session expired nav failed", it)
-                        false
-                    }
-                }
-            )
-        }
-        composable("daily_challenge") {
-            DailyChallengeScreen(
-                contentPadding = padding,
-                onBack = {
-                    runCatching {
-                        navController.popBackStack()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Daily challenge back failed", it)
-                        false
-                    }
-                },
-                onRequireSignIn = {
-                    runCatching {
-                        onSessionExpired()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Daily challenge session expired nav failed", it)
-                        false
-                    }
-                }
-            )
-        }
-        composable(
-            route = "device_fetch/{featureId}",
-            arguments = listOf(
-                navArgument("featureId") { type = NavType.StringType }
-            )
-        ) { entry ->
-            val featureId =
-                entry.arguments?.getString("featureId") ?: "sensi"
-            DeviceFetchScreen(
-                featureId = featureId,
-                contentPadding = padding,
-                onBack = {
-                    runCatching {
-                        navController.popBackStack()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Device fetch back failed", it)
-                        false
-                    }
-                },
-                onConfirm = { device ->
-                    runCatching {
-                        AppSession.deviceInfo = device
-                        AppSession.featureId = featureId
-                        if (featureId == "dpi") {
-                            navController.navigate("dpi_result")
-                        } else {
-                            navController.navigate("wizard")
-                        }
-                        true
-                    }.getOrElse {
-                        AppLog.e("Confirm device failed", it)
-                        false
-                    }
-                }
-            )
-        }
-        composable("wizard") {
-            WizardScreen(
-                contentPadding = padding,
-                onBack = {
-                    runCatching {
-                        navController.popBackStack()
-                        true
-                    }.getOrElse {
-                        AppLog.e("Wizard back failed", it)
-                        false
-                    }
-                },
-                onCalculate = { answers ->
-                    runCatching {
-                        AppSession.wizardAnswers = answers
-                        navController.navigate("results")
-                        true
-                    }.getOrElse {
-                        AppLog.e("Navigate results failed", it)
-                        false
-                    }
-                }
-            )
-        }
-        composable("results") {
-            val device = AppSession.deviceInfo
-            val answers = AppSession.wizardAnswers
-            if (device == null || answers == null) {
-                ErrorStateScreen(
-                    title = "Session expired",
-                    message = "Device scan data is missing. Please start again from Home.",
-                    primaryAction = "Back to Home",
-                    contentPadding = padding,
-                    onPrimary = { goHome() }
-                )
-            } else {
-                val calc = remember(device, answers) {
-                    safeCalculateAll(device, answers)
-                }
-                calc.fold(
-                    onSuccess = { result ->
-                        ResultsScreen(
-                            featureId = AppSession.featureId,
-                            result = result,
-                            contentPadding = padding,
-                            onBack = {
-                                runCatching {
-                                    navController.popBackStack()
-                                    true
-                                }.getOrElse {
-                                    AppLog.e("Results back failed", it)
-                                    false
-                                }
-                            },
-                            onCompareWithFreeFire = {
-                                runCatching {
-                                    navController.navigate("compare_sensi") {
-                                        launchSingleTop = true
-                                    }
-                                    true
-                                }.getOrElse {
-                                    AppLog.e("Open compare failed", it)
-                                    false
-                                }
-                            },
-                            onGoHome = {
-                                runCatching {
-                                    goHome()
-                                    true
-                                }.getOrElse {
-                                    AppLog.e("Results goHome failed", it)
-                                    false
-                                }
-                            }
-                        )
-                    },
-                    onFailure = {
-                        ErrorStateScreen(
-                            title = "Calculation failed",
-                            message = "Could not calculate settings for this device. Please scan again.",
-                            primaryAction = "Back to Home",
-                            contentPadding = padding,
-                            onPrimary = { goHome() },
-                            secondaryAction = "Go back",
-                            onSecondary = {
-                                runCatching { navController.popBackStack() }
-                            }
-                        )
-                    }
-                )
-            }
-        }
-        composable("compare_sensi") {
-            val device = AppSession.deviceInfo
-            val answers = AppSession.wizardAnswers
-            if (device == null || answers == null) {
-                ErrorStateScreen(
-                    title = "Session expired",
-                    message = "Compare needs your calculated settings. Please start again from Home.",
-                    primaryAction = "Back to Home",
-                    contentPadding = padding,
-                    onPrimary = { goHome() }
-                )
-            } else {
-                val calc = remember(device, answers) {
-                    safeCalculateAll(device, answers)
-                }
-                calc.fold(
-                    onSuccess = { result ->
-                        CompareSensitivityScreen(
-                            result = result,
-                            answers = answers,
-                            contentPadding = padding,
-                            onBack = {
-                                runCatching {
-                                    navController.popBackStack()
-                                    true
-                                }.getOrElse {
-                                    AppLog.e("Compare back failed", it)
-                                    false
-                                }
-                            }
-                        )
-                    },
-                    onFailure = {
-                        ErrorStateScreen(
-                            title = "Compare unavailable",
-                            message = "Could not load suggested sensitivity for compare.",
-                            primaryAction = "Back to Home",
-                            contentPadding = padding,
-                            onPrimary = { goHome() }
-                        )
-                    }
-                )
-            }
-        }
-        composable("dpi_result") {
-            val device = AppSession.deviceInfo
-            if (device == null) {
-                ErrorStateScreen(
-                    title = "Session expired",
-                    message = "DPI calculator needs a fresh device scan.",
-                    primaryAction = "Back to Home",
-                    contentPadding = padding,
-                    onPrimary = { goHome() }
-                )
-            } else {
-                val calc = remember(device) { safeCalculateDpi(device) }
-                calc.fold(
-                    onSuccess = { result ->
-                        DpiResultScreen(
-                            result = result,
-                            contentPadding = padding,
-                            onBack = {
-                                runCatching {
-                                    navController.popBackStack()
-                                    true
-                                }.getOrElse {
-                                    AppLog.e("DPI result back failed", it)
-                                    false
-                                }
-                            }
-                        )
-                    },
-                    onFailure = {
-                        ErrorStateScreen(
-                            title = "DPI calculation failed",
-                            message = "Could not calculate safe DPI for this phone. Please scan again.",
-                            primaryAction = "Back to Home",
-                            contentPadding = padding,
-                            onPrimary = { goHome() }
-                        )
-                    }
-                )
-            }
-        }
+        mainNavToolDestinations(
+            navController = navController,
+            padding = padding,
+            onSessionExpired = onSessionExpired,
+            goHome = goHome
+        )
     }
 }

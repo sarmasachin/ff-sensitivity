@@ -16,7 +16,21 @@ export type ChallengeBundle = {
 function normalizeRules(
   rules: Partial<ChallengeRules> | null | undefined,
 ): ChallengeRules {
-  return { ...CHALLENGE_DEFAULT_RULES, ...(rules ?? {}) };
+  const merged = { ...CHALLENGE_DEFAULT_RULES, ...(rules ?? {}) };
+  const minutes =
+    rules?.adBonusCooldownMinutes != null &&
+    Number.isFinite(Number(rules.adBonusCooldownMinutes))
+      ? Math.max(0, Math.min(10080, Math.trunc(Number(rules.adBonusCooldownMinutes))))
+      : Math.max(0, Math.trunc(merged.adBonusCooldownHours) * 60);
+  const hours =
+    minutes <= 0
+      ? 0
+      : Math.min(168, Math.max(1, Math.ceil(minutes / 60)));
+  return {
+    ...merged,
+    adBonusCooldownMinutes: minutes,
+    adBonusCooldownHours: hours || merged.adBonusCooldownHours,
+  };
 }
 
 function normalizeQuiz(quiz: QuizQuestionRow[] | undefined): QuizQuestionRow[] {

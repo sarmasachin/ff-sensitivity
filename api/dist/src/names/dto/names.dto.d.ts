@@ -22,6 +22,6 @@ export declare class NamesPolicyDto {
 }
 export declare class SaveNamesDto {
     policy: NamesPolicyDto;
-    frames: NameFrameDto[];
-    fonts: NameFontDto[];
+    frames?: NameFrameDto[];
+    fonts?: NameFontDto[];
 }

@@ -8,6 +8,10 @@ import {
   ensureChallengeDefaults,
 } from '../challenge/challenge-shared';
 import type { SaveEconomyDto } from './dto/economy-admin.dto';
+import {
+  clampPremiumUnlockCoins,
+  PREMIUM_UNLOCK_DEFAULT_COINS,
+} from './premium-unlock-prices';
 
 @Injectable()
 export class EconomyAdminService {
@@ -28,6 +32,18 @@ export class EconomyAdminService {
     await ensureChallengeDefaults(this.prisma);
     const quizWrong =
       dto.earn.quizWrongCoins === 0 ? 0 : -Math.abs(dto.earn.quizWrongCoins);
+    const best = clampPremiumUnlockCoins(dto.premiumUnlock.bestPremium);
+    const proMax = clampPremiumUnlockCoins(dto.premiumUnlock.premiumProMax);
+    const oneTap = clampPremiumUnlockCoins(dto.premiumUnlock.oneTapPremium);
+    const coinUnlockEnabled = !!dto.premiumUnlock.coinUnlockEnabled;
+    const adUnlockEnabled = !!dto.premiumUnlock.adUnlockEnabled;
+    if (!coinUnlockEnabled && !adUnlockEnabled) {
+      throw new AppError(
+        'ECONOMY_PREMIUM_UNLOCK_PATH',
+        'Enable at least one Premium unlock path (coins or watch ad).',
+        400,
+      );
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.challengeConfig.update({
         where: { id: CONFIG_ID },
@@ -41,6 +57,11 @@ export class EconomyAdminService {
           dailyEarnCap: dto.limits.dailyEarnCap,
           checkInEnabled: dto.checkInEnabled,
           quizEnabled: dto.quizEnabled,
+          premiumUnlockBestCoins: best,
+          premiumUnlockProMaxCoins: proMax,
+          premiumUnlockOneTapCoins: oneTap,
+          premiumUnlockCoinEnabled: coinUnlockEnabled,
+          premiumUnlockAdEnabled: adUnlockEnabled,
         },
       });
       await tx.auditLog.create({
@@ -58,6 +79,11 @@ export class EconomyAdminService {
             checkInEnabled: dto.checkInEnabled,
             quizEnabled: dto.quizEnabled,
             adBonusEnabled: dto.adBonusEnabled,
+            premiumUnlockBestCoins: best,
+            premiumUnlockProMaxCoins: proMax,
+            premiumUnlockOneTapCoins: oneTap,
+            premiumUnlockCoinEnabled: coinUnlockEnabled,
+            premiumUnlockAdEnabled: adUnlockEnabled,
           } as Prisma.InputJsonValue,
         },
       });
@@ -75,6 +101,11 @@ export class EconomyAdminService {
     checkInEnabled: boolean;
     quizEnabled: boolean;
     adBonusOptional: boolean;
+    premiumUnlockBestCoins?: number | null;
+    premiumUnlockProMaxCoins?: number | null;
+    premiumUnlockOneTapCoins?: number | null;
+    premiumUnlockCoinEnabled?: boolean | null;
+    premiumUnlockAdEnabled?: boolean | null;
   }) {
     return {
       earn: {
@@ -86,6 +117,22 @@ export class EconomyAdminService {
       limits: {
         walletCap: row.walletCap,
         dailyEarnCap: row.dailyEarnCap,
+      },
+      premiumUnlock: {
+        bestPremium: clampPremiumUnlockCoins(
+          row.premiumUnlockBestCoins ??
+            PREMIUM_UNLOCK_DEFAULT_COINS.best_premium,
+        ),
+        premiumProMax: clampPremiumUnlockCoins(
+          row.premiumUnlockProMaxCoins ??
+            PREMIUM_UNLOCK_DEFAULT_COINS.premium_pro_max,
+        ),
+        oneTapPremium: clampPremiumUnlockCoins(
+          row.premiumUnlockOneTapCoins ??
+            PREMIUM_UNLOCK_DEFAULT_COINS.one_tap_premium,
+        ),
+        coinUnlockEnabled: row.premiumUnlockCoinEnabled ?? true,
+        adUnlockEnabled: row.premiumUnlockAdEnabled ?? true,
       },
       checkInEnabled: row.checkInEnabled,
       quizEnabled: row.quizEnabled,

@@ -17,6 +17,7 @@ export declare class PushController {
             body: string;
             deepLink: string;
             sentAt: string | null;
+            sentAtMs: number | null;
         }[];
     }>;
 }

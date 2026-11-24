@@ -11,13 +11,22 @@ const common_1 = require("@nestjs/common");
 const users_admin_controller_1 = require("./users-admin.controller");
 const users_module_guard_1 = require("./users-module.guard");
 const users_service_1 = require("./users.service");
+const users_screen_journey_service_1 = require("./users-screen-journey.service");
+const users_activity_feed_service_1 = require("./users-activity-feed.service");
+const users_purge_service_1 = require("./users-purge.service");
 let UsersAdminModule = class UsersAdminModule {
 };
 exports.UsersAdminModule = UsersAdminModule;
 exports.UsersAdminModule = UsersAdminModule = __decorate([
     (0, common_1.Module)({
         controllers: [users_admin_controller_1.UsersAdminController],
-        providers: [users_service_1.UsersService, users_module_guard_1.UsersModuleGuard],
+        providers: [
+            users_service_1.UsersService,
+            users_screen_journey_service_1.UsersScreenJourneyService,
+            users_activity_feed_service_1.UsersActivityFeedService,
+            users_purge_service_1.UsersPurgeService,
+            users_module_guard_1.UsersModuleGuard,
+        ],
     })
 ], UsersAdminModule);
 //# sourceMappingURL=users.module.js.map

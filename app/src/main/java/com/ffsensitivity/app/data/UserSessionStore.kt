@@ -52,6 +52,7 @@ class UserSessionStore(context: Context) {
         userId: String = ""
         // --- End: Users admin live wire (Sachin) ---
     ) {
+        // commit() — startDestination reads prefs in the same onCreate after e2e/Google sign-in.
         prefs.edit()
             .putBoolean(KEY_SIGNED_IN, true)
             .putString(KEY_NAME, displayName.trim())
@@ -63,7 +64,7 @@ class UserSessionStore(context: Context) {
             // --- Start: Users admin live wire (Sachin) ---
             .putString(KEY_USER_ID, userId.trim())
             // --- End: Users admin live wire (Sachin) ---
-            .apply()
+            .commit()
     }
 
     fun signOut() {

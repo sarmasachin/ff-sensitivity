@@ -17,7 +17,7 @@ const common_1 = require("@nestjs/common");
 const throttler_1 = require("@nestjs/throttler");
 const user_jwt_auth_guard_1 = require("../user-auth/user-jwt-auth.guard");
 const current_user_decorator_1 = require("../user-auth/current-user.decorator");
-const scratch_service_1 = require("./scratch.service");
+const scratch_user_service_1 = require("./scratch-user.service");
 let ScratchController = class ScratchController {
     scratch;
     constructor(scratch) {
@@ -25,6 +25,9 @@ let ScratchController = class ScratchController {
     }
     config(user) {
         return this.scratch.userConfig(user.id);
+    }
+    history(user) {
+        return this.scratch.history(user.id);
     }
     roll(user) {
         return this.scratch.userRoll(user.id);
@@ -40,6 +43,14 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], ScratchController.prototype, "config", null);
 __decorate([
+    (0, common_1.Get)('history'),
+    (0, throttler_1.Throttle)({ default: { limit: 60, ttl: 60_000 } }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], ScratchController.prototype, "history", null);
+__decorate([
     (0, common_1.Post)('roll'),
     (0, throttler_1.Throttle)({ default: { limit: 20, ttl: 60_000 } }),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -50,6 +61,6 @@ __decorate([
 exports.ScratchController = ScratchController = __decorate([
     (0, common_1.Controller)('api/v1/scratch'),
     (0, common_1.UseGuards)(user_jwt_auth_guard_1.UserJwtAuthGuard),
-    __metadata("design:paramtypes", [scratch_service_1.ScratchService])
+    __metadata("design:paramtypes", [scratch_user_service_1.ScratchUserService])
 ], ScratchController);
 //# sourceMappingURL=scratch.controller.js.map

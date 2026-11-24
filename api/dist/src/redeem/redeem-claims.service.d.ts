@@ -17,6 +17,16 @@ export declare class RedeemClaimsService {
         createdAt: string;
         whenLabel: string;
     }[]>;
+    recentWinners(cadenceRaw?: string): Promise<{
+        items: {
+            id: string;
+            displayName: string;
+            prizeLabel: string;
+            cadence: string;
+            text: string;
+            createdAt: string;
+        }[];
+    }>;
     adminListClaims(query?: string): Promise<{
         id: string;
         title: string;
