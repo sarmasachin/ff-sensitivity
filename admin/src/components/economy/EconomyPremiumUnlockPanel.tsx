@@ -28,7 +28,12 @@ export function EconomyPremiumUnlockPanel({ values, onChange }: Props) {
           Coins deducted from the server wallet when a user unlocks with coins.
           Set <span className="font-semibold text-slate-700">0</span> for free
           coin-unlock. Use the checkboxes below to show coins, watch ad, or both
-          in the app dialog.
+          in the app dialog. Unlock duration (how long the popup stays hidden)
+          is under{" "}
+          <span className="font-semibold text-slate-700">
+            Ads → Premium Pro
+          </span>
+          .
         </p>
       </div>
 

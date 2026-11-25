@@ -68,7 +68,8 @@ function main() {
   ].some((f) => /CalculateRewardedAds\.preload\(\s*context\s*\)/.test(f));
   checks.f1_pairs =
     /Slot\.PREMIUM/.test(premium) &&
-    /slot = CalculateRewardedAds\.Slot\.CALCULATE/.test(wizard) &&
+    /Slot\.PREMIUM/.test(wizard) &&
+    /Slot\.CALCULATE/.test(wizard) &&
     /slot = CalculateRewardedAds\.Slot\.DPI/.test(dpi) &&
     /slot = CalculateRewardedAds\.Slot\.AD_BONUS/.test(bonus) &&
     /slot = CalculateRewardedAds\.Slot\.SECOND_CHANCE/.test(second);
@@ -84,15 +85,14 @@ function main() {
     /CalculateRewardedAds\.initialize\(this\)/.test(app) &&
     !/CalculateRewardedAds\.preload\(/.test(app);
 
-  // Premium: screen warm + dialog refresh; both gated by adUnlockEnabled
-  checks.f2_premium_screen_warm =
-    /LaunchedEffect\(unlockPrices\.adUnlockEnabled\)/.test(premium);
+  // Premium: screen warm + dialog refresh; both gated by showAdUnlock
+  checks.f2_premium_screen_warm = /LaunchedEffect\(showAdUnlock\)/.test(premium);
   checks.f2_premium_screen_preload_gated =
-    /LaunchedEffect\(unlockPrices\.adUnlockEnabled\)[\s\S]*?if \(unlockPrices\.adUnlockEnabled\)[\s\S]*?Slot\.PREMIUM/.test(
+    /LaunchedEffect\(showAdUnlock\)[\s\S]*?if \(showAdUnlock\)[\s\S]*?Slot\.PREMIUM/.test(
       premium,
     );
   checks.f2_premium_dialog_gated =
-    /fun openUnlock[\s\S]*?if \(unlockPrices\.adUnlockEnabled\)[\s\S]*?Slot\.PREMIUM/.test(
+    /fun openUnlock[\s\S]*?if \(showAdUnlock\)[\s\S]*?Slot\.PREMIUM/.test(
       premium,
     );
   // Must not preload PREMIUM when ad unlock off on dialog open
@@ -104,7 +104,7 @@ function main() {
     !/openUnlock[\s\S]*?CalculateRewardedAds\.preload\(context, CalculateRewardedAds\.Slot\.PREMIUM\)\s*\n    \}/.test(
       openUnlock,
     ) &&
-    /if \(unlockPrices\.adUnlockEnabled\)/.test(openUnlock ?? '');
+    /if \(showAdUnlock\)/.test(openUnlock ?? '');
   detail.premiumOpenUnlockSnippet = openUnlock?.slice(0, 400);
 
   // Wizard: earlier step, still needsCalculateAd
@@ -112,8 +112,9 @@ function main() {
   checks.f2_wizard_not_only_step3 = !/safeStep == 3 && needsCalculateAd/.test(
     wizard,
   );
+  // Paid engines → PREMIUM; classic → CALCULATE
   checks.f2_wizard_uses_calculate_slot =
-    /preload\(context, CalculateRewardedAds\.Slot\.CALCULATE\)/.test(wizard);
+    /Slot\.CALCULATE/.test(wizard) && /Slot\.PREMIUM/.test(wizard);
   // needsCalculateAd still respects paid engine skip
   checks.f2_wizard_paid_skip =
     /isPaidSensitivityEngine\(\)/.test(wizard) &&
@@ -152,7 +153,7 @@ function main() {
   checks.f2_show_premium_slot =
     /slot = CalculateRewardedAds\.Slot\.PREMIUM/.test(premium);
   checks.f2_show_calc_slot =
-    /slot = CalculateRewardedAds\.Slot\.CALCULATE/.test(wizard);
+    /Slot\.CALCULATE/.test(wizard) && /Slot\.PREMIUM/.test(wizard);
   checks.f2_show_dpi_slot = /slot = CalculateRewardedAds\.Slot\.DPI/.test(dpi);
 
   // Slot re-preload after dismiss still same-slot (instance method)

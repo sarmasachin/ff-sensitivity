@@ -17,4 +17,6 @@ export declare class SaveAppConfigDto {
     features: Record<string, boolean>;
     navigation: Record<string, boolean>;
     links: AppLinksDto;
+    ads?: unknown;
+    promax?: unknown;
 }

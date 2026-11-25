@@ -1,8 +1,10 @@
 import {
+  Allow,
   IsBoolean,
   IsEmail,
   IsInt,
   IsObject,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
@@ -73,5 +75,15 @@ export class SaveAppConfigDto {
   @ValidateNested()
   @Type(() => AppLinksDto)
   links!: AppLinksDto;
+
+  /** GET /admin/app also returns ads; ignore on PUT (Ads desk owns writes). */
+  @IsOptional()
+  @Allow()
+  ads?: unknown;
+
+  /** Reserved / ignored — ProMax desk owns writes. */
+  @IsOptional()
+  @Allow()
+  promax?: unknown;
 }
 // --- End: App remote config live wire (Sachin) ---

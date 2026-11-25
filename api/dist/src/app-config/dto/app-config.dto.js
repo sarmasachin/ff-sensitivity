@@ -85,6 +85,8 @@ class SaveAppConfigDto {
     features;
     navigation;
     links;
+    ads;
+    promax;
 }
 exports.SaveAppConfigDto = SaveAppConfigDto;
 __decorate([
@@ -105,4 +107,14 @@ __decorate([
     (0, class_transformer_1.Type)(() => AppLinksDto),
     __metadata("design:type", AppLinksDto)
 ], SaveAppConfigDto.prototype, "links", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.Allow)(),
+    __metadata("design:type", Object)
+], SaveAppConfigDto.prototype, "ads", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.Allow)(),
+    __metadata("design:type", Object)
+], SaveAppConfigDto.prototype, "promax", void 0);
 //# sourceMappingURL=app-config.dto.js.map

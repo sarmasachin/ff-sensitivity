@@ -61,7 +61,7 @@ export declare class UsersAdminController {
         since: string;
         summary: {
             total: number;
-            counts: Record<"login" | "logout" | "app_open" | "redeem_claim" | "scratch_roll", number>;
+            counts: Record<"app_open" | "login" | "redeem_claim" | "scratch_roll" | "logout", number>;
         };
         items: {
             id: string;

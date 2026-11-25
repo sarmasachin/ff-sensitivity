@@ -6,6 +6,14 @@ type Props = {
   value: AdPlacementConfig;
   onChange: (next: AdPlacementConfig) => void;
   readOnly?: boolean;
+  /** Keep cooldown editable even when placement is Off (e.g. coin-only unlock window). */
+  allowCooldownWhenDisabled?: boolean;
+  /** Override the cooldown field label. */
+  cooldownLabel?: string;
+  /** Override the default cooldown help text. */
+  cooldownHint?: string;
+  /** Edit as hours (Daily Check-in / Quiz) or minutes (default). */
+  cooldownUnit?: "minutes" | "hours";
 };
 
 const labelClass = "block text-[11px] font-semibold tracking-wide text-slate-600";
@@ -20,10 +28,26 @@ export function AdPlacementForm({
   value,
   onChange,
   readOnly,
+  allowCooldownWhenDisabled = false,
+  cooldownLabel,
+  cooldownHint,
+  cooldownUnit = "minutes",
 }: Props) {
   function patch(partial: Partial<AdPlacementConfig>) {
     onChange({ ...value, ...partial });
   }
+
+  const cooldownDisabled =
+    readOnly || (!value.enabled && !allowCooldownWhenDisabled);
+  const useHours = cooldownUnit === "hours";
+  const resolvedLabel =
+    cooldownLabel ??
+    (useHours ? "Cooldown (hours)" : "Cooldown (minutes)");
+  const resolvedHint =
+    cooldownHint ??
+    (useHours
+      ? "Hours until this ad can show again · 0 = every time · max 168 (7d)"
+      : "Minutes until this ad can show again · 0 = every time · max 10080 (7d)");
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-slate-200/90 bg-slate-50/40 p-4">
@@ -53,15 +77,26 @@ export function AdPlacementForm({
 
       <div className="mt-3 grid flex-1 gap-3">
         <label className={labelClass}>
-          Cooldown (minutes)
+          {resolvedLabel}
           <input
             type="number"
             min={0}
-            max={10080}
-            disabled={readOnly || !value.enabled}
+            max={useHours ? 168 : 10080}
+            disabled={cooldownDisabled}
             className={`${fieldClass} tabular-nums`}
-            value={value.cooldownMinutes}
+            value={useHours ? value.cooldownHours : value.cooldownMinutes}
             onChange={(e) => {
+              if (useHours) {
+                const cooldownHours = Math.min(
+                  168,
+                  Math.max(0, Math.trunc(Number(e.target.value) || 0)),
+                );
+                patch({
+                  cooldownHours,
+                  cooldownMinutes: cooldownHours * 60,
+                });
+                return;
+              }
               const cooldownMinutes = Math.trunc(Number(e.target.value) || 0);
               const hours =
                 cooldownMinutes <= 0
@@ -71,7 +106,7 @@ export function AdPlacementForm({
             }}
           />
           <span className="mt-1 block text-[10px] font-normal text-slate-400">
-            Minutes until this ad can show again · 0 = every time · max 10080 (7d)
+            {resolvedHint}
           </span>
         </label>
 

@@ -71,7 +71,10 @@ function main() {
   checks.store_exists =
     /object PremiumAdStore/.test(premStore) &&
     /fun needsAd\(/.test(premStore) &&
-    /fun markRewarded\(/.test(premStore);
+    /fun markRewarded\(/.test(premStore) &&
+    /fun isUnlocked\(/.test(premStore);
+  checks.store_needs_ad_uses_unlocked =
+    /return !isUnlocked\(context, featureId\)/.test(premStore);
 
   checks.wizard_paid_uses_premium =
     /if \(paidEngine\) \{\s*PremiumAdStore\.needsAd/s.test(wizard);
@@ -88,6 +91,10 @@ function main() {
     /PremiumAdConfig\.enabled/.test(unlock);
   checks.unlock_marks_rewarded =
     (unlock.match(/PremiumAdStore\.markRewarded/g) || []).length >= 2;
+  checks.unlock_skips_popup_when_unlocked =
+    /if \(PremiumAdStore\.isUnlocked\(context\)\) \{\s*startUnlockedFlow\(target\)/s.test(
+      unlock,
+    );
   checks.unlock_no_calculate_copy = !/CalculateAdConfig/.test(unlock);
 
   // Runtime normalize: missing premium → default

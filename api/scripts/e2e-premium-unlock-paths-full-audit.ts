@@ -119,7 +119,7 @@ async function main() {
     /if \(coinOn\)/.test(dialog) && /if \(adOn\)/.test(dialog);
   checks.app_screen_passes_flags =
     /showCoinUnlock = unlockPrices\.coinUnlockEnabled/.test(screen) &&
-    /showAdUnlock = unlockPrices\.adUnlockEnabled/.test(screen);
+    /showAdUnlock\s*=\s*\n?\s*unlockPrices\.adUnlockEnabled/.test(screen);
   checks.app_parse =
     /optBoolean\("coinUnlockEnabled"/.test(apiKt) &&
     /optBoolean\("adUnlockEnabled"/.test(apiKt);

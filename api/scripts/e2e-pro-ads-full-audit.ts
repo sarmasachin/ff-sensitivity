@@ -89,25 +89,23 @@ function main() {
       premium,
     );
   checks.pro_all_show_ad_flag =
-    (premium.match(/showAdUnlock = unlockPrices\.adUnlockEnabled/g) || [])
-      .length >= 3;
+    (premium.match(/showAdUnlock = /g) || []).length >= 1 &&
+    (premium.match(/showAdUnlock/g) || []).length >= 3;
   checks.pro_all_show_coin_flag =
     (premium.match(/showCoinUnlock = unlockPrices\.coinUnlockEnabled/g) || [])
       .length >= 3;
   checks.pro_unlockWithAd_gated =
-    /fun unlockWithAd\([\s\S]*?if \(!unlockPrices\.adUnlockEnabled\)/.test(
-      premium,
-    );
+    /fun unlockWithAd\([\s\S]*?if \(!showAdUnlock\)/.test(premium);
   checks.pro_unlockWithAd_premium_slot =
     /fun unlockWithAd\([\s\S]*?slot = CalculateRewardedAds\.Slot\.PREMIUM/.test(
       premium,
     );
   checks.pro_preload_premium_gated =
-    /LaunchedEffect\(unlockPrices\.adUnlockEnabled\)[\s\S]*?if \(unlockPrices\.adUnlockEnabled\)[\s\S]*?Slot\.PREMIUM/.test(
+    /LaunchedEffect\(showAdUnlock\)[\s\S]*?if \(showAdUnlock\)[\s\S]*?Slot\.PREMIUM/.test(
       premium,
     );
   checks.pro_dialog_preload_gated =
-    /fun openUnlock\([\s\S]*?if \(unlockPrices\.adUnlockEnabled\)[\s\S]*?Slot\.PREMIUM/.test(
+    /fun openUnlock\([\s\S]*?if \(showAdUnlock\)[\s\S]*?Slot\.PREMIUM/.test(
       premium,
     );
   checks.pro_on_rewarded_starts_flow =

@@ -85,10 +85,11 @@ export class UsersService {
   }
 
   async adminListUsers() {
+    // Stats already count every seat — list must return every row too
+    // (a prior hard cap made footer say ~500 while cards showed 3000+).
     const [users, stats] = await Promise.all([
       this.prisma.user.findMany({
         orderBy: { updatedAt: 'desc' },
-        take: 500,
         select: userListSelect,
       }),
       countUserDeskStats(this.prisma),

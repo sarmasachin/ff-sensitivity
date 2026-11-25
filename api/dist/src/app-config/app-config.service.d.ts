@@ -8,23 +8,23 @@ export declare class AppConfigService {
     constructor(prisma: PrismaService);
     private toBundle;
     ensureDefaults(): Promise<{
-        id: number;
-        createdAt: Date;
-        updatedAt: Date;
         maintenanceMode: boolean;
         maintenanceMessage: string;
         forceUpdate: boolean;
         softUpdatePrompt: boolean;
         minVersionCode: number;
         minVersionName: string;
-        featuresJson: Prisma.JsonValue;
-        navigationJson: Prisma.JsonValue;
-        adsJson: Prisma.JsonValue;
-        promaxJson: Prisma.JsonValue;
         playStoreUrl: string;
         privacyUrl: string;
         websiteUrl: string;
         supportEmail: string;
+        id: number;
+        featuresJson: Prisma.JsonValue;
+        navigationJson: Prisma.JsonValue;
+        adsJson: Prisma.JsonValue;
+        promaxJson: Prisma.JsonValue;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     adminGet(): Promise<{
         status: {

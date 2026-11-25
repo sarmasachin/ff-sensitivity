@@ -75,7 +75,6 @@ let UsersService = class UsersService {
         const [users, stats] = await Promise.all([
             this.prisma.user.findMany({
                 orderBy: { updatedAt: 'desc' },
-                take: 500,
                 select: users_row_1.userListSelect,
             }),
             (0, users_stats_1.countUserDeskStats)(this.prisma),

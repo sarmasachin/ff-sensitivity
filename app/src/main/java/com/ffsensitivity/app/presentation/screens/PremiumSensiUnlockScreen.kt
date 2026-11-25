@@ -165,21 +165,6 @@ fun PremiumSensiUnlockScreen(
         }
     }
 
-    fun openUnlock(target: PremiumUnlockTarget) {
-        if (unlockBusy) return
-        unlockError = null
-        unlockTarget = target
-        if (showAdUnlock) {
-            CalculateRewardedAds.preload(context, CalculateRewardedAds.Slot.PREMIUM)
-        }
-    }
-
-    fun dismissUnlock() {
-        if (unlockBusy) return
-        unlockTarget = null
-        unlockError = null
-    }
-
     fun startUnlockedFlow(target: PremiumUnlockTarget) {
         val nav = when (target) {
             PremiumUnlockTarget.BEST_PREMIUM -> onBestPremiumUnlocked
@@ -194,6 +179,26 @@ fun PremiumSensiUnlockScreen(
             unlockError = "Unlocked, but couldn’t open Premium sensi. Try again."
             unlockTarget = target
         }
+    }
+
+    fun openUnlock(target: PremiumUnlockTarget) {
+        if (unlockBusy) return
+        unlockError = null
+        // Already unlocked (coin or ad) within admin window → skip popup.
+        if (PremiumAdStore.isUnlocked(context)) {
+            startUnlockedFlow(target)
+            return
+        }
+        unlockTarget = target
+        if (showAdUnlock) {
+            CalculateRewardedAds.preload(context, CalculateRewardedAds.Slot.PREMIUM)
+        }
+    }
+
+    fun dismissUnlock() {
+        if (unlockBusy) return
+        unlockTarget = null
+        unlockError = null
     }
 
     fun unlockSubtitle(): String {

@@ -292,9 +292,12 @@ export default function AdsPage() {
               />
               <AdPlacementForm
                 title="Premium Pro"
-                subtitle="Best / Pro Max / One Tap unlock + paid wizard gate. Separate from Calculate."
+                subtitle="After coin or ad unlock: hide unlock popup + skip paid wizard ad for this duration. Separate from Calculate."
                 value={config.premium ?? DEFAULT_ADS_CONFIG.premium}
                 readOnly={viewer}
+                allowCooldownWhenDisabled
+                cooldownLabel="Unlock duration (minutes)"
+                cooldownHint="How long unlock lasts after coins/ad (e.g. 1440 = 24h). 0 = ask every time. Max 10080 (7d). Editable even if Watch-ad is Off."
                 onChange={(premium) =>
                   setConfig((prev) => ({ ...prev, premium }))
                 }
@@ -311,6 +314,7 @@ export default function AdsPage() {
                 subtitle="Interstitial before quiz answer submit."
                 value={config.quiz ?? DEFAULT_ADS_CONFIG.quiz}
                 readOnly={viewer}
+                cooldownUnit="hours"
                 onChange={(quiz) => setConfig((prev) => ({ ...prev, quiz }))}
               />
               <AdPlacementForm
@@ -338,6 +342,7 @@ export default function AdsPage() {
                 subtitle="Interstitial before claiming daily check-in coins."
                 value={config.checkIn ?? DEFAULT_ADS_CONFIG.checkIn}
                 readOnly={viewer}
+                cooldownUnit="hours"
                 onChange={(checkIn) =>
                   setConfig((prev) => ({ ...prev, checkIn }))
                 }
